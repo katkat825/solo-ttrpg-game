@@ -78,6 +78,18 @@ public partial class DieMark : Node3D
         if (_label != null && Text != null) _label.Text = Text.Get(LabelKey);
     }
 
+    // where this die's mark stops, so anything drawn outside it - the name, a snag flash -
+    // is placed against one formula instead of against a second copy of the constants above
+    // static and pure, so a caller can ask before the mark is built and never has to guess
+    // at ordering. an unmarked die draws no ring but still reserves the space one would take
+    public static float OuterRadiusFor(DieSolid solid, TrayMark mark)
+    {
+        float outer = solid.Circumradius + RingGap
+                    + (mark == TrayMark.Impact ? ImpactThickness : CountedThickness);
+
+        return mark == TrayMark.Impact ? outer + HaloGap + HaloThickness : outer;
+    }
+
     void Build()
     {
         Color ink = Mark switch
@@ -101,10 +113,9 @@ public partial class DieMark : Node3D
             // the second ring turns the ember colour from "a different one" into "still going"
             _haloInk = FeltRing.Ink(ink);
             _halo = Ring(FeltRing.Build(outer + HaloGap, outer + HaloGap + HaloThickness), _haloInk);
-            outer += HaloGap + HaloThickness;
         }
 
-        _labelDrop = outer + LabelGap + LabelHeight * 0.5f;
+        _labelDrop = OuterRadiusFor(Die.Solid, Mark) + LabelGap + LabelHeight * 0.5f;
 
         AddChild(_label = new Label3D
         {

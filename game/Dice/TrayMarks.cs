@@ -41,15 +41,36 @@ public partial class TrayMarks : Node3D
             _marks.Add(mark);
             AddChild(mark);
         }
+
+        // the snagged die already has a mark saying what it is - this says what just happened
+        // to it, which is a different question, so it is a second node rather than a fourth
+        // TrayMark value that would cost us knowing whether it counted
+        if (thrown.SnaggedSlot >= 0)
+        {
+            int s = thrown.SnaggedSlot;
+
+            AddChild(new SnagFlash
+            {
+                Name = $"{dice[s].Name}Snag",
+                Die = dice[s],
+
+                // asked rather than measured, so the flash cannot end up under the ring it
+                // is supposed to be leaving
+                InnerRadius = DieMark.OuterRadiusFor(dice[s].Solid, thrown.Marks[s]),
+            });
+        }
     }
 
     // called the moment a throw starts, so nothing stale is drawn over live dice
+    // everything under here belongs to one throw, so it frees children rather than a list -
+    // a list is a second description of the same thing, and the day a third kind of mark is
+    // added the list is the copy that gets forgotten
     public void Clear()
     {
-        foreach (DieMark mark in _marks)
+        foreach (Node child in GetChildren())
         {
-            RemoveChild(mark);
-            mark.QueueFree();
+            RemoveChild(child);
+            child.QueueFree();
         }
 
         _marks.Clear();

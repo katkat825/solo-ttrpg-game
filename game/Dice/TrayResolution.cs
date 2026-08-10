@@ -129,11 +129,23 @@ public sealed class TrayThrow
     // came out in a different order than it was made
     public IReadOnlyList<TrayMark> Marks { get; }
 
+    // which die on the felt showed the 1, in THROW order, or -1 when nothing snagged
+    //
+    // orthogonal to Marks and it has to be: the die that snagged is also either counted
+    // or the Impact die, so a snag is a fourth TrayMark value only if you are willing to
+    // lose which of the other three it was
+    //
+    // the rules decide THAT it snagged - PoolResult.Snag, exactly one 1 - and this only
+    // finds where it landed. two or more 1s is Trouble, a different cue with its own bark,
+    // and deliberately not this
+    public int SnaggedSlot { get; }
+
     public TrayThrow(PoolResult result, IReadOnlyList<TraySlot> slots)
     {
         Result = result;
         Slots = slots;
         Marks = Assign(result, slots);
+        SnaggedSlot = FindSnag(result, slots);
     }
 
     // puts each roll back on the die it came off
@@ -190,6 +202,37 @@ public sealed class TrayThrow
         return marks;
     }
 
+    // the slot showing the 1, once the rules have called it a Snag
+    // scanning for the 1 rather than being handed it, because PoolResult counts 1s and does
+    // not say which die carried one - the tier is the rules' answer and the address is ours
+    //
+    // both failures throw rather than shrug: a Snag with no 1 on the felt, or a second 1 the
+    // rules did not count, each mean the pool and the table have come apart, and a cue
+    // pointing at the wrong die is exactly the silent lie TrayThrow.Assign exists to prevent
+    static int FindSnag(PoolResult result, IReadOnlyList<TraySlot> slots)
+    {
+        if (!result.Snag) return -1;
+
+        int found = -1;
+
+        for (int s = 0; s < slots.Count; s++)
+        {
+            if (slots[s].Value != 1) continue;
+
+            if (found >= 0)
+                throw new InvalidOperationException(
+                    "The rules called one 1 and the felt is showing more than one.");
+
+            found = s;
+        }
+
+        if (found < 0)
+            throw new InvalidOperationException(
+                "The rules called a Snag and no die on the felt is showing a 1.");
+
+        return found;
+    }
+
     // no die was left over, so Result.Impact is the resolver's d4 fallback, not a real die
     // cannot happen with three dice, kept so a short pool never reads "impact d4" as a result
     public bool ImpactIsFallback => Result.Rolls.All(r => r.Counted);
@@ -225,7 +268,9 @@ public sealed class TrayThrow
                          : $", impact is the leftover {Result.Impact.Label()} showing {spare.Value} ({spare.LabelKey})");
 
         if (Result.Trouble) yield return "TROUBLE  two or more 1s - a real consequence";
-        else if (Result.Snag) yield return "snag   one 1 - cosmetic, the companion's cue to speak";
+        else if (Result.Snag)
+            yield return $"snag   {Slots[SnaggedSlot].LabelKey} {Slots[SnaggedSlot].Die.Label()} " +
+                         "showing 1 - cosmetic, the companion's cue to speak";
 
         int margin = Result.Total - difficulty;
         yield return $"vs {difficulty,-2}  {(Result.Beats(difficulty) ? "beats it" : "falls short")} by {Math.Abs(margin)}";

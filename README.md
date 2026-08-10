@@ -4,7 +4,17 @@ A single-player RPG that looks like an actual table. Grid map, a tray of physics
 
 No SRD content. The dice system is my own.
 
-Solo project, built mainly because I want to play it.
+## Why this exists
+
+For years I'd been looking for a single-player RPG that gave me the feeling of a tabletop campaign without micromanaging a party or relying on companion AI that never quite behaved the way I wanted.
+
+While helping redesign the localization architecture for Portalborn, I enjoyed the game enough to start writing my own campaign content for it. That was fun, and it clarified that what I actually wanted was something else.
+
+Then the obvious caught up with me. I write software for a living. If the game I want doesn't exist, I can build it.
+
+That localization work is also why this project handles text the way it does from the start. The engine emits keys and never player-facing strings, English is a locale file like every other language, and the key grammar is enforced by tests rather than by good intentions. Retrofitting internationalization into a codebase that grew without it is expensive, and I wasn't interested in doing it twice.
+
+So this is my attempt at the feeling of sitting at a table with a DM, rolling real dice, and working through a handcrafted adventure without running a party of six.
 
 ## Building
 
@@ -52,7 +62,7 @@ Build a pool of up to three dice (attribute + skill + gear), throw it, add the b
 
 Damage steps your dice down a size. You watch a character get worse instead of watching a number drop. The hero gets two actions a round and ordinary enemies get one; without that a solo fight measures at about a 4% win rate.
 
-A single 1 anywhere in the pool is a **Snag**, which is cosmetic and just cues the companion to say something. It comes up on roughly 39% of early rolls. Two or more 1s is **Trouble** and actually costs you, at about 6%.
+Exactly one 1 in the pool is a **Snag**, which is cosmetic and just cues the companion to say something. It comes up on about 33% of early rolls. Two or more 1s is **Trouble** and actually costs you, at about 6%. Some 1 or other turns up 39% of the time, which is those two added — an easy pair of numbers to confuse, so `Rules.Resolution.PoolOdds` gives the exact odds for any pool and a test holds the resolver to them.
 
 **Vigor** is the hit-point-ish stat. Conditions are the other half of taking damage: each one shrinks an attribute die by a size, which compounds without needing a separate death-spiral rule.
 

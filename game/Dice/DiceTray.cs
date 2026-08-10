@@ -64,6 +64,10 @@ public partial class DiceTray : Node3D
 
     private TrayMarks _marks;
 
+    // the companion's cue, before there is a companion - which bark a Snag would have fired
+    // and how often the felt really asks for one
+    private SnagCue _cue;
+
     // held as the interface so this file cannot start reaching for TranslationServer
     private readonly ILocalizer _text = new GodotLocalizer();
 
@@ -127,7 +131,7 @@ public partial class DiceTray : Node3D
         foreach (DieBody die in _dice) die.Settled += _ => TryResolve();
 
         // developer diagnostic, not player-facing text
-        GD.Print($"dice tray M8 - space throws, {(char)KeyToCycle} changes the shapes, " +
+        GD.Print($"dice tray M9 - space throws, {(char)KeyToCycle} changes the shapes, " +
                  $"{(char)KeyToSwitchTray} changes the tray, {(char)KeyToSwitchLocale} switches language");
         GD.Print($"tray    {SkinName}");
 
@@ -234,7 +238,14 @@ public partial class DiceTray : Node3D
     // a d8 in the tray resolving as a d6 is the quiet lie the face table exists to prevent
     private void Rebuild()
     {
-        _resolution = new TrayResolution(_dice.Select(d => d.Size).ToList());
+        var sizes = _dice.Select(d => d.Size).ToList();
+
+        _resolution = new TrayResolution(sizes);
+
+        // the snag tally restarts with the pool, and has to: bigger dice snag less, so a count
+        // carried across a change of shapes is measuring a table that no longer exists
+        if (_cue == null) _cue = new SnagCue(sizes);
+        else _cue.Reset(sizes);
     }
 
     // queue every die, a couple of physics ticks apart
@@ -321,6 +332,16 @@ public partial class DiceTray : Node3D
 
         foreach (string line in _lastThrow.DebugLines(TargetDifficulty, _text))
             GD.Print(line);
+
+        // the key a companion would have spoken, not the words - there are no words, and
+        // there must not be: dialogue.* is campaign content and game/locale/ never grows one
+        string bark = _cue.Watch(_lastThrow);
+
+        if (bark != null) GD.Print($"cue    {bark} - nothing says it yet");
+
+        // every throw, not only the ones that snag, so the running count is exact at the
+        // moment you stop rather than as of the last time it fired
+        GD.Print($"snags  {_cue.Tally}");
     }
 
     // switch language and reprint the throw already on the table
@@ -365,6 +386,9 @@ public partial class DiceTray : Node3D
             ? "shapes  back to the pool the scene was saved with: " +
               string.Join(" + ", _authored.Select(d => d.Label()))
             : $"shapes  three {ShapeTour[_tour].Label()}s");
+
+        // says why the count below just went back to zero, and what to expect of the new one
+        GD.Print($"        snags {_cue.Expected:0.0%} on this pool - the tally starts again");
 
         ThrowAll();
     }
