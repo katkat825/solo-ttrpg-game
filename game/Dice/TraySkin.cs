@@ -41,6 +41,21 @@ public partial class TraySkin : Resource
     // wrong physics looks like a rendering bug and measures like a real result
     public static TraySkin Load(string name)
     {
+        // whitelist, not sanitisation: All() already knows every legitimate name, so ask it
+        // rather than trying to spot a bad one
+        //
+        // today the only caller is our own command line, so this is close to theatre - but
+        // ARCHITECTURE 4 has campaigns as droppable folders and modding as a deliberate
+        // outcome, and a .tres can carry script_class, which means loading an arbitrary one
+        // is running arbitrary code. the moment a campaign can name a skin, an unchecked
+        // path here stops being theatre. cheaper to close now than to remember later
+        if (name == null || !All().Contains(name))
+        {
+            // developer diagnostic, not player-facing text
+            GD.PushError($"tray skin: '{name}' is not a known skin - have {string.Join(", ", All())}");
+            return null;
+        }
+
         string path = $"{Folder}{name}.tres";
 
         var skin = GD.Load<TraySkin>(path);

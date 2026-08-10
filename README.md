@@ -2,11 +2,11 @@
 
 A single-player RPG that looks like an actual table. Grid map, a tray of physics dice, painted minis, and a DM behind a screen: you see his hands, you don't see his dice. One hero, no party.
 
-No SRD content. The dice system is my own.
+Original rules. Original dice system. Inspired by the experience of tabletop RPGs, not any specific ruleset.
 
 ## Why this exists
 
-For years I'd been looking for a single-player RPG that gave me the feeling of a tabletop campaign without micromanaging a party or relying on companion AI that never quite behaved the way I wanted.
+For years I'd been looking for a single-player RPG that gave me the feeling of a tabletop campaign without micromanaging a party or relying on companion AI that I often found lacking.
 
 While helping redesign the localization architecture for Portalborn, I enjoyed the game enough to start writing my own campaign content for it. That was fun, and it clarified that what I actually wanted was something else.
 
