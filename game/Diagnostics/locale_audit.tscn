@@ -1,0 +1,13 @@
+[gd_scene load_steps=2 format=3]
+
+; The locale audit, on its own scene rather than wedged into the dice tray. Unlike the
+; fairness sweep - which has to run in the real tray, because a copy of the tray would be a
+; different physical system - this measures the project's translation config, which is the
+; same wherever it is asked from.
+;
+; Run it with check-locale.ps1.
+
+[ext_resource type="Script" path="res://Diagnostics/LocaleAudit.cs" id="1_audit"]
+
+[node name="LocaleAudit" type="Node"]
+script = ExtResource("1_audit")

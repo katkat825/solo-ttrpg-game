@@ -1,0 +1,17 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://2r40dm54axed"]
+
+[ext_resource type="Texture2D" uid="uid://13m7a22uhkac" path="res://textures/tray_wood/color.jpg" id="1_color"]
+[ext_resource type="Texture2D" uid="uid://bvxc33s6h7ad6" path="res://textures/tray_wood/roughness.jpg" id="2_rough"]
+[ext_resource type="Texture2D" uid="uid://dwx4m4tvrxdig" path="res://textures/tray_wood/normalgl.jpg" id="3_normal"]
+[ext_resource type="Texture2D" uid="uid://bll2nlfpxk37w" path="res://textures/tray_wood/displacement.jpg" id="4_height"]
+
+[resource]
+albedo_texture = ExtResource("1_color")
+roughness_texture = ExtResource("2_rough")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_texture = ExtResource("3_normal")
+heightmap_enabled = true
+heightmap_scale = 0.01
+heightmap_texture = ExtResource("4_height")
+uv1_scale = Vector3(4, 4, 4)

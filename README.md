@@ -1,0 +1,91 @@
+# Untitled tabletop RPG
+
+A single-player RPG that looks like an actual table. Grid map, a tray of physics dice, painted minis, and a DM behind a screen: you see his hands, you don't see his dice. One hero, no party.
+
+No SRD content. The dice system is my own.
+
+Solo project, built mainly because I want to play it.
+
+## Building
+
+```
+dotnet test                     # rules test suite
+dotnet run --project sim        # balance tables
+dotnet run --project sim 50000  # more trials
+```
+
+To run the game, open `game/` in Godot 4.7 (.NET build) and press F5. It doesn't run from the CLI.
+
+Two PowerShell checks run headless and exit non-zero on failure:
+
+```
+.\check-fairness.ps1 [-Dice 3] [-Shape N] [-Tray name]   # chi-squared, are the dice uniform
+.\check-locale.ps1                                       # every key has text, every string has a key
+```
+
+## Layout
+
+```
+rules/          pure C# rules engine, never references Godot
+  Dice/         die sizes, stepping, IRng
+  Localization/ ILocalizer, key conventions
+  Statistics/   FaceTally, chi-squared fairness testing
+  Resolution/   Pool, PoolResult, IResolver, Difficulty
+  Characters/   Traits, Actor, IArchetypeSource
+  Combat/       CombatEngine, ITargetSelector, ICombatObserver
+rules.tests/    xUnit, one file per concern
+sim/            headless balance harness
+game/           the Godot project
+  Dice/         DieBody, DieSolid, DieFaceTable, the tray
+  Diagnostics/  fairness sweep, locale audit
+  Localization/ GodotLocalizer, the only place a key becomes text
+  locale/       game.csv, one column per language
+```
+
+`DndGame.slnx` at the root covers rules, rules.tests and sim. Godot generates its own `.sln` inside `game/`, which is gitignored. `rules` targets net8.0 because Godot 4.7 does; `sim` and `rules.tests` are on net10.0.
+
+See [`rules/README.md`](rules/README.md) for the layer order and the substitution seams.
+
+## How it plays
+
+Build a pool of up to three dice (attribute + skill + gear), throw it, add the best two, beat the difficulty. The die you didn't count becomes the Impact die and gets rolled for damage, so one throw covers both whether it worked and how well.
+
+Damage steps your dice down a size. You watch a character get worse instead of watching a number drop. The hero gets two actions a round and ordinary enemies get one; without that a solo fight measures at about a 4% win rate.
+
+A single 1 anywhere in the pool is a **Snag**, which is cosmetic and just cues the companion to say something. It comes up on roughly 39% of early rolls. Two or more 1s is **Trouble** and actually costs you, at about 6%.
+
+**Vigor** is the hit-point-ish stat. Conditions are the other half of taking damage: each one shrinks an attribute die by a size, which compounds without needing a separate death-spiral rule.
+
+## Rules I hold myself to
+
+`rules/` never references Godot. Headless tests and overnight balance runs both depend on it.
+
+Rules in code, world in data. The dice system stays hard-coded. Monsters, items, maps, encounters and dialogue are content and live in data files. If adding a campaign would mean touching it, it's content.
+
+Anything that's a policy decision goes behind an interface with a default implementation. `rules.tests/SeamTests.cs` substitutes each seam from outside the library, so a test that stops compiling means I've welded one shut.
+
+I've stopped there. `Actor`, `Pool`, `PoolResult` and the dice system are concrete on purpose.
+
+No player-facing text in `rules/`. The engine emits localization keys and the presentation layer resolves them. English is a locale file like any other language, so adding a language is a content task. Key grammar is `namespace.subject.aspect[.qualifier]*[.index]`, enforced by `KeyConventions.IsWellFormed` and checked end to end by `check-locale.ps1`.
+
+Change a balance number, run the sim. Those figures were verified against exact enumeration, so drift means something broke.
+
+When two implementations both work, I pick whichever feels more like sitting at a real table. That's settled most of the hard calls: hands instead of a UI, physics dice instead of a random number with an animation over it. Cosmetics never affect mechanics, or every roll turns into a question about your inventory. Text before voice, at least for now, because writing is cheap to revise and voice acting isn't.
+
+## Where it is
+
+The dice tray works. Three dice of mixed shapes thrown together, real collisions, face reading off the resting orientation, per-skin tray physics, force-driven audio, and the outcome readable off the felt without a UI panel. Fairness is swept per shape and per tray skin, since colliding dice are a different physical system from solo throws and I didn't want to assume.
+
+Next is the Snag cue, then the grid and tiles, one mini moving, and the combat loop. After that comes the part I actually care about, which is writing a short campaign entirely in data with no new code. If that doesn't work then neither does the rest of the plan, so it's better to find out now than in year three.
+
+## Still undecided
+
+- Vigor plus Conditions, or Conditions only
+- Gear die scaling: rarity, quality, or both
+- Skill advancement: XP or use-based
+- Whether the DM ever speaks aloud
+- Whether a d20 exists at all as a collectible. It never joins the pool either way, since it would break the difficulty ladder
+
+## Assets
+
+Everything borrowed is CC0 and listed in [`THIRD_PARTY.md`](THIRD_PARTY.md) with its source, licence and download date. Raw downloads live in `assets/`, which is gitignored. Only the processed maps in `game/textures/` are committed.

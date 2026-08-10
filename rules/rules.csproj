@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Rules</RootNamespace>
+    <AssemblyName>Rules</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!--
+    This project must NEVER reference Godot.
+    This is the load-bearing constraint. Everything downstream - headless tests,
+    overnight balance simulations, surviving a future engine change -
+    depends on that single constraint holding.
+  -->
+
+</Project>

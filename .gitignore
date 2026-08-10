@@ -1,0 +1,23 @@
+# Godot
+.godot/
+/game/android/
+*.translation
+
+# Godot regenerates its own solution file for the game project.
+# The canonical solution is DndGame.slnx at the repo root.
+/game/*.sln
+
+# C#
+.mono/
+[Bb]in/
+[Oo]bj/
+*.user
+*.userprefs
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Raw asset downloads - source material, never committed.
+# Processed maps live in game/textures/ and are committed.
+assets/
