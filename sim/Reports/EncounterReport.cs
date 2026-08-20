@@ -1,7 +1,7 @@
-using Rules.Characters;
-using Rules.Combat;
-using Rules.Dice;
-using Rules.Resolution;
+using Core.Characters;
+using Core.Combat;
+using Core.Dice;
+using Core.Resolution;
 
 namespace Sim
 {
@@ -10,6 +10,11 @@ namespace Sim
     // and the Rabble sweep, which checks the tier adds pressure rather than length
     static class EncounterReport
     {
+        // the one place this report names a concrete roster
+        // every balance number below comes out of whatever source is bound here, so pointing
+        // it at a campaign's statblocks is this line and nothing else
+        static readonly IArchetypeSource Archetypes = new BuiltInArchetypes();
+
         readonly struct Stats
         {
             public readonly double WinPct;
@@ -60,8 +65,8 @@ namespace Sim
             for (int i = 0; i < trials; i++)
             {
                 var r = engine.Run(
-                    BuiltInArchetypes.Barbarian(),
-                    BuiltInArchetypes.StandardEncounter(rabble));
+                    Archetypes.Create(EngineIds.Barbarian),
+                    Archetypes.Standard(rabble));
 
                 rounds += r.Rounds;
 

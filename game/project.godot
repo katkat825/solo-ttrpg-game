@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Solo Tabletop RPG"
-run/main_scene="res://Dice/dice_tray.tscn"
+run/main_scene="res://Tray/dice_tray.tscn"
 config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 config/icon="res://icon.svg"
 

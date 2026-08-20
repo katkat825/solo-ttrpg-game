@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
-using Rules.Dice;
-using Rules.Statistics;
+using Core.Dice;
+using Core.Statistics;
 
 
 // runs thousands of real physics rolls 
@@ -73,6 +73,7 @@ public partial class DiceFairness : Node
     FaceTally[] _bySeat;
 
     int _recorded;
+    int _nudges;
     int _cockedRethrows;
     int _acceptedCocked;
     int _leftTray;
@@ -191,6 +192,9 @@ public partial class DiceFairness : Node
 
         die.ReportContacts = false;
 
+        // one handler per action - Nudged and Cocked were one signal until 2026-08-20,
+        // and adding them together is what made this counter report roughly 3x the truth
+        die.Nudged += (_, _) => _nudges++;
         die.Cocked += (_, _) => _cockedRethrows++;
         die.LeftTray += _ => _leftTray++;
     }
@@ -277,12 +281,13 @@ public partial class DiceFairness : Node
         }
 
         GD.Print("");
-        (double mean, double expected, double z) = MeanDrift(_tally);
-        GD.Print($"average pip {mean:0.0000} against {expected:0.0000} expected - " +
-                 $"{z:+0.00;-0.00} standard errors ({DriftVerdict(z)})");
+        // the maths lives on FaceTally in core/Statistics, where it has tests
+        // this file only decides how to say it, because only this file knows the subject is a tray
+        GD.Print($"average pip {_tally.MeanPip:0.0000} against {_tally.ExpectedMeanPip:0.0000} " +
+                 $"expected - {_tally.MeanDriftZ:+0.00;-0.00} standard errors ({DriftSentence(_tally)})");
 
         GD.Print("");
-        GD.Print($"took {_elapsed:0.0}s | cocked re-throws {_cockedRethrows} | " +
+        GD.Print($"took {_elapsed:0.0}s | nudges {_nudges} | cocked re-throws {_cockedRethrows} | " +
                  $"cocked accepted anyway {_acceptedCocked} | left the tray {_leftTray} | stuck pools {_stuck}");
 
         if (_acceptedCocked > 0)
@@ -291,39 +296,19 @@ public partial class DiceFairness : Node
 
         bool biased = _tally.Verdict == Fairness.Biased
                    || _bySeat.Any(t => t.Verdict == Fairness.Biased)
-                   || Math.Abs(z) >= DriftFails;
+                   || _tally.DriftVerdict == Fairness.Biased;
 
         GD.Print(biased ? "FAIRNESS CHECK FAILED" : "fairness check passed");
 
         if (QuitWhenDone) GetTree().Quit(biased ? 1 : 0);
     }
 
-    const double DriftWarns = 2.58;   // 1% two-sided
-
-    const double DriftFails = 3.0;    // about 1 run in 370
-
-    // calculates how far average rolled value deviates from expected mean
-    // specifically sensitive to systematic high or low rolling bias
-    static (double Mean, double Expected, double Z) MeanDrift(FaceTally tally)
+    // the numbers and the verdict come from FaceTally; the wording is this file's job
+    // "this tray rolls high" is a sentence about a tray, and core/ has never heard of one
+    static string DriftSentence(FaceTally tally) => tally.DriftVerdict switch
     {
-        if (tally.Total == 0) return (0, 0, 0);
-
-        double sum = 0;
-        for (int face = 1; face <= tally.Sides; face++) sum += (double)face * tally[face];
-
-        double mean = sum / tally.Total;
-        double expected = (tally.Sides + 1) / 2.0;
-
-        double variance = ((double)tally.Sides * tally.Sides - 1) / 12.0;
-        double standardError = Math.Sqrt(variance / tally.Total);
-
-        return (mean, expected, standardError > 0 ? (mean - expected) / standardError : 0);
-    }
-
-    static string DriftVerdict(double z) => Math.Abs(z) switch
-    {
-        >= DriftFails => "BIASED - this tray rolls " + (z > 0 ? "high" : "low"),
-        >= DriftWarns => "suspicious, throw more at it",
+        Fairness.Biased => "BIASED - this tray rolls " + (tally.DriftsHigh ? "high" : "low"),
+        Fairness.Suspicious => "suspicious, throw more at it",
         _ => "no directional drift",
     };
 

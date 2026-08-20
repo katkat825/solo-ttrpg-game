@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="TraySurface" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://Tray/TraySurface.cs" id="1_script"]
+[ext_resource type="Material" path="res://textures/tray_felt/felt_teal.tres" id="2_look"]
+
+[sub_resource type="PhysicsMaterial" id="Physics_felt"]
+friction = 0.98
+bounce = 0.05
+
+[resource]
+script = ExtResource("1_script")
+Material = ExtResource("2_look")
+Physics = SubResource("Physics_felt")
+; BORROWED, not felt. There is no felt recording yet, so this points at the wood pool
+; and leans on ImpactDb and ImpactPitch to dull it - quieter and lower reads as softer,
+; which is close enough to be convincing and is not the same as being right.
+; The fix is a real recording: slice_impacts.py --out game/audio/samples/impacts/felt
+AudioPool = "res://audio/samples/impacts/wood/"
+ImpactDb = -4.0
+ImpactPitch = 0.96

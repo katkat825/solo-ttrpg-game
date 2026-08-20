@@ -1,5 +1,5 @@
 using Godot;
-using Rules.Dice;
+using Core.Dice;
 
 // which number is showing, given a die's orientation
 // split out of DieBody because the table is the piece that varies per shape

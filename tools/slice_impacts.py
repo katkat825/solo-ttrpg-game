@@ -194,7 +194,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("files", nargs="*", default=None)
-    p.add_argument("--out", default="game/audio/dice_wood")
+    p.add_argument("--out", default="game/audio/samples/impacts/wood")
     p.add_argument("--threshold", type=float, default=0.14,
                    help="onset level, as a fraction of the file's peak")
     p.add_argument("--min-gap", type=float, default=45,

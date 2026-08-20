@@ -1,10 +1,10 @@
 using Godot;
-using Rules.Localization;
+using Core.Localization;
 
 // the ONLY place a key turns into text
 // forwards to Godot's translation system, so we inherit CSV/PO import, locale fallback
 // and live locale switching
-// resolving a key anywhere inside rules/ means something has gone wrong
+// resolving a key anywhere inside core/ means something has gone wrong
 
 public sealed class GodotLocalizer : ILocalizer
 {

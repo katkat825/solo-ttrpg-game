@@ -1,5 +1,0 @@
-<Solution>
-  <Project Path="rules.tests/rules.tests.csproj" />
-  <Project Path="rules/rules.csproj" />
-  <Project Path="sim/sim.csproj" />
-</Solution>

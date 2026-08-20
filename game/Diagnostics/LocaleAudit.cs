@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
-using Rules.Characters;
-using Rules.Localization;
+using Core.Characters;
+using Core.Localization;
 
 // checks the locale file against the keys the engine actually emits
 // a missing string does not crash and does not look broken - it puts skill.larceny.name

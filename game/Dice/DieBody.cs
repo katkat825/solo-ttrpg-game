@@ -1,16 +1,22 @@
 using System;
 using Godot;
-using Rules.Dice;
+using Core.Dice;
 
 // one physical die - weight, tumble, a shape, and a face that can be read when it settles
-// named DieBody rather than Die because Rules.Dice.Die is the enum for die SIZE
+// named DieBody rather than Die because Core.Dice.Die is the enum for die SIZE
 // owns throw impulses, rest detection, and which collisions were hard enough to be worth hearing
-// owns no opinion about a bad throw (IDieRecovery), about noise (DieAudio), or about meaning (rules/)
+// owns no opinion about a bad throw (IDieRecovery), about noise (DieAudio), or about meaning (core/)
 // deliberately not a [Tool] script - building in the editor would bake a stale mesh and mass into die.tscn
 
 public partial class DieBody : RigidBody3D
 {
     [Signal] public delegate void SettledEventHandler(int value);
+
+    // one signal per recovery action, because a listener counting "how often was a die cocked"
+    // and a listener counting "how often did we re-throw it" are asking different questions
+    // these carried one signal and two different counters until 2026-08-20, and every consumer
+    // that added them up got a number roughly 3x the truth - see SEAMS.md
+    [Signal] public delegate void NudgedEventHandler(float alignment, int attempt);
 
     [Signal] public delegate void CockedEventHandler(float alignment, int attempt);
 
@@ -432,7 +438,7 @@ public partial class DieBody : RigidBody3D
                 _nudges++;
                 if (LogSettles)
                     GD.Print($"{Name}: cocked at {alignment:0.000} (needs {required:0.000}) - nudge {_nudges}");
-                EmitSignal(SignalName.Cocked, alignment, _nudges);
+                EmitSignal(SignalName.Nudged, alignment, _nudges);
                 Nudge();
                 return;
             }

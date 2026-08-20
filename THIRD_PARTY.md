@@ -37,7 +37,7 @@ python tools/slice_impacts.py assets/foo.wav     # just one
 python tools/slice_impacts.py --out game/audio/dice_stone
 ```
 
-Current pool is 77 samples, 1.1 MB, in `game/audio/dice_wood/`. Filenames keep the Freesound id as a prefix (`545489_07.wav`) so provenance survives in the file itself.
+Current pool is 77 samples, 1.1 MB, in `game/audio/samples/impacts/wood/`. Filenames keep the Freesound id as a prefix (`545489_07.wav`) so provenance survives in the file itself.
 
 Each sample comes out mono, because `AudioStreamPlayer3D` can't spatialise stereo and will silently do nothing if you feed it any. 48 kHz 16-bit, since Godot resamples anyway. Trimmed to the transient with 3 ms pre-roll, 1 ms fade-in and 10 ms fade-out; the fade-in is there because a cut landing mid-waveform clicks. Normalised to −3 dBFS so loudness comes from impact force at runtime. Onsets are rejected unless preceded by real quiet, otherwise you get samples starting halfway through the previous bounce.
 
@@ -45,7 +45,7 @@ It parses RIFF directly rather than using Python's `wave` module, which refuses 
 
 ### The Altoids can
 
-`441841`'s description warns about the metallic clang on the fifth roll, so I measured the samples for spectral tonality and decay length rather than trusting my ears. All eight of the most metallic samples came from that clip. Three were 3–4 standard deviations out, with `441841_18` ringing for 284 ms against a pool average of 77 ms. Those three sit in `game/audio/dice_wood/_review/`, out of the pool but not deleted. The other five had long tails but normal tonality, which is just a die rolling to a stop, so they stayed.
+`441841`'s description warns about the metallic clang on the fifth roll, so I measured the samples for spectral tonality and decay length rather than trusting my ears. All eight of the most metallic samples came from that clip. Three were 3–4 standard deviations out, with `441841_18` ringing for 284 ms against a pool average of 77 ms. Those three are excluded from the pool — 22 of 25 from that clip ship. They are not kept on disk: `slice_impacts.py` is deterministic, so re-running it against the source clip in `assets/` reproduces all 25 and you can listen to the rejects then. The other five had long tails but normal tonality, which is just a die rolling to a stop, so they stayed.
 
 The measurement is only a proxy, so I should sit down and listen to those three properly at some point.
 

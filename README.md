@@ -8,7 +8,7 @@ Original rules. Original dice system. Inspired by the experience of tabletop RPG
 
 For years I'd been looking for a single-player RPG that gave me the feeling of a tabletop campaign without micromanaging a party or relying on companion AI that I often found lacking.
 
-While helping redesign the localization architecture for Portalborn, I enjoyed the game enough to start writing my own campaign content for it. That was fun, and it clarified that what I actually wanted was something else.
+While helping redesign the localization architecture for [Portalborn](https://store.steampowered.com/app/4815720/Portalborn/), I enjoyed the game enough to start writing my own campaign content for it. That was fun, and it clarified that what I actually wanted was something else.
 
 Then the obvious caught up with me. I write software for a living. If the game I want doesn't exist, I can build it.
 
@@ -36,25 +36,27 @@ Two PowerShell checks run headless and exit non-zero on failure:
 ## Layout
 
 ```
-rules/          pure C# rules engine, never references Godot
+core/           pure C# rules engine, never references Godot
   Dice/         die sizes, stepping, IRng
   Localization/ ILocalizer, key conventions
   Statistics/   FaceTally, chi-squared fairness testing
   Resolution/   Pool, PoolResult, IResolver, Difficulty
   Characters/   Traits, Actor, IArchetypeSource
   Combat/       CombatEngine, ITargetSelector, ICombatObserver
-rules.tests/    xUnit, one file per concern
+core.tests/     xUnit, one file per concern
 sim/            headless balance harness
 game/           the Godot project
-  Dice/         DieBody, DieSolid, DieFaceTable, the tray
+  Dice/         DieBody, DieSolid, DieFaceTable, the die itself
+  Tray/         DiceTray, TrayResolution, skins, the Snag cue
+  audio/        DieAudio, SurfaceVoice, ImpactPool, the samples
   Diagnostics/  fairness sweep, locale audit
   Localization/ GodotLocalizer, the only place a key becomes text
   locale/       game.csv, one column per language
 ```
 
-`DndGame.slnx` at the root covers rules, rules.tests and sim. Godot generates its own `.sln` inside `game/`, which is gitignored. `rules` targets net8.0 because Godot 4.7 does; `sim` and `rules.tests` are on net10.0.
+`SoloTabletopRpg.slnx` at the root covers core, core.tests and sim. Godot generates its own `.sln` inside `game/`, which is gitignored. `core` targets net8.0 because Godot 4.7 does; `sim` and `core.tests` are on net10.0.
 
-See [`rules/README.md`](rules/README.md) for the layer order and the substitution seams.
+See [`core/README.md`](core/README.md) for the layer order and the substitution seams.
 
 ## How it plays
 
@@ -62,21 +64,21 @@ Build a pool of up to three dice (attribute + skill + gear), throw it, add the b
 
 Damage steps your dice down a size. You watch a character get worse instead of watching a number drop. The hero gets two actions a round and ordinary enemies get one; without that a solo fight measures at about a 4% win rate.
 
-Exactly one 1 in the pool is a **Snag**, which is cosmetic and just cues the companion to say something. It comes up on about 33% of early rolls. Two or more 1s is **Trouble** and actually costs you, at about 6%. Some 1 or other turns up 39% of the time, which is those two added — an easy pair of numbers to confuse, so `Rules.Resolution.PoolOdds` gives the exact odds for any pool and a test holds the resolver to them.
+Exactly one 1 in the pool is a **Snag**, which is cosmetic and just cues the companion to say something. It comes up on about 33% of early rolls. Two or more 1s is **Trouble** and actually costs you, at about 6%. Some 1 or other turns up 39% of the time, which is those two added — an easy pair of numbers to confuse, so `Core.Resolution.PoolOdds` gives the exact odds for any pool and a test holds the resolver to them.
 
 **Vigor** is the hit-point-ish stat. Conditions are the other half of taking damage: each one shrinks an attribute die by a size, which compounds without needing a separate death-spiral rule.
 
 ## Rules I hold myself to
 
-`rules/` never references Godot. Headless tests and overnight balance runs both depend on it.
+`core/` never references Godot. Headless tests and overnight balance runs both depend on it.
 
 Rules in code, world in data. The dice system stays hard-coded. Monsters, items, maps, encounters and dialogue are content and live in data files. If adding a campaign would mean touching it, it's content.
 
-Anything that's a policy decision goes behind an interface with a default implementation. `rules.tests/SeamTests.cs` substitutes each seam from outside the library, so a test that stops compiling means I've welded one shut.
+Anything that's a policy decision goes behind an interface with a default implementation. `core.tests/SeamTests.cs` substitutes each seam from outside the library, so a test that stops compiling means I've welded one shut.
 
 I've stopped there. `Actor`, `Pool`, `PoolResult` and the dice system are concrete on purpose.
 
-No player-facing text in `rules/`. The engine emits localization keys and the presentation layer resolves them. English is a locale file like any other language, so adding a language is a content task. Key grammar is `namespace.subject.aspect[.qualifier]*[.index]`, enforced by `KeyConventions.IsWellFormed` and checked end to end by `check-locale.ps1`.
+No player-facing text in `core/`. The engine emits localization keys and the presentation layer resolves them. English is a locale file like any other language, so adding a language is a content task. Key grammar is `namespace.subject.aspect[.qualifier]*[.index]`, enforced by `KeyConventions.IsWellFormed` and checked end to end by `check-locale.ps1`.
 
 Change a balance number, run the sim. Those figures were verified against exact enumeration, so drift means something broke.
 

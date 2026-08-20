@@ -1,6 +1,6 @@
 <Project Sdk="Godot.NET.Sdk/4.7.1">
   <ItemGroup>
-    <ProjectReference Include="..\rules\rules.csproj" />
+    <ProjectReference Include="..\core\core.csproj" />
   </ItemGroup>
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>

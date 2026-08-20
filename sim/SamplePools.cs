@@ -1,6 +1,6 @@
-using Rules.Characters;
-using Rules.Dice;
-using Rules.Resolution;
+using Core.Characters;
+using Core.Dice;
+using Core.Resolution;
 
 namespace Sim
 {
@@ -29,7 +29,7 @@ namespace Sim
             public Pool Build() => Pool.Of(
                 (Attr.Might.Key(), AttrDie),
                 (Skill.Blades.Key(), SkillDie),
-                (Rules.Localization.KeyConventions.GearName("axe"), GearDie));
+                (Core.Localization.KeyConventions.GearName("axe"), GearDie));
         }
 
         public static readonly Sample[] All =

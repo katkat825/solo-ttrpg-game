@@ -1,5 +1,5 @@
-using Rules.Dice;
-using Rules.Resolution;
+using Core.Dice;
+using Core.Resolution;
 
 namespace Sim
 {

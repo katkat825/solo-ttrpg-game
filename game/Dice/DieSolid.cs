@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
-using Rules.Dice;
+using Core.Dice;
 
 // the shape of one die, as maths rather than as an asset
 // Godot ships box, sphere and cylinder, so d4/d8/d10/d12 need geometry from somewhere

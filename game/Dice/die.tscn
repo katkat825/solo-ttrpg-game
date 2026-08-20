@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://cioldqb5uwbs0" path="res://Dice/DieBody.cs" id="1_die"]
 [ext_resource type="Material" path="res://textures/die_onyx/die_onyx.tres" id="2_k4nea"]
-[ext_resource type="Script" path="res://Dice/DieAudio.cs" id="3_audio"]
+[ext_resource type="Script" path="res://audio/DieAudio.cs" id="3_audio"]
 
 [sub_resource type="PhysicsMaterial" id="Physics_die"]
 friction = 0.55

@@ -38,7 +38,7 @@
     likeliest of the set to come to rest against a wall on something that isn't a face.
 
 .PARAMETER Tray
-    Which tray skin to measure, by bare name - a .tres in game/Dice/skins/. Default 'wood',
+    Which tray skin to measure, by bare name - a .tres in game/Tray/skins/. Default 'wood',
     the tray the scene ships with.
 
     A skin changes friction and bounce, and bounce is exactly what decides how a die settles,
@@ -93,9 +93,9 @@ if (-not $Godot -or -not (Test-Path $Godot)) {
 
 $project = Join-Path $PSScriptRoot 'game'
 
-$skin = Join-Path $PSScriptRoot "game\Dice\skins\$Tray.tres"
+$skin = Join-Path $PSScriptRoot "game\Tray\skins\$Tray.tres"
 if (-not (Test-Path $skin)) {
-    $available = (Get-ChildItem (Join-Path $PSScriptRoot 'game\Dice\skins') -Filter '*.tres' |
+    $available = (Get-ChildItem (Join-Path $PSScriptRoot 'game\Tray\skins') -Filter '*.tres' |
                   Select-Object -ExpandProperty BaseName) -join ', '
     Write-Error "No tray skin '$Tray'. Available: $available"
 }

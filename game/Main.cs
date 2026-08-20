@@ -1,27 +1,32 @@
 using Godot;
-using Rules.Characters;
-using Rules.Combat;
-using Rules.Dice;
-using Rules.Localization;
-using Rules.Resolution;
+using Core.Characters;
+using Core.Combat;
+using Core.Dice;
+using Core.Localization;
+using Core.Resolution;
 
-// smoke test for the rules library, kept on its own scene (main.tscn)
+// smoke test for the core library, kept on its own scene (main.tscn)
 // not in the normal run path - the game's main scene is dice_tray.tscn
-// the fastest way to confirm Godot can still see and use rules/ after a refactor
+// the fastest way to confirm Godot can still see and use core/ after a refactor
 // open main.tscn, press F6, read the output
 
 public partial class Main : Node
 {
+    // the one place this scene names a concrete roster
+    // swapping in a data-backed source is this line and nothing else - which is the whole
+    // reason nothing below reaches past IArchetypeSource to build a fighter
+    readonly IArchetypeSource _archetypes = new BuiltInArchetypes();
+
     public override void _Ready()
     {
         var loc = new GodotLocalizer();
         var rng = new SeededRng((int)Time.GetTicksMsec());
 
         // the label is a KEY, resolved here at the edge and never inside the rules
-        var hero = BuiltInArchetypes.Barbarian();
+        var hero = _archetypes.Create(EngineIds.Barbarian);
         var result = new StandardResolver(rng).Resolve(hero.BuildPool(Attr.Might, Skill.Blades));
 
-        GD.Print("rules library reachable from Godot");
+        GD.Print("core library reachable from Godot");
         foreach (var d in result.Rolls)
             GD.Print($"  {loc.Get(d.LabelKey),-22} {d.Die.Label(),-4} -> {d.Value}  " +
                      (d.Counted ? "counted" : "IMPACT"));
@@ -32,6 +37,6 @@ public partial class Main : Node
         // a whole fight, narrated through the observer seam into Godot's output
         GD.Print("");
         new CombatEngine(new StandardResolver(rng), observer: new RecordingCombatObserver(GD.Print))
-            .Run(hero, BuiltInArchetypes.StandardEncounter());
+            .Run(hero, _archetypes.Standard());
     }
 }

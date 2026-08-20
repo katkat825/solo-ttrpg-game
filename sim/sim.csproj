@@ -3,9 +3,9 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <!--
-      net10.0 because that's the runtime installed on this machine. `rules` stays
+      net10.0 because that's the runtime installed on this machine. `core` stays
       on net8.0 because Godot 4.7 targets it; a net8.0 library referenced from a
-      net10.0 app is fine. Bump this if you ever move rules forward.
+      net10.0 app is fine. Bump this if you ever move core forward.
     -->
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Sim</RootNamespace>
@@ -15,7 +15,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\rules\rules.csproj" />
+    <ProjectReference Include="..\core\core.csproj" />
   </ItemGroup>
 
 </Project>

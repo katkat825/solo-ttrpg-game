@@ -4,7 +4,7 @@
 *.translation
 
 # Godot regenerates its own solution file for the game project.
-# The canonical solution is DndGame.slnx at the repo root.
+# The canonical solution is SoloTabletopRpg.slnx at the repo root.
 /game/*.sln
 
 # C#
