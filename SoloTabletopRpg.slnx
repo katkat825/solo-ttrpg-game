@@ -1,5 +1,7 @@
 <Solution>
   <Project Path="core.tests/core.tests.csproj" />
   <Project Path="core/core.csproj" />
+  <Project Path="game.tests/game.tests.csproj" />
+  <Project Path="game/Solo Tabletop RPG.csproj" />
   <Project Path="sim/sim.csproj" />
 </Solution>

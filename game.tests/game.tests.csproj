@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Game.Tests</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!--
+    The Godot project itself, referenced whole. Nothing here may touch a Godot type -
+    GodotSharp loads, but the engine behind it is not running, so anything that reaches
+    for a Node or a Resource fails at runtime rather than at compile time.
+
+    That is the boundary this project tests up to and no further: the Godot-free helpers
+    in game/ - TrayResolution, TrayThrow, SnagCue, NudgeThenRethrow. A helper that cannot
+    be tested from here because it needs the engine is a helper that belongs in core/.
+    See FOUNDATIONS.md F1.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\game\Solo Tabletop RPG.csproj" />
+  </ItemGroup>
+
+</Project>

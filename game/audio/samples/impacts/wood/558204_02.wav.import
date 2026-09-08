@@ -3,12 +3,12 @@
 importer="wav"
 type="AudioStreamWAV"
 uid="uid://dv5i7v5ydt0x8"
-path="res://.godot/imported/558204_02.wav-f91575a83aea87dabb822499f84f2710.sample"
+path="res://.godot/imported/558204_02.wav-0fcd7aa3f36ae852d7534102923057fd.sample"
 
 [deps]
 
-source_file="res://audio/dice_wood/558204_02.wav"
-dest_files=["res://.godot/imported/558204_02.wav-f91575a83aea87dabb822499f84f2710.sample"]
+source_file="res://audio/samples/impacts/wood/558204_02.wav"
+dest_files=["res://.godot/imported/558204_02.wav-0fcd7aa3f36ae852d7534102923057fd.sample"]
 
 [params]
 

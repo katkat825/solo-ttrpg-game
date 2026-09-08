@@ -19,7 +19,7 @@ So this is my attempt at the feeling of sitting at a table with a DM, rolling re
 ## Building
 
 ```
-dotnet test                     # rules test suite
+dotnet test                     # rules test suite, plus game.tests
 dotnet run --project sim        # balance tables
 dotnet run --project sim 50000  # more trials
 ```
@@ -52,9 +52,12 @@ game/           the Godot project
   Diagnostics/  fairness sweep, locale audit
   Localization/ GodotLocalizer, the only place a key becomes text
   locale/       game.csv, one column per language
+game.tests/     xUnit over the Godot-free helpers in game/
 ```
 
-`SoloTabletopRpg.slnx` at the root covers core, core.tests and sim. Godot generates its own `.sln` inside `game/`, which is gitignored. `core` targets net8.0 because Godot 4.7 does; `sim` and `core.tests` are on net10.0.
+Namespaces match folders throughout: `Core.*` in `core/`, `Game.*` in `game/`.
+
+`SoloTabletopRpg.slnx` at the root covers core, core.tests, game, game.tests and sim, so `dotnet test` builds the Godot project too — that needs `Godot.NET.Sdk` from nuget.org and no Godot install. Godot generates its own `.sln` inside `game/`, which is gitignored. `core` and `game` target net8.0 because Godot 4.7 does; `sim`, `core.tests` and `game.tests` are on net10.0.
 
 See [`core/README.md`](core/README.md) for the layer order and the substitution seams.
 
