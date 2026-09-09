@@ -31,6 +31,12 @@ namespace Game.Tray
         // this sits outside it, so the two never overlap however the die was marked
         public float InnerRadius { get; set; }
 
+        // where the felt is, and the frame that is measured in - the same pair DieMark takes,
+        // and for the same reason: this ring was pinned to a world Y until F2
+        public TrayBounds Bounds { get; set; } = TrayBounds.Shipped;
+
+        public Node3D TraySpace { get; set; }
+
         const float FeltLift = 0.0014f;  // a hair above DieMark's rings, so the two never z-fight
 
         const float Gap = 0.0016f;       // the die's mark to this one
@@ -72,14 +78,22 @@ namespace Game.Tray
                 // drawn as light, like every other mark - no shadow of its own
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             });
+
+            // placed before it is ever drawn, for the reason DieMark says at the same line
+            Follow();
+        }
+
+        // follow the die rather than snapshotting where it was, for the same reason DieMark
+        // does - a ring around empty felt lies. in the tray's space, also for DieMark's reason
+        void Follow()
+        {
+            Vector3 p = TraySpace?.ToLocal(Die.GlobalPosition) ?? Die.GlobalPosition;
+            Position = new Vector3(p.X, Bounds.FeltY + FeltLift, p.Z);
         }
 
         public override void _Process(double delta)
         {
-            // follow the die rather than snapshotting where it was, for the same reason DieMark
-            // does - a ring around empty felt lies
-            Vector3 p = Die.GlobalPosition;
-            GlobalPosition = new Vector3(p.X, FeltLift, p.Z);
+            Follow();
 
             if (_age >= Pings * PingSeconds) return;
 

@@ -78,11 +78,26 @@ namespace Game.Dice
 
         [Export] public int MaxNudges { get; set; } = 2;
 
-        // out of the tray: below this world Y, or beyond LostRadius from the centre
-        // assumes the tray sits at the world origin - move the tray and both move with it
-        [Export] public float LostBelowY { get; set; } = -0.2f;
+        // the frame this die's bounds are measured in - the tray it was thrown into
+        // null means world space, which is die.tscn opened on its own: no tray, nothing to leave,
+        // and the two numbers below measured from the world origin exactly as they were before F2
+        //
+        // deliberately a Node3D and not the tray itself: Game.Dice must not reach into Game.Tray,
+        // and a frame is all the die needs. deliberately not [Export] either - a node reference
+        // exported on a scene that is instanced three times is a NodePath waiting to break
+        public Node3D TraySpace { get; set; }
 
-        [Export] public float LostRadius { get; set; } = 0.6f;
+        // out of the tray: below this Y, or beyond this radius from the origin - both measured in
+        // TraySpace, so the tray can stand anywhere. they were world coordinates until F2, which
+        // is what made a tray at the world origin the only tray that worked (SEAMS.md 8)
+        //
+        // not [Export] any more, and that is the point: how big the tray is has never been a
+        // property of a die. DiceTray derives both from the tray it measured and hands them over
+        // - see Game.Tray.TrayBounds. What is left here is what a die uses when nothing has told
+        // it otherwise, and it is the shipped tray's own figures
+        public float LostBelowY { get; set; } = -0.2f;
+
+        public float LostRadius { get; set; } = 0.6f;
 
         // re-throws for an escaped die, before the default policy takes whatever is showing
         [Export] public int MaxLostRethrows { get; set; } = 3;
@@ -473,9 +488,23 @@ namespace Game.Dice
         // live, not cached - valid mid-tumble, it just won't mean much until the die stops
         public (int Value, float Alignment) ReadFace() => _faces.Read(GlobalBasis);
 
+        // hand this die the tray another one is already being thrown into
+        // the fairness sweep clones its dice, and Duplicate() copies [Export]s only - the three
+        // properties above are deliberately not, so the clone would otherwise be measured against
+        // the world origin while the original was measured against the tray
+        public void BoundLike(DieBody other)
+        {
+            TraySpace = other.TraySpace;
+            LostBelowY = other.LostBelowY;
+            LostRadius = other.LostRadius;
+        }
+
+        // asked in the tray's own space, so moving the tray moves what "out" means with it
+        // a die that has left the tray is one outside the tray's extent, wherever the tray stands
         bool HasLeftTray()
         {
-            Vector3 p = GlobalPosition;
+            Vector3 p = TraySpace?.ToLocal(GlobalPosition) ?? GlobalPosition;
+
             return p.Y < LostBelowY
                 || new Vector2(p.X, p.Z).Length() > LostRadius;
         }

@@ -22,11 +22,14 @@ namespace Game.Tray
         // injected, so this file cannot reach for TranslationServer
         public ILocalizer Text { get; set; }
 
-        // the felt as the label may use it - a name past these edges vanishes into the woodwork
-        // assumes the tray is centred on the world origin, as DieBody.LostRadius does
-        public float FeltNearEdge { get; set; } = 0.225f;
+        // how big the tray is and where its felt sits, measured off the scene by DiceTray
+        // the felt edges used to be two hand-copied world coordinates here, which is what made a
+        // tray anywhere but the world origin put every name in the woodwork - SEAMS.md 8
+        public TrayBounds Bounds { get; set; } = TrayBounds.Shipped;
 
-        public float FeltSideEdge { get; set; } = 0.300f;
+        // the frame Bounds is expressed in. null means the tray stands at the world origin,
+        // which is what this file assumed outright until F2
+        public Node3D TraySpace { get; set; }
 
         const float FeltLift = 0.0012f;  // clear of the felt, so the ring never fights the floor for the pixel
 
@@ -38,7 +41,7 @@ namespace Game.Tray
         const float HaloGap = 0.0045f;   // Impact ring to the second ring outside it
         const float HaloThickness = 0.0014f;
 
-        const float LabelHeight = 0.0125f;  // cap height on the felt, in metres - the tray is 0.64 m across
+        const float LabelHeight = 0.0125f;  // cap height on the felt, in metres - see TrayBounds for how wide that is
 
         const float LabelGap = 0.008f;
 
@@ -67,6 +70,11 @@ namespace Game.Tray
         {
             Build();
             Retranslate();
+
+            // placed before it is ever drawn. a mark built this frame does not get a _Process
+            // until the next one, and a ring sitting at the tray's centre for a frame reads as a
+            // fourth die that is not there
+            Follow();
         }
 
         // switching language, or turning the pseudolocale on, rewrites the felt without re-throwing
@@ -148,16 +156,20 @@ namespace Game.Tray
 
         // below the die, above it when below would hit the near wall, slid along when the word is long
         // a name that has slid under the woodwork looks exactly like a die that was never marked
+        // dieAt is in the TRAY's space, and so are the edges it is clamped against - the whole
+        // comparison is inside one frame, which is what lets the tray stand anywhere
         void PlaceLabel(Vector3 dieAt)
         {
-            float z = dieAt.Z + _labelDrop > FeltNearEdge ? -_labelDrop : _labelDrop;
+            float z = dieAt.Z + _labelDrop > Bounds.FeltNearEdge ? -_labelDrop : _labelDrop;
 
             // measured every frame rather than cached when the text was set
             // a Label3D builds its mesh after the fact, so asking as the string changes answers about the last one
             float half = _label.GetAabb().Size.X * 0.5f;
 
-            float onFelt = Mathf.Clamp(dieAt.X, -FeltSideEdge + half, FeltSideEdge - half);
+            float side = Bounds.FeltSideEdge;
+            float onFelt = Mathf.Clamp(dieAt.X, -side + half, side - half);
 
+            // an offset within the mark, not a position on the felt, so it needs no conversion
             _label.Position = new Vector3(onFelt - dieAt.X, 0f, z);
         }
 
@@ -177,13 +189,24 @@ namespace Game.Tray
             return instance;
         }
 
+        // follow the die rather than snapshotting where it was
+        // a die knocked loose later would leave its ring behind, and a ring around empty felt lies
+        //
+        // asked in the tray's space and answered in it: Position, not GlobalPosition, because
+        // TrayMarks sits exactly on the tray's origin and holds itself there. the ring was pinned
+        // to a world Y until F2, which is what left it on the floor of the room the moment the
+        // tray stood anywhere else
+        void Follow()
+        {
+            Vector3 p = TraySpace?.ToLocal(Die.GlobalPosition) ?? Die.GlobalPosition;
+            Position = new Vector3(p.X, Bounds.FeltY + FeltLift, p.Z);
+
+            PlaceLabel(p);
+        }
+
         public override void _Process(double delta)
         {
-            // follow the die rather than snapshotting where it was
-            // a die knocked loose later would leave its ring behind, and a ring around empty felt lies
-            Vector3 p = Die.GlobalPosition;
-            GlobalPosition = new Vector3(p.X, FeltLift, p.Z);
-            PlaceLabel(p);
+            Follow();
 
             if (Role != DieRole.Impact) return;
 

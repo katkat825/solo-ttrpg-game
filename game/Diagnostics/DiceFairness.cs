@@ -155,6 +155,13 @@ namespace Game.Diagnostics
             var clone = (DieBody)template.Duplicate();
             clone.Name = $"P{poolIndex:00}D{seat}";
             parent.AddChild(clone);
+
+            // Duplicate() copies [Export]s, and since F2 where the tray is is not one of them -
+            // it is handed to each die by whatever owns the tray. without this a clone measures
+            // its escape from the world origin while the die it was cut from measures from the
+            // tray, and the sweep's "left the tray" count stops describing the game
+            clone.BoundLike(template);
+
             return clone;
         }
 

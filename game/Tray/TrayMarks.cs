@@ -13,7 +13,16 @@ namespace Game.Tray
     {
         public ILocalizer Text { get; set; }
 
+        // how big the tray is and where its felt sits, handed down to every mark
+        // one measurement reaches the whole felt from here, rather than each mark carrying a copy
+        public TrayBounds Bounds { get; set; } = TrayBounds.Shipped;
+
         readonly List<DieMark> _marks = new();
+
+        // marks place themselves in TRAY coordinates, which is only true while this node sits
+        // exactly on the tray's origin. held here rather than assumed - it costs one line, and
+        // the alternative is every mark converting to world space and back for the same answer
+        public override void _Ready() => Transform = Transform3D.Identity;
 
         // dice must be in throw order - the same order given to TrayResolution.Resolve
         // that is what makes indexing them by slot correct
@@ -38,6 +47,10 @@ namespace Game.Tray
                     LabelKey = thrown.Slots[i].LabelKey,
                     Role = thrown.Roles[i],
                     Text = Text,
+                    Bounds = Bounds,
+
+                    // this node's own frame, which is the tray's - see _Ready
+                    TraySpace = this,
                 };
 
                 _marks.Add(mark);
@@ -55,6 +68,8 @@ namespace Game.Tray
                 {
                     Name = $"{dice[s].Name}Snag",
                     Die = dice[s],
+                    Bounds = Bounds,
+                    TraySpace = this,
 
                     // asked rather than measured, so the flash cannot end up under the ring it
                     // is supposed to be leaving

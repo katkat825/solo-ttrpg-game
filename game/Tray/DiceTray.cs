@@ -105,6 +105,13 @@ namespace Game.Tray
             if (skinName != null) Skin = TraySkin.Load(skinName) ?? Skin;
             ApplySkin();
 
+            // before anything is thrown, and before the sweep branch below, because a die that
+            // has not been told where the tray is measures its escape from the world origin
+            _bounds = Measure();
+            foreach (DieBody die in _dice) Bind(die);
+
+            GD.Print($"tray    {_bounds}");
+
             // the sweep runs in this scene, so the thing measured is the thing played
             // handed over BEFORE any wiring below: the sweep clones dice, and Duplicate()
             // copies signal connections along with them
@@ -129,7 +136,7 @@ namespace Game.Tray
             _authored = _dice.Select(d => d.Size).ToArray();
             Rebuild();
 
-            AddChild(_marks = new TrayMarks { Name = "Marks", Text = _text });
+            AddChild(_marks = new TrayMarks { Name = "Marks", Text = _text, Bounds = _bounds });
 
             // one handler for all three - each die reports for itself and the handler asks
             // whether the throw as a whole is over, so there is no per-die state to keep in sync
@@ -151,6 +158,96 @@ namespace Game.Tray
 
         private StaticBody3D _floorBody;
         private StaticBody3D _wallsBody;
+
+        // how big this tray is, read off the scene once. everything that needs to know - escape
+        // detection, label clamping, where the rings lie - is handed it from here
+        private TrayBounds _bounds = TrayBounds.Shipped;
+
+        // the scene is the one description of how big the tray is. four constants in three files
+        // said so too until F2 and nothing derived them from it, so resizing the floor left a die
+        // reported as outside the tray while visibly on the felt - SEAMS.md 5
+        //
+        // measured in THIS node's space, so the tray can be parented anywhere and still knows its
+        // own shape. the walls contribute only their thickness: they lean outward a few degrees,
+        // which makes their inner faces a function of height, and the felt a label may use is the
+        // floor they stand on rather than the gap between them at any particular altitude
+        private TrayBounds Measure()
+        {
+            _floorBody ??= GetNodeOrNull<StaticBody3D>(TrayFloorPath);
+            _wallsBody ??= GetNodeOrNull<StaticBody3D>(TrayWallsPath);
+
+            (CollisionShape3D shape, BoxShape3D box) = FirstBox(_floorBody);
+
+            if (box == null)
+            {
+                GD.PushError($"dice tray: no box-shaped floor under '{TrayFloorPath}' to measure - " +
+                             $"falling back to the authored tray, {TrayBounds.Shipped}");
+                return TrayBounds.Shipped;
+            }
+
+            // the top of the floor box, not its centre - dice rest on the felt, not inside it
+            float feltY = ToLocal(shape.GlobalPosition).Y + box.Size.Y * 0.5f;
+
+            float thickness = WallThickness();
+
+            var measured = new TrayBounds(box.Size.X * 0.5f, box.Size.Z * 0.5f, feltY, thickness);
+
+            if (measured.IsUsable) return measured;
+
+            GD.PushError($"dice tray: measured a tray with no felt inside it ({measured}) - " +
+                         $"falling back to the authored tray, {TrayBounds.Shipped}");
+            return TrayBounds.Shipped;
+        }
+
+        // the thinnest horizontal dimension across the wall boxes
+        // a wall is a slab: long one way, tall another, thin the third, and the thin one is the
+        // only one that eats into the felt. asking every wall and taking the smallest means an
+        // uneven tray reports the wall a label is most likely to slide under
+        private float WallThickness()
+        {
+            float thinnest = float.MaxValue;
+
+            foreach (CollisionShape3D shape in Shapes(_wallsBody))
+                if (shape.Shape is BoxShape3D box)
+                    thinnest = Mathf.Min(thinnest, Mathf.Min(box.Size.X, box.Size.Z));
+
+            if (thinnest < float.MaxValue) return thinnest;
+
+            GD.PushError($"dice tray: no box-shaped walls under '{TrayWallsPath}' to measure - " +
+                         "taking the authored thickness, so a long name may reach the woodwork");
+
+            return TrayBounds.Shipped.WallThickness;
+        }
+
+        private static (CollisionShape3D Shape, BoxShape3D Box) FirstBox(Node body)
+        {
+            foreach (CollisionShape3D shape in Shapes(body))
+                if (shape.Shape is BoxShape3D box) return (shape, box);
+
+            return (null, null);
+        }
+
+        // walks rather than naming anything, the same way Meshes does and for the same reason:
+        // a tray with more walls, or with its shapes nested differently, still measures
+        private static IEnumerable<CollisionShape3D> Shapes(Node node)
+        {
+            if (node == null) yield break;
+
+            foreach (Node child in node.GetChildren())
+            {
+                if (child is CollisionShape3D shape) yield return shape;
+
+                foreach (CollisionShape3D deeper in Shapes(child)) yield return deeper;
+            }
+        }
+
+        // one die told where it is being thrown. the tray owns the numbers; the die owns the test
+        private void Bind(DieBody die)
+        {
+            die.TraySpace = this;
+            die.LostBelowY = _bounds.LostBelowY;
+            die.LostRadius = _bounds.LostRadius;
+        }
 
         // the skin's bare file name - wood, gamblers - or "none"
         public string SkinName =>

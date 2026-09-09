@@ -26,8 +26,8 @@ namespace Game.Audio
         // must stay under the tray's rattle lead, or it is still going when the die flies
         [Export] public float RattleSeconds { get; set; } = 0.11f;
 
-        // metres to full volume. the tray is 0.64 m across and the camera sits about a metre off
-        // it, so at these distances the 3D player is mostly buying stereo position
+        // metres to full volume. the camera sits about a metre off the tray, whose size is TrayBounds
+        // so at these distances the 3D player is mostly buying stereo position
         [Export] public float UnitSize { get; set; } = 0.9f;
 
         DieBody _die;
