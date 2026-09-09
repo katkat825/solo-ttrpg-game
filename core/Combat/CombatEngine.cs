@@ -71,7 +71,8 @@ namespace Core.Combat
             }
 
             bool won = !hero.IsDown && foes.All(f => f.IsDown);
-            var result = new EncounterResult(won, round, Math.Max(0, hero.Vigor));
+            // Actor clamps Vigor at 0 since F3, so there is nothing left to paper over here
+            var result = new EncounterResult(won, round, hero.Vigor);
             _observer.EncounterEnded(result);
             return result;
         }

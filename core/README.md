@@ -59,6 +59,27 @@ var engine   = new CombatEngine(resolver, observer: new RecordingCombatObserver(
 
 Seeded runs are reproducible and `SeamTests.SeededRun_IsReproducible` asserts it. When a fight gives a result I don't believe, I re-run it with the same seed and a recorder attached instead of adding print statements.
 
+## The trait pipeline
+
+An actor's attribute dice are a base plus an ordered list of `TraitModifier`s, each carrying the
+`ModifierSource` it came from. `TraitPipeline` composes the two and owns the only write to the
+current dice, which is the invariant that keeps applying an effect and clearing one from computing
+the same value two different ways.
+
+Three properties, and they are the reason it came off `Actor` in F3 rather than after classes and
+items landed on it:
+
+- **Order is irrelevant.** Steps are summed and the die moves along the ladder once. A step up
+  before a step down and after it give the same die.
+- **Saturation is visible.** The ladder clamps at d4 and d12 and the leftover is kept, so
+  `Refused(attr)` tells three steps down from d6 apart from one. Silent clamping is how "two stacks"
+  and "three stacks" become indistinguishable and nobody can tell the rule from a bug.
+- **Provenance is kept.** `RemoveAllFrom(source)` takes the ring off without disturbing the rage.
+
+`CORE_RULES.md` §9 "Saturation" is the rules text this implements, including the one place it feeds
+back into combat: a Condition pressing on a die the ladder refuses to move is one the actor cannot
+absorb, and `Actor.IsOverwhelmed` makes it `IsDown`.
+
 ## Deliberately concrete
 
 `Actor` is a class, not an interface. Everything in the game is an actor and there's no second implementation waiting to happen. `Pool` and `PoolResult` are data. `Difficulty` is a static class of `const int` thresholds; a campaign needing different numbers passes them in rather than subclassing.

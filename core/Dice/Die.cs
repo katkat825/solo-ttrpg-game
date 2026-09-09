@@ -38,6 +38,31 @@ namespace Core.Dice
             return Ladder[Math.Min(Ladder.Length - 1, i + 1)];
         }
 
+        // moves a die n places along the ladder in one go - negative is down, positive is up
+        // this is the only place a stack of modifiers reaches the ladder, and it is one move
+        // rather than a replay, which is what makes the order effects arrived in irrelevant
+        // (CORE_RULES.md section 9, "Saturation")
+        //
+        // <paramref name="delivered"/> is how far it actually moved, so a caller can tell three
+        // steps down from d6 (a d4, two refused) from one step down from d6 (a d4, none refused)
+        // clamping without reporting is the silent saturation this exists to remove
+        //
+        // None is not on the ladder at all: no die, nothing to step, delivered 0
+        public static Die StepBy(this Die d, int steps, out int delivered)
+        {
+            int i = Array.IndexOf(Ladder, d);
+
+            if (i < 0)
+            {
+                delivered = 0;
+                return d;
+            }
+
+            int landed = Math.Clamp(i + steps, 0, Ladder.Length - 1);
+            delivered = landed - i;
+            return Ladder[landed];
+        }
+
         public static string Label(this Die d) => d == Die.None ? "-" : "d" + (int)d;
     }
 }

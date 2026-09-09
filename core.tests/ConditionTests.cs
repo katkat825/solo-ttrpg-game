@@ -84,5 +84,130 @@ namespace Core.Tests
 
             Assert.True(mook.IsDown);
         }
+
+        // ---- the pipeline underneath, seen through an Actor (F3) ----
+
+        [Fact]
+        public void AConditionAndAnItem_ComposeOnTheSameAttribute_WhicheverArrivesFirst()
+        {
+            var ring = ModifierSource.Gear("cursed_ring");
+
+            var first = Fixtures.Hero();
+            first.ApplyCondition(Condition.Winded);
+            first.AddModifier(new TraitModifier(ring, Attr.Might, -1));
+
+            var second = Fixtures.Hero();
+            second.AddModifier(new TraitModifier(ring, Attr.Might, -1));
+            second.ApplyCondition(Condition.Winded);
+
+            Assert.Equal(Die.D4, first.Attribute(Attr.Might));
+            Assert.Equal(first.Attribute(Attr.Might), second.Attribute(Attr.Might));
+            Assert.Equal(0, first.Saturation(Attr.Might));
+        }
+
+        [Fact]
+        public void TakingTheRingOff_LeavesTheConditionWhereItWas()
+        {
+            var ring = ModifierSource.Gear("cursed_ring");
+            var hero = Fixtures.Hero();
+
+            hero.ApplyCondition(Condition.Winded);
+            hero.AddModifier(new TraitModifier(ring, Attr.Might, -1));
+            hero.RemoveModifiers(ring);
+
+            Assert.Equal(Die.D6, hero.Attribute(Attr.Might));
+            Assert.Contains(Condition.Winded, hero.Conditions);
+        }
+
+        [Fact]
+        public void ClearingTheCondition_LeavesTheRingWhereItWas()
+        {
+            var ring = ModifierSource.Gear("cursed_ring");
+            var hero = Fixtures.Hero();
+
+            hero.ApplyCondition(Condition.Winded);
+            hero.AddModifier(new TraitModifier(ring, Attr.Might, -1));
+            hero.ClearCondition(Condition.Winded);
+
+            Assert.Equal(Die.D6, hero.Attribute(Attr.Might));
+            Assert.Single(hero.Modifiers);
+        }
+
+        // the saturation rule, CORE_RULES.md section 9
+        [Fact]
+        public void AnItemPastTheFloor_IsRefused_AndSaysHowFar()
+        {
+            var hero = Fixtures.Hero();
+            hero.AddModifier(new TraitModifier(ModifierSource.Gear("cursed_ring"), Attr.Might, -4));
+
+            Assert.Equal(Die.D4, hero.Attribute(Attr.Might));
+            Assert.Equal(-2, hero.Saturation(Attr.Might));
+        }
+
+        [Fact]
+        public void AnItemAlone_CannotDropYou_HoweverFarPastTheFloorItAsks()
+        {
+            var hero = Fixtures.Hero();
+            hero.AddModifier(new TraitModifier(ModifierSource.Gear("cursed_ring"), Attr.Might, -9));
+
+            Assert.False(hero.IsOverwhelmed);
+            Assert.False(hero.IsDown);
+        }
+
+        [Fact]
+        public void AConditionOnADieWithNothingLeftToGive_DropsYou()
+        {
+            var hero = Fixtures.Hero();
+            hero.AddModifier(new TraitModifier(ModifierSource.Gear("cursed_ring"), Attr.Might, -4));
+
+            Assert.False(hero.IsDown);
+
+            hero.ApplyCondition(Condition.Winded);
+
+            Assert.True(hero.IsOverwhelmed);
+            Assert.True(hero.IsDown);
+            Assert.True(hero.Vigor > 0);
+        }
+
+        [Fact]
+        public void TakingTheRingOff_BringsYouBack()
+        {
+            var ring = ModifierSource.Gear("cursed_ring");
+            var hero = Fixtures.Hero();
+
+            hero.AddModifier(new TraitModifier(ring, Attr.Might, -4));
+            hero.ApplyCondition(Condition.Winded);
+            hero.RemoveModifiers(ring);
+
+            Assert.False(hero.IsDown);
+        }
+
+        // a foe with no Grace statblock takes Reeling and is simply unaffected
+        // the alternative drops every mook that catches a Condition it has no die for
+        [Fact]
+        public void AConditionOnAnAttributeYouHaveNoDieFor_DoesNothing()
+        {
+            var rival = Fixtures.Rival();
+            Assert.Equal(Die.None, rival.Attribute(Attr.Grace));
+
+            rival.ApplyCondition(Condition.Reeling);
+
+            Assert.Equal(Die.None, rival.Attribute(Attr.Grace));
+            Assert.Equal(0, rival.Saturation(Attr.Grace));
+            Assert.False(rival.IsOverwhelmed);
+        }
+
+        // ---- vigor has one answer (F3) ----
+
+        [Fact]
+        public void Vigor_ClampsAtZero_RatherThanRunningNegative()
+        {
+            var hero = Fixtures.Hero();
+
+            hero.Damage(hero.MaxVigor + 50);
+
+            Assert.Equal(0, hero.Vigor);
+            Assert.True(hero.IsDown);
+        }
     }
 }

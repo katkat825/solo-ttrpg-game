@@ -100,6 +100,35 @@ Downloaded 2026-08-04. All three sources publish under CC0 1.0: commercial use f
 
 The collectible die materials are nearly all there: wood (`dark_wood`, `rosewood_veneer1`), marble (`Marble012`, `Marble016`), obsidian (`Onyx013`), brass (`Metal048A`), copper (`Metal057B`), stone (`rock_01`), gemstone (`Onyx011`, `Onyx015`). Resin is the one real gap. Steel would be `Metal048A` recoloured. Felt, wood and leather for table dressing are covered several times over.
 
+## 3D models
+
+Added 2026-09-09. All CC0 1.0 — commercial use fine, modification fine, no attribution required — and all human-authored. That second point matters as much as the licence here: Steam's disclosure form is about AI-generated content that ships (ASSET_MANIFEST.md), and "free" no longer implies "made by a person" on every store, so provenance now records both. KayKit and Quaternius are established human studios; the confirmation is theirs, not assumed from a tag.
+
+I confirmed Quaternius's CC0 directly on the itch page on 2026-09-09. KayKit's CC0 is long-standing and already documented in LEGAL_NOTES.md. The standing rule still applies: whoever downloads a pack checks its own page at download time — these were pulled 2026-09-09.
+
+Kept zipped in `assets/`, gitignored like everything else here. **These rows are provenance only — the models are not in the game yet.** Using a pack means unzipping it, pulling just the models this game needs into `game/`, and putting them through the one-palette recolour and the painted-miniature shader in ART_DIRECTION.md §9 so four packs read as one game. That's an in-editor pass, not done here.
+
+### KayKit — Kay Lousberg, https://kaylousberg.itch.io (CC0)
+
+| Pack | Source | Licence | For |
+|---|---|---|---|
+| `KayKit_Adventurers_2.0_FREE` | [kaylousberg.itch.io/kaykit-adventurers](https://kaylousberg.itch.io/kaykit-adventurers) | CC0 | The five player minis. Rigged, ~75 animations, 25+ accessories — the free stand-in for the class heroes until any are commissioned (ART_DIRECTION.md §9.3). |
+| `KayKit_Dungeon_Pack_1.1_FREE` | [kaylousberg.itch.io/kaykit-dungeon-pack](https://kaylousberg.itch.io/kaykit-dungeon-pack) | CC0 | The modular map tiles — floor, wall, door, stair — for THE_BOARD.md B2 and the campaign `maps/` kit. |
+| `KayKit_Skeletons_1.1_FREE` | kaylousberg.itch.io — KayKit Skeletons Pack | CC0 | Undead enemies: Rabble and Rivals. Folklore creatures, safe per LEGAL_NOTES.md. |
+| `KayKit_FantasyWeaponsBits_1.0_FREE` | kaylousberg.itch.io — KayKit Fantasy Weapons Bits | CC0 | Gear on the minis and as loot — the gear die made visible. |
+| `KayKit_Furniture_Bits_1.0_FREE` | kaylousberg.itch.io — KayKit Furniture Bits | CC0 | The room (ROOM_AND_SHEET.md R3) — table, chairs, shelf. |
+| `KayKit_RPGToolsBits_1.0_FREE` | kaylousberg.itch.io — KayKit RPG Tools Bits | CC0 | Tabletop dressing (THE_TABLE.md §7). Worth opening first — likely holds dice-case, rulebook and token pieces that fit the diegetic-table look directly. |
+
+### Quaternius — https://quaternius.com (CC0)
+
+| Pack | Source | Licence | For |
+|---|---|---|---|
+| `Fantasy Props MegaKit[Standard]` | [quaternius.itch.io/fantasy-props-megakit](https://quaternius.itch.io/fantasy-props-megakit) | CC0, confirmed on the page 2026-09-09 | Props for maps and table dressing — 94 models in the Standard tier. |
+| `Medieval Village MegaKit[Standard]` | [quaternius.com/packs/medievalvillagemegakit.html](https://quaternius.com/packs/medievalvillagemegakit.html) | CC0 | Above-ground environment and buildings for campaign settings. |
+| `Bestiary - Dungeon Monsters Kit[Standard]` | quaternius.com — Bestiary: Dungeon Monsters | CC0 | The monster roster — Rabble, Rivals, and Dread bosses. |
+
+Standard is Quaternius's free tier; Pro and Source add engine implementations and raw files under the same CC0. Nothing here needs a tier above Standard.
+
 ## Resolution
 
 A die is 50 mm on a 640 mm tray. If the tray fills about 1200 px of a 1080p screen, a die occupies roughly 90 px. A 4K texture on that is around 45× more texels than pixels, costing VRAM, load time and repo space for detail nobody can see.
@@ -209,4 +238,5 @@ CC0 requires nothing, but three lines on a credits screen are cheap:
 
 > Textures from ambientCG.com, PolyHaven.com and ShareTextures.com.
 > Sound from Freesound.org.
+> 3D models from KayKit (Kay Lousberg) and Quaternius.
 > All assets used under CC0.

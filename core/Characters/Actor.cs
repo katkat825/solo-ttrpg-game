@@ -30,8 +30,9 @@ namespace Core.Characters
         // not localized and never will be, so it must never reach the screen
         public string DebugName => Ordinal > 0 ? $"{Id}#{Ordinal}" : Id;
 
-        readonly Dictionary<Attr, Die> _base = new Dictionary<Attr, Die>();
-        readonly Dictionary<Attr, Die> _current = new Dictionary<Attr, Die>();
+        // base dice, everything pressing on them, and the arithmetic that composes the two
+        // it came off this class in F3 - see TraitPipeline for what it holds and why
+        readonly TraitPipeline _traits = new TraitPipeline();
         readonly Dictionary<Skill, Die> _skills = new Dictionary<Skill, Die>();
         readonly List<Condition> _conditions = new List<Condition>();
 
@@ -41,6 +42,9 @@ namespace Core.Characters
 
         public string WeaponKey => KeyConventions.GearName(WeaponId);
 
+        // clamped at 0 in the one place it is written, so "how much vigor" has a single answer
+        // it used to be able to go negative and CombatEngine papered over it with Math.Max(0, ...)
+        // at the point it reported the result, which is two answers depending on who you asked
         public int Vigor { get; private set; }
         public int MaxVigor { get; }
 
@@ -52,7 +56,28 @@ namespace Core.Characters
         public int ActionsPerRound { get; set; }
 
         public IReadOnlyList<Condition> Conditions => _conditions;
-        public bool IsDown => Vigor <= 0;
+
+        // every modifier on this actor, with its source - presentation and save/load read it
+        public IReadOnlyList<TraitModifier> Modifiers => _traits.Modifiers;
+
+        // CORE_RULES.md section 9: "take a Condition you can't absorb and you're down"
+        // made mechanical - the ladder refused a step DOWN on an attribute a Condition is
+        // pressing on, so that Condition bought nothing and there was nothing left to give
+        //
+        // gear alone cannot do this. a cursed ring can pin a die at d4 all day and you keep
+        // fighting; it is a Condition landing on a die with no room that finishes you
+        public bool IsOverwhelmed
+        {
+            get
+            {
+                foreach (var c in _conditions)
+                    if (_traits.Refused(c.Affects()) < 0) return true;
+
+                return false;
+            }
+        }
+
+        public bool IsDown => Vigor <= 0 || IsOverwhelmed;
 
         public Actor(string id, int maxVigor, int defense, Tier tier = Tier.Rival)
         {
@@ -68,14 +93,13 @@ namespace Core.Characters
         // ---- construction ----
 
         // sets the BASE die and lets the pipeline derive the current one
-        // writing _current directly here erased any active condition's effect while leaving the
-        // condition in the list, so the actor was Winded and un-debuffed at the same time, and
-        // ClearCondition would later step it down a second time
-        // every write to _current goes through Recalculate, so there is one path and not two
+        // writing the current die directly here erased any active condition's effect while
+        // leaving the condition in the list, so the actor was Winded and un-debuffed at the
+        // same time, and ClearCondition would later step it down a second time
+        // the pipeline owns the only write, so there is one path and not two
         public Actor With(Attr a, Die d)
         {
-            _base[a] = d;
-            Recalculate();
+            _traits.SetBase(a, d);
             return this;
         }
 
@@ -100,9 +124,21 @@ namespace Core.Characters
 
         // ---- traits ----
 
-        public Die Attribute(Attr a) => _current.TryGetValue(a, out var d) ? d : Die.None;
-        public Die BaseAttribute(Attr a) => _base.TryGetValue(a, out var d) ? d : Die.None;
+        public Die Attribute(Attr a) => _traits.Current(a);
+        public Die BaseAttribute(Attr a) => _traits.Base(a);
         public Die SkillDie(Skill s) => _skills.TryGetValue(s, out var d) ? d : Die.None;
+
+        // steps the ladder refused on this attribute - 0 when the whole stack was absorbed,
+        // negative when it asked for more than the d4 floor has. see TraitPipeline.Refused
+        public int Saturation(Attr a) => _traits.Refused(a);
+
+        // ---- modifiers ----
+
+        // feats, gear and effects arrive in Phases P and R; the pipeline that holds them is here
+        public void AddModifier(TraitModifier m) => _traits.Add(m);
+
+        // "take the ring off, keep raging" - by source, so nothing else is disturbed
+        public int RemoveModifiers(ModifierSource source) => _traits.RemoveAllFrom(source);
 
         // attribute + skill (if trained) + gear
         // each die carries the key of the trait that contributed it
@@ -120,35 +156,25 @@ namespace Core.Characters
 
         public bool HasCondition(Condition c) => _conditions.Contains(c);
 
-        // a Condition steps the attribute it affects down one size
-        // this stepped _current in place until 2026-08-20, which meant applying a condition and
-        // clearing one computed the same value two different ways - identical today only because
-        // StepDown saturates at D4 and nothing can buff. add one buff and they diverge, silently
-        // and only after a particular sequence of play. one path instead
+        // a Condition is one modifier like any other - one step down, sourced to itself, so
+        // clearing it takes off exactly what it put on and nothing else
+        // it stepped the current die in place until 2026-08-20, which meant applying a condition
+        // and clearing one computed the same value two different ways
         public bool ApplyCondition(Condition c)
         {
             if (_conditions.Contains(c)) return false;
+
             _conditions.Add(c);
-            Recalculate();
+            _traits.Add(new TraitModifier(ModifierSource.FromCondition(c), c.Affects(), -1));
             return true;
         }
 
         public bool ClearCondition(Condition c)
         {
             if (!_conditions.Remove(c)) return false;
-            Recalculate();
+
+            _traits.RemoveAllFrom(ModifierSource.FromCondition(c));
             return true;
-        }
-
-        void Recalculate()
-        {
-            foreach (var kv in _base) _current[kv.Key] = kv.Value;
-
-            foreach (var c in _conditions)
-            {
-                var a = c.Affects();
-                if (_current.TryGetValue(a, out var d)) _current[a] = d.StepDown();
-            }
         }
 
         // ---- damage ----
@@ -165,7 +191,7 @@ namespace Core.Characters
                 return Array.Empty<Condition>();
             }
 
-            Vigor -= amount;
+            Vigor = Math.Max(0, Vigor - amount);
 
             List<Condition> applied = null;
 
