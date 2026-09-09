@@ -31,7 +31,7 @@ namespace Core.Tests
             foreach (var d in hero.BuildPool(Attr.Might, Skill.Blades).Dice)
                 yield return d.LabelKey;
 
-            foreach (string key in EngineKeys.All())
+            foreach (string key in EngineKeys.All(Fixtures.Archetypes))
                 yield return key;
 
             // not engine output - these ship with a campaign, or do not exist yet
@@ -220,7 +220,7 @@ namespace Core.Tests
         [Fact]
         public void EngineKeys_CoverEveryTraitAndCondition_SoAddingOneAddsItToTheChecklist()
         {
-            var keys = new HashSet<string>(EngineKeys.All());
+            var keys = new HashSet<string>(EngineKeys.All(Fixtures.Archetypes));
 
             // derived from the enums, so a new skill lands here with nobody remembering to add it
             // check-locale.ps1 then fails until it has English
@@ -236,7 +236,7 @@ namespace Core.Tests
         [Fact]
         public void EngineKeys_FollowTheRoster_NotAHardCodedList()
         {
-            var keys = new HashSet<string>(EngineKeys.All());
+            var keys = new HashSet<string>(EngineKeys.All(Fixtures.Archetypes));
 
             foreach (string id in Fixtures.Archetypes.Ids)
             {
@@ -258,7 +258,7 @@ namespace Core.Tests
             // a campaign ships its own strings
             // if dialogue ever leaked into the engine checklist
             // game/locale/ would be asked to cover every bark in every campaign ever written
-            foreach (string key in EngineKeys.All())
+            foreach (string key in EngineKeys.All(Fixtures.Archetypes))
                 Assert.Contains(key.Split('.')[0], EngineKeys.Namespaces);
 
             Assert.DoesNotContain(KeyConventions.DialogueNs, EngineKeys.Namespaces);
@@ -269,8 +269,62 @@ namespace Core.Tests
         [Fact]
         public void EngineKeys_AreUnique_SoALocaleFileCanKeyOnThem()
         {
-            var all = EngineKeys.All().ToList();
+            var all = EngineKeys.All(Fixtures.Archetypes).ToList();
             Assert.Equal(all.Count, all.Distinct().Count());
+        }
+
+        // F4. this used to be `archetypes ?? new BuiltInArchetypes()`, so a caller that never said
+        // which roster was loaded got the placeholder three back and check-locale.ps1 passed while
+        // the campaign that actually loaded had no strings at all
+        [Fact]
+        public void EngineKeys_RefuseToGuessARoster_RatherThanSubstituteThePlaceholder()
+        {
+            var thrown = Assert.Throws<ArgumentNullException>(() => EngineKeys.All(null));
+
+            Assert.Equal("archetypes", thrown.ParamName);
+        }
+
+        // the iterator is split out so this lands at the call site and not on some later foreach
+        [Fact]
+        public void EngineKeys_RefuseImmediately_NotOnFirstEnumeration()
+        {
+            // no ToList(), no foreach - if the throw were deferred, nothing would happen here
+            Assert.Throws<ArgumentNullException>(() => EngineKeys.All(null));
+        }
+
+        [Fact]
+        public void EngineKeys_ReportTheRosterTheyWereGiven_NotTheBuiltInOne()
+        {
+            var keys = new HashSet<string>(EngineKeys.All(new OneFighterSource()));
+
+            Assert.Contains(KeyConventions.ActorName("ashfall_knight"), keys);
+            Assert.Contains(KeyConventions.ActorNameNumbered("ashfall_knight"), keys);
+            Assert.Contains("gear.halberd.name", keys);
+
+            // the placeholder roster must not leak in beside it, in either direction
+            foreach (string id in Fixtures.Archetypes.Ids)
+                Assert.DoesNotContain(KeyConventions.ActorName(id), keys);
+
+            Assert.DoesNotContain("gear.axe.name", keys);
+        }
+
+        // a stand-in for the data-backed source Phase P brings, substituted from outside core/
+        // exactly as SeamTests does it - the point being that the checklist follows it and not
+        // a roster living in the engine
+        sealed class OneFighterSource : IArchetypeSource
+        {
+            const string Id = "ashfall_knight";
+
+            static readonly string[] Roster = { Id };
+
+            public IReadOnlyCollection<string> Ids => Roster;
+
+            public bool Has(string id) => id == Id;
+
+            public Actor Create(string id) =>
+                new Actor(Id, maxVigor: 10, defense: 11)
+                    .With(Attr.Might, Die.D8)
+                    .WithWeapon("halberd", Die.D8);
         }
 
         [Fact]

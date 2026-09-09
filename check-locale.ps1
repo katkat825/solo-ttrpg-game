@@ -24,7 +24,9 @@
     add keys to the checklist without touching this file.
 
 .PARAMETER Godot
-    Path to the Godot mono console binary. Falls back to $env:GODOT, then a search of C:\Godot.
+    Path to the Godot mono console binary. Falls back to $env:GODOT, then a search of
+    $env:GODOT_ROOT or C:\Godot. Discovery lives in Find-Godot.ps1, which every check script
+    dot-sources.
 
 .EXAMPLE
     .\check-locale.ps1
@@ -36,18 +38,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-if (-not $Godot) { $Godot = $env:GODOT }
-
-if (-not $Godot) {
-    # The console binary, not the plain one: only that variant writes to stdout on Windows.
-    $Godot = Get-ChildItem 'C:\Godot' -Recurse -Filter '*mono*console.exe' -ErrorAction SilentlyContinue |
-             Sort-Object FullName -Descending |
-             Select-Object -First 1 -ExpandProperty FullName
-}
-
-if (-not $Godot -or -not (Test-Path $Godot)) {
-    Write-Error "Godot not found. Pass -Godot <path to the mono console exe> or set `$env:GODOT."
-}
+# discovery lives in one file, dot-sourced by every check script - see Find-Godot.ps1
+. (Join-Path $PSScriptRoot 'Find-Godot.ps1')
+$Godot = Find-Godot $Godot
 
 $project = Join-Path $PSScriptRoot 'game'
 

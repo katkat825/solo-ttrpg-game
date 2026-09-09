@@ -20,9 +20,38 @@ namespace Core.Characters
             KeyConventions.GearNs,
         };
 
+        // THE ROSTER IS REQUIRED, AND THAT IS THE POINT (F4)
+        //
+        // this took `IArchetypeSource archetypes = null` and fell back to `new BuiltInArchetypes()`.
+        // it read as a convenience and it was a trap: when statblocks become campaign data, a
+        // caller that forgot to say which roster is loaded would get the *hardcoded* three back,
+        // check-locale.ps1 would pass, and the campaign that is actually loaded would ship with
+        // no strings at all. a check that passes for the wrong reason is worse than no check, and
+        // this was the last route by which the checklist could describe a different game
+        //
+        // of the two answers the milestone offered - throw, or omit the actor namespace - this is
+        // the third and strictly better one: the parameter is required, so the *compiler* asks the
+        // question and no caller can forget at runtime. omitting the actor keys would have failed
+        // loudly too, but as "actor.rabble.name is in the file and nothing emits it", which sends
+        // the reader to the locale file rather than to the caller that didn't name a roster
+        //
+        // null still throws, and it throws HERE rather than on first enumeration - the iterator is
+        // split out below so a deferred exception can't surface somewhere unrelated
+        //
         // order is stable and grouped by namespace
         // so a generated locale file diffs cleanly when something is added
-        public static IEnumerable<string> All(IArchetypeSource archetypes = null)
+        public static IEnumerable<string> All(IArchetypeSource archetypes)
+        {
+            if (archetypes == null)
+                throw new ArgumentNullException(
+                    nameof(archetypes),
+                    "EngineKeys.All needs the archetype source that is actually loaded. " +
+                    "Defaulting to one would make the locale checklist describe a different game.");
+
+            return Keys(archetypes);
+        }
+
+        static IEnumerable<string> Keys(IArchetypeSource archetypes)
         {
             foreach (Attr a in Enum.GetValues<Attr>())
             {
@@ -45,7 +74,7 @@ namespace Core.Characters
             foreach (Tier t in Enum.GetValues<Tier>())
                 yield return t.Key();
 
-            foreach (string key in ForRoster(archetypes ?? new BuiltInArchetypes()))
+            foreach (string key in ForRoster(archetypes))
                 yield return key;
         }
 

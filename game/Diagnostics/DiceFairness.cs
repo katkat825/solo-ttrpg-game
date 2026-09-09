@@ -12,8 +12,10 @@ namespace Game.Diagnostics
     // includes single and multi die collision, different die shapes
     // verifies that each die shape produces mostly uniform distribution
     // helps catch physics/collision biases before they affect game balance
-    public partial class DiceFairness : Node
+    public partial class DiceFairness : HeadlessCheck
     {
+        protected override string Subject => "fairness";
+
         // dice tray (all dice hit this layer)
         const uint TrayLayer = 1;
 
@@ -24,9 +26,19 @@ namespace Game.Diagnostics
         // bit 0 belongs to the tray. Godot has 32.
         const int MaxCollidingPools = 31;
 
+        // THE SWEEP'S DEFAULTS LIVE HERE AND NOWHERE ELSE (F5)
+        //
+        // check-fairness.ps1 stated its own copies of these and had already diverged - it
+        // defaulted -Tray to 'wood' while this file defaulted to "none", so the script and the
+        // thing it runs disagreed about what an unqualified sweep measures. the script passes
+        // only what it was actually given now, and RequestedFrom fills in the rest from here
         public const int DefaultThrows = 2000;
 
         public const int DefaultSoloPools = 50;
+
+        public const int DefaultPoolSize = 1;
+
+        public const Die DefaultShape = Die.D6;
 
         // number of dice to keep in the air when pools collide
         const int TargetDiceInFlight = 48;
@@ -40,24 +52,28 @@ namespace Game.Diagnostics
         public int Throws { get; set; } = DefaultThrows;
 
         // dice thrown together, colliding with each other - 1 means each die is alone
-        public int PoolSize { get; set; } = 1;
+        public int PoolSize { get; set; } = DefaultPoolSize;
 
-        public Die Shape { get; set; } = Die.D6;
+        public Die Shape { get; set; } = DefaultShape;
 
         // independent pools in the air at once - zero is sensible default
         public int Pools { get; set; }
 
-        // which tray skin the dice are landing in,
+        // which tray skin the dice are landing in - set by DiceTray from the skin it applied,
+        // so the report always names the tray that was actually measured
         //
         // tray skin changes friction and bounce
         // bounce is what decides how a die settles
         // current skins - felt is fine and wood is fine
-        public string TrayName { get; set; } = "none";
+        //
+        // there is no default tray for a sweep to pick: the default is WHATEVER THE SCENE SHIPS
+        // WITH, which is the only answer that keeps meaning "the tray the game is played in" when
+        // the scene's skin changes. --tray= overrides it and DiceTray applies that before
+        // anything is thrown. the placeholder below is only ever seen if DiceTray forgets to set it
+        public string TrayName { get; set; } = "unset";
 
         // fail-safe for a pool that somehow never comes to rest - should recover itself
         public double StuckSeconds { get; set; } = 10.0;
-
-        public bool QuitWhenDone { get; set; } = true;
 
         // one pool: dice that hit each other - thrown and read as a unit
         sealed class PoolRun
@@ -232,7 +248,7 @@ namespace Game.Diagnostics
                 if (pool.Dice.All(d => d.IsSettled && d.IsAtRest))
                 {
                     Record(pool);
-                    if (_recorded >= Throws) { Finish(); return; }
+                    if (_recorded >= Throws) { Conclude(); return; }
                     Launch(pool);
                     continue;
                 }
@@ -269,7 +285,9 @@ namespace Game.Diagnostics
             }
         }
 
-        void Finish()
+        // named apart from HeadlessCheck.Finish on purpose: this is the whole closing report,
+        // and the base's Finish - the verdict line and the exit code - is the last thing it does
+        void Conclude()
         {
             _finished = true;
 
@@ -306,9 +324,9 @@ namespace Game.Diagnostics
                        || _bySeat.Any(t => t.Verdict == Fairness.Biased)
                        || _tally.DriftVerdict == Fairness.Biased;
 
-            GD.Print(biased ? "FAIRNESS CHECK FAILED" : "fairness check passed");
-
-            if (QuitWhenDone) GetTree().Quit(biased ? 1 : 0);
+            // the verdict line and the exit code come off HeadlessCheck, so this sweep and the
+            // locale audit cannot disagree about what 0 and 1 mean
+            Finish(!biased);
         }
 
         // the numbers and the verdict come from FaceTally; the wording is this file's job
@@ -329,10 +347,11 @@ namespace Game.Diagnostics
             out int throws, out int poolSize, out int pools, out Die shape, out string tray)
         {
             throws = DefaultThrows;
-            poolSize = 1;
+            poolSize = DefaultPoolSize;
             pools = 0;
-            shape = Die.D6;
+            shape = DefaultShape;
 
+            // null means "leave the scene's skin alone" - see TrayName
             tray = null;
 
             bool asked = false;

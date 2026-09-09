@@ -27,9 +27,12 @@ namespace Game.Tray
 
         // a KEY - gear.tray_gamblers.name, never "Gambler's Tray"
         //
-        // deliberately NOT in game/locale/game.csv, and nothing displays it yet
-        // the locale audit derives its checklist from core/, so a key with no engine
-        // behind it fails as an orphan - same trap M6 hit with ui.tray.impact
+        // it IS in game/locale/game.csv, and it is the locale audit's business even though
+        // nothing displays it yet. until F4 the audit built its checklist out of core/ alone, so
+        // both skins' names read as orphans and check-locale.ps1 failed for a reason that had
+        // nothing to do with anything being missing - same shape as the trap M6 hit with
+        // ui.tray.impact, from the other side. Game.Localization.GameKeys lists this folder now,
+        // so a skin arrives on the checklist by being dropped in, exactly like its sweep
         [Export] public string NameKey { get; set; } = "";
 
         [Export] public TraySurface Floor { get; set; }

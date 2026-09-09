@@ -12,20 +12,22 @@ namespace Game.Diagnostics
     // on the screen and waits for someone to open a character sheet and notice
     // run it with check-locale.ps1: exit 0 if the locale is complete, 1 if it isn't
     // everything printed is developer diagnostic, exempt from localization like Actor.DebugName
-    public partial class LocaleAudit : Node
+    public partial class LocaleAudit : HeadlessCheck
     {
+        protected override string Subject => "locale";
+
         // the source of truth. the .translation binaries beside it are build output
         [Export] public string CsvPath { get; set; } = "res://locale/game.csv";
 
-        [Export] public bool QuitWhenDone { get; set; } = true;
-
-        int _problems;
-
-        void Problem(string message)
-        {
-            _problems++;
-            GD.Print("  FAIL  " + message);
-        }
+        // THE ROSTER THE CHECKLIST IS TAKEN FROM, named here and printed in the report (F4)
+        //
+        // EngineKeys.All used to default to BuiltInArchetypes when handed nothing, so this file
+        // could audit a placeholder roster while a campaign was loaded and still say "passed".
+        // it is a required argument now, which puts the choice at the composition root where it
+        // belongs - this line, and Main.cs's. when statblocks become campaign data (Phase P) this
+        // is the one line that changes, and the report says out loud what it checked so a stale
+        // answer is visible rather than assumed
+        public IArchetypeSource Archetypes { get; set; } = new BuiltInArchetypes();
 
         public override void _Ready()
         {
@@ -36,19 +38,54 @@ namespace Game.Diagnostics
 
             if (english == null)
             {
+                GD.Print("");
                 Finish();
                 return;
             }
 
-            var expected = EngineKeys.All().ToList();
+            var expected = Checklist();
 
             CheckRegistered();
             CheckCoverage(expected, english);
             CheckGrammar(english);
             CheckPlaceholders(english);
 
-            ShowSample(expected);
+            ShowSample();
+
+            GD.Print("");
             Finish();
+        }
+
+        // the whole checklist: what the rules emit, plus what the presentation layer emits
+        //
+        // it was the first half alone until F4, which is why the two tray skins' names read as
+        // orphans - the file had them, the game emitted them, and the checklist had never heard
+        // of either. a checklist that covers less than the game is the same failure as one that
+        // covers a different game, just from the other side
+        IReadOnlyCollection<string> Checklist()
+        {
+            var keys = new SortedSet<string>(EngineKeys.All(Archetypes));
+
+            GD.Print($"roster      {Archetypes.GetType().Name}, " +
+                     $"{Archetypes.Ids.Count} archetypes: {string.Join(", ", Archetypes.Ids)}");
+
+            SortedDictionary<string, string> skins = GameKeys.TrayNameKeys();
+
+            foreach (KeyValuePair<string, string> skin in skins)
+            {
+                if (string.IsNullOrWhiteSpace(skin.Value))
+                {
+                    Problem($"tray skin '{skin.Key}' has no NameKey, so it can never be named on screen");
+                    continue;
+                }
+
+                keys.Add(skin.Value);
+            }
+
+            GD.Print($"tray skins  {string.Join(", ", skins.Keys)}");
+            GD.Print("");
+
+            return keys;
         }
 
         // a perfect CSV that nobody registered is still a screen full of keys
@@ -75,6 +112,7 @@ namespace Game.Diagnostics
 
         // both directions, and both matter
         // a key with no text breaks the screen; text with no key is dead weight a translator is paid for
+        // "the game" is the rules and the presentation layer together - see Checklist()
         void CheckCoverage(IReadOnlyCollection<string> expected, Dictionary<string, string> english)
         {
             var have = new HashSet<string>(english.Keys);
@@ -82,16 +120,16 @@ namespace Game.Diagnostics
             var missing = expected.Where(k => !have.Contains(k)).ToList();
             var orphans = english.Keys.Where(k => !expected.Contains(k)).ToList();
 
-            GD.Print($"keys        engine emits {expected.Count}, file has {english.Count}");
+            GD.Print($"keys        the game emits {expected.Count}, file has {english.Count}");
 
             foreach (string key in missing)
-                Problem($"{key} has no English. The engine emits it and the file doesn't cover it.");
+                Problem($"{key} has no English. The game emits it and the file doesn't cover it.");
 
             foreach (string key in orphans)
                 Problem($"{key} is in the file but nothing emits it. Either it's a typo or the code that used it is gone.");
 
             if (missing.Count == 0 && orphans.Count == 0)
-                GD.Print("            every key the engine emits has English, and nothing is spare");
+                GD.Print("            every key the game emits has English, and nothing is spare");
         }
 
         // the file is hand-edited, so it is the one place a key can be typed rather than built
@@ -127,7 +165,7 @@ namespace Game.Diagnostics
 
         // what the pseudolocale does to a handful of strings, so it is obvious it is wired up
         // and obvious what to look for when hunting hardcoded English by eye
-        void ShowSample(IReadOnlyCollection<string> keys)
+        void ShowSample()
         {
             var loc = new GodotLocalizer();
 
@@ -251,16 +289,6 @@ namespace Game.Diagnostics
             }
 
             return rows;
-        }
-
-        void Finish()
-        {
-            GD.Print("");
-            GD.Print(_problems == 0
-                ? "locale check passed"
-                : $"LOCALE CHECK FAILED with {_problems} problem{(_problems == 1 ? "" : "s")}");
-
-            if (QuitWhenDone) GetTree().Quit(_problems == 0 ? 0 : 1);
         }
     }
 }
