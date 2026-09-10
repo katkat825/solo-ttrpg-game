@@ -1,0 +1,25 @@
+[gd_scene load_steps=5 format=3]
+
+; The battle map. Almost empty on purpose: the squares are BUILT from the extent at load, not
+; laid out here, because a scene full of hand-placed tiles would be a second description of the
+; grid and free to disagree with it. See Board.cs.
+;
+; Nothing states the extent here either - Board's exports default to BoardMetrics.Shipped, so the
+; 8 x 8 board of 60 mm squares is stated once, in code, and the inspector overrides it per scene.
+;
+; Placeholder felt and painted lines. B2 replaces both with a tile set read from a data file.
+
+[ext_resource type="Script" path="res://Board/Board.cs" id="1_board"]
+[ext_resource type="Material" path="res://textures/tray_felt/felt_green.tres" id="2_felt"]
+[ext_resource type="PackedScene" path="res://Board/mini.tscn" id="3_mini"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_lines"]
+albedo_color = Color(0.05, 0.08, 0.06, 1)
+roughness = 1.0
+
+[node name="Board" type="Node3D"]
+script = ExtResource("1_board")
+Mat = ExtResource("2_felt")
+Lines = SubResource("Mat_lines")
+
+[node name="Mini" parent="." instance=ExtResource("3_mini")]

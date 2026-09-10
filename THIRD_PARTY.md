@@ -24,6 +24,15 @@ A clip whose licence I can't prove has to come out later, after it's already all
 | `485946__aunrea__10-sided-die-rolled-on-wood-table.wav` | [freesound.org/s/485946](https://freesound.org/people/aunrea/sounds/485946/) by aunrea, 2019 | CC0, verified on the page 2026-08-04 | 25 impacts. Tascam DR-100MKIII with an AT875R shotgun, 24/48 mono. |
 | `545489__wardoctor17__d20-rolls.wav` | [freesound.org/s/545489](https://freesound.org/people/wardoctor17/sounds/545489/) by wardoctor17, 2020 | CC0, verified on the page 2026-08-04 | 25 impacts. d20 on a wooden table. |
 | `441841__seanmporio__d20-rolling.wav` | [freesound.org/s/441841](https://freesound.org/people/SeanMPorio/sounds/441841/) by SeanMPorio, 2020 | CC0, verified on the page 2026-08-04 | 22 impacts, 3 quarantined. Single d20 on wood. The uploader notes the die hits an Altoids can on the fifth roll. |
+| `432917__djlprojects__paper-rustle-and-plop-on-wooden-table.wav` | [freesound.org/s/432917](https://freesound.org/people/djlprojects/sounds/432917/) by djlprojects, 2018 | Attribution 4.0, verified on the page 2026-09-10 | paper rustling followed by notebook impacting table.  |
+| `477435__rvgerxini__copper-and-metal-pieces-dropping-on-hardwood-surface.mp3` | [freesound.org/s/477435](https://freesound.org/people/Rvgerxini/sounds/477435/) by 
+Rvgerxini, 2019 | CC0, verified on the page 2026-09-10 | metal impacting wood - use for metal dice.  |
+| `649210__johanvanvuren__salt-or-pepper-on-counter-or-table-impact.wav` | [freesound.org/s/649210](https://freesound.org/people/Johanvanvuren/sounds/649210/) by 
+Johanvanvuren, 2022 | CC0, verified on the page 2026-09-10 | salt or pepper shakers on table - use for minis?  |
+| `505963__jedg__small-single-plastic-impacts.wav` | [freesound.org/s/505963](https://freesound.org/people/jedg/sounds/505963/) by 
+jedg, 2020 | CC0, verified on the page 2026-09-10 | plastic tiles on wood table - maybe dungeon tiles being laid out?  |
+| `258249__youandbiscuitme__wooden-object-set-on-table-6.wav` | [freesound.org/s/258249](https://freesound.org/people/youandbiscuitme/sounds/258249/) by 
+youandbiscuitme, 2014 | Attribution 3.0, verified on the page 2026-09-10 | wood bowl on wood table - dice tray being set on table  |
 
 ### Slicing
 
@@ -71,6 +80,7 @@ Downloaded 2026-08-04. All three sources publish under CC0 1.0: commercial use f
 | `Wood067`, 1K | Tray frame. In the project at `game/textures/tray_wood/` |
 | `Fabric034`, 1K felt | Tray floor. `game/textures/tray_felt/`, tinted green and teal |
 | `Onyx011`, 1K | Dice. `game/textures/die_onyx/`, triplanar |
+| `Plastic018B`, 2K/4K | Map surface. change to sepia/parchment color scheme. |
 
 ### Poly Haven — https://polyhaven.com
 

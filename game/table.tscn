@@ -1,0 +1,78 @@
+[gd_scene load_steps=8 format=3]
+
+; THE TABLE. The game's main scene from B0 onward, and the shipped view of it.
+;
+; The tray used to own the room - a camera, a sun and a world environment sat in dice_tray.tscn
+; because for M0-M9 the tray WAS the game. B0 puts a board on the table beside it, and one fixed
+; camera now has to frame both, so the room moved out here and the tray became what it always
+; was: an object standing on a table. F2 is what made that safe - everything in the tray is
+; measured in the tray's own space, so moving the tray moved the tray and nothing else.
+;
+; THE CAMERA IS THE ONE THING TO GET RIGHT HERE. Fixed, at the 60 degrees off the felt that
+; idea_notes.txt asks for - the angle a player actually sees a table from, close enough to read
+; the numerals on the dice and high enough to read the grid as a grid. It sees the tabletop, the
+; board and the tray together, and it does not move. THE_BOARD.md B0: get the angle right once.
+;
+; Everything on the table is placed HERE, in world space, and nothing inside either scene knows
+; where it stands.
+
+[ext_resource type="PackedScene" path="res://Board/board.tscn" id="1_board"]
+[ext_resource type="PackedScene" path="res://Tray/dice_tray.tscn" id="2_tray"]
+[ext_resource type="Texture2D" path="res://textures/tray_wood/color.jpg" id="3_color"]
+[ext_resource type="Texture2D" path="res://textures/tray_wood/roughness.jpg" id="4_rough"]
+[ext_resource type="Texture2D" path="res://textures/tray_wood/normalgl.jpg" id="5_normal"]
+
+[sub_resource type="Environment" id="Environment_room"]
+background_mode = 1
+background_color = Color(0.05, 0.045, 0.04, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.56, 0.58, 0.64, 1)
+ambient_light_energy = 0.35
+
+; the same oak as the tray, but a table is not a tray: the grain repeats over its own size rather
+; than over the tray's, and the parallax is left off because nothing is seen close enough to
+; benefit and a 2.4 m plane at this angle is exactly where it goes wrong
+[sub_resource type="StandardMaterial3D" id="Mat_table"]
+albedo_color = Color(0.62, 0.58, 0.54, 1)
+albedo_texture = ExtResource("3_color")
+roughness_texture = ExtResource("4_rough")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_texture = ExtResource("5_normal")
+uv1_scale = Vector3(9, 9, 9)
+
+[sub_resource type="BoxMesh" id="Mesh_table"]
+size = Vector3(2.4, 0.04, 1.5)
+
+[node name="Table" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_room")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, 0.4096, -0.2868, 0, 0.5736, 0.8192, 0.5, -0.7094, 0.4967, 0, 1.2, 0.8)
+light_energy = 1.2
+shadow_enabled = true
+shadow_bias = 0.02
+shadow_normal_bias = 0.5
+directional_shadow_max_distance = 4.0
+
+; pitched 60 degrees down, aimed between the board and the tray, 1.55 m back along that line - measured
+; headlessly against tan(fov/2) at 16:9, and the near right corner of the tray is the tight one
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.5, 0.8660254, 0, -0.8660254, 0.5, 0.08, 1.3423, 0.805)
+current = true
+fov = 35.0
+
+; the table itself, 1 mm below everything standing on it - close enough to look like contact,
+; far enough that no two faces are coplanar and flicker against each other
+[node name="Tabletop" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.08, -0.041, 0.03)
+mesh = SubResource("Mesh_table")
+material_override = SubResource("Mat_table")
+
+[node name="Board" parent="." instance=ExtResource("1_board")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.3, -0.014, -0.03)
+
+[node name="DiceTray" parent="." instance=ExtResource("2_tray")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.38, 0, 0.09)

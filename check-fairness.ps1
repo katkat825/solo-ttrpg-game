@@ -6,7 +6,9 @@
     Physics dice are not fair by construction, and a die that favours a face
     invalidates every number the balance simulator produces.
     Runs the real dice_tray.tscn - not a copy - with many independent pools in the air at
-    once, so 2,000 throws take about half a minute instead of an hour.
+    once, so 2,000 throws take about half a minute instead of an hour. Since B0 that scene is
+    reached through the main scene, table.tscn, which stands the tray on a table beside the
+    board; the tray, its dice and its physics are the same objects either way.
 
     Exit code 0 if the dice look fair, 1 if any of them is measurably biased. Safe to wire
     into a pre-commit hook or CI.

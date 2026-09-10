@@ -1,5 +1,7 @@
 # Untitled tabletop RPG
 
+Working name: Maps & Math Rocks
+
 A single-player RPG that looks like an actual table. Grid map, a tray of physics dice, painted minis, and a DM behind a screen: you see his hands, you don't see his dice. One hero, no party.
 
 Original rules. Original dice system. Inspired by the experience of tabletop RPGs, not any specific ruleset.

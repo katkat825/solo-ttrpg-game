@@ -9,7 +9,7 @@ using Game.Localization;
 namespace Game
 {
     // smoke test for the core library, kept on its own scene (main.tscn)
-    // not in the normal run path - the game's main scene is dice_tray.tscn
+    // not in the normal run path - the game's main scene is table.tscn
     // the fastest way to confirm Godot can still see and use core/ after a refactor
     // open main.tscn, press F6, read the output
     public partial class Main : Node

@@ -18,15 +18,38 @@ namespace Game.Audio
         // the resource system is necessarily up
         public static ImpactPool For(string folder)
         {
-            if (string.IsNullOrWhiteSpace(folder)) folder = Default;
-
-            if (!folder.EndsWith("/")) folder += "/";
+            folder = Normalize(folder);
 
             if (Loaded.TryGetValue(folder, out ImpactPool pool)) return pool;
 
             pool = new ImpactPool(folder);
             Loaded[folder] = pool;
             return pool;
+        }
+
+        static string Normalize(string folder)
+        {
+            if (string.IsNullOrWhiteSpace(folder)) folder = Default;
+
+            return folder.EndsWith("/") ? folder : folder + "/";
+        }
+
+        // has this folder anything to play, asked WITHOUT building a pool and WITHOUT complaining
+        //
+        // For() treats an empty folder as the error it usually is, and it usually is: samples
+        // that have gone missing are silence, and silence looks exactly like a die that never hit
+        // anything. But a folder that is empty because nobody has recorded it YET is an ordinary
+        // state of the project - audio/samples/minis/ is one today - and a caller with somewhere
+        // honest to fall back to should be able to ask without an error being pushed on its
+        // behalf. MiniVoice is the caller; TraySurface felt.tres borrows the same way
+        //
+        // THE FOLDER IS STILL THE LIST. This asks the folder rather than a flag someone has to
+        // remember to turn off, so dropping the first real recording in is the whole of switching
+        public static bool Has(string folder)
+        {
+            folder = Normalize(folder);
+
+            return DirAccess.DirExistsAbsolute(folder) && Files(folder).Count > 0;
         }
 
         // an AudioStreamRandomizer over every sample in the folder

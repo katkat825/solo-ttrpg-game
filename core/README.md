@@ -7,7 +7,7 @@ Pure C#, and it never references Godot.
 Dependencies point one way. Nothing lower reaches up.
 
 ```
-Core.Dice   Core.Localization   Core.Statistics
+Core.Dice   Core.Localization   Core.Statistics   Core.Space
         ↑
 Core.Resolution    pools, results, the resolver seam, the difficulty ladder
         ↑
@@ -16,9 +16,13 @@ Core.Characters    traits, actors, conditions, the content seam
 Core.Combat        the fight loop, targeting, the observer seam
 ```
 
-The three at the bottom don't know about each other either.
+The four at the bottom don't know about each other either. `Core.Space` is the newest of them
+(B0) and the only one nothing above it uses yet: a `Cell` and a `Grid` of them, extent and
+occupancy and no terrain. `game/Board` draws it; `COMBAT_LOOP.md` decides how much of it the
+dice care about; B3 adds pathfinding and line of sight, which is exactly the fiddly geometry
+that is miserable to check by eye and trivial to check with a test.
 
-Namespaces match folders, so if this ever needs to become several assemblies it's a project-file change rather than a rename. `Localization` and `Statistics` aren't game rules, and they belong here anyway: the membership test is *pure, headless and Godot-free*, not *is it literally a rule*. That's why this folder is `core/` and not `rules/`.
+Namespaces match folders, so if this ever needs to become several assemblies it's a project-file change rather than a rename. `Localization`, `Statistics` and `Space` aren't game rules, and they belong here anyway: the membership test is *pure, headless and Godot-free*, not *is it literally a rule*. That's why this folder is `core/` and not `rules/`.
 
 ## Seams
 
@@ -82,7 +86,7 @@ absorb, and `Actor.IsOverwhelmed` makes it `IsDown`.
 
 ## Deliberately concrete
 
-`Actor` is a class, not an interface. Everything in the game is an actor and there's no second implementation waiting to happen. `Pool` and `PoolResult` are data. `Difficulty` is a static class of `const int` thresholds; a campaign needing different numbers passes them in rather than subclassing.
+`Actor` is a class, not an interface. Everything in the game is an actor and there's no second implementation waiting to happen. `Pool` and `PoolResult` are data. `Cell` and `Grid` are data too — `Grid` is generic in what stands on a square only because `Space` is a bottom layer and cannot name an `Actor`, and it has no business knowing what a piece is anyway. `Difficulty` is a static class of `const int` thresholds; a campaign needing different numbers passes them in rather than subclassing.
 
 The dice system stays hard-coded. Letting a campaign redefine how the Impact die works would cost a lot of complexity for flexibility nobody will use, and it would stop the rules being simulatable, which is how every balance number in the project got checked.
 
