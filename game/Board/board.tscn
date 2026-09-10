@@ -27,10 +27,12 @@ normal_texture = ExtResource("4_normal")
 normal_scale = 0.5
 uv1_scale = Vector3(1, 1, 1)
 
-; a wet-erase grid: soft sepia ink, dark enough to read on the parchment without the harsh
-; near-black the felt mat used to want
+; a wet-erase grid: soft, light sepia ink. Deliberately faint - the map has to read first and the
+; grid sit under it, the way a real wet-erase grid does. The first pass (0.29,0.21,0.12) was so dark
+; the grid won out over the parchment; this is lightened to a soft tan that reads as a grid without
+; competing. Painted lines are lit, so albedo lands a touch darker than this in-scene.
 [sub_resource type="StandardMaterial3D" id="Mat_lines"]
-albedo_color = Color(0.29, 0.21, 0.12, 1)
+albedo_color = Color(0.58, 0.50, 0.38, 1)
 roughness = 1.0
 
 [node name="Board" type="Node3D"]
