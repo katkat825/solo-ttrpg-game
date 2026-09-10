@@ -1,4 +1,4 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=8 format=3]
 
 ; The battle map. Almost empty on purpose: the squares are BUILT from the extent at load, not
 ; laid out here, because a scene full of hand-placed tiles would be a second description of the
@@ -7,19 +7,35 @@
 ; Nothing states the extent here either - Board's exports default to BoardMetrics.Shipped, so the
 ; 8 x 8 board of 60 mm squares is stated once, in code, and the inspector overrides it per scene.
 ;
-; Placeholder felt and painted lines. B2 replaces both with a tile set read from a data file.
+; The mat is a WET-ERASE BATTLE MAP surface, not felt: ambientCG Plastic018B recoloured from its
+; neutral grey to a mottled sepia/parchment (game/textures/map_parchment/, see THIRD_PARTY.md),
+; with the roughness biased matte so it reads as paper rather than plastic. The grid is a soft
+; sepia ink over it. B2 replaces both with a tile set read from a data file.
 
 [ext_resource type="Script" path="res://Board/Board.cs" id="1_board"]
-[ext_resource type="Material" path="res://textures/tray_felt/felt_green.tres" id="2_felt"]
-[ext_resource type="PackedScene" path="res://Board/mini.tscn" id="3_mini"]
+[ext_resource type="PackedScene" path="res://Board/mini.tscn" id="2_mini"]
+[ext_resource type="Texture2D" path="res://textures/map_parchment/color.jpg" id="3_color"]
+[ext_resource type="Texture2D" path="res://textures/map_parchment/normalgl.jpg" id="4_normal"]
+[ext_resource type="Texture2D" path="res://textures/map_parchment/roughness.jpg" id="5_rough"]
 
+[sub_resource type="StandardMaterial3D" id="Mat_map"]
+albedo_texture = ExtResource("3_color")
+roughness_texture = ExtResource("5_rough")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_texture = ExtResource("4_normal")
+normal_scale = 0.5
+uv1_scale = Vector3(1, 1, 1)
+
+; a wet-erase grid: soft sepia ink, dark enough to read on the parchment without the harsh
+; near-black the felt mat used to want
 [sub_resource type="StandardMaterial3D" id="Mat_lines"]
-albedo_color = Color(0.05, 0.08, 0.06, 1)
+albedo_color = Color(0.29, 0.21, 0.12, 1)
 roughness = 1.0
 
 [node name="Board" type="Node3D"]
 script = ExtResource("1_board")
-Mat = ExtResource("2_felt")
+Mat = SubResource("Mat_map")
 Lines = SubResource("Mat_lines")
 
-[node name="Mini" parent="." instance=ExtResource("3_mini")]
+[node name="Mini" parent="." instance=ExtResource("2_mini")]

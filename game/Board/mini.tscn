@@ -48,10 +48,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.039, 0)
 mesh = SubResource("Mesh_body")
 material_override = SubResource("Mat_body")
 
-; the set-down click. same 3D settings as the dice use, so a piece and a die placed side by side
-; are heard at the same distance and the same width - see DieAudio.Take
+; the set-down click. distance and width match the dice (unit_size, attenuation, panning) so a
+; piece and a die placed side by side are heard at the same distance and the same width - see
+; DieAudio.Take. max_db is lifted above the dice ceiling on purpose: the shaker set-down sample
+; reads softer than a die impact at equal peak, so its gain (MiniVoice.SetDownDb) runs higher and
+; needs the headroom - without this the loud end of the set-down would clip against the ceiling.
 [node name="Voice" type="AudioStreamPlayer3D" parent="."]
 unit_size = 0.9
-max_db = 0.0
+max_db = 4.0
 attenuation_model = 0
 panning_strength = 1.2

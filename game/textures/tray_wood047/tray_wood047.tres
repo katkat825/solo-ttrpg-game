@@ -1,0 +1,29 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+; The dice tray's oak, swapped from Wood067 (ambientCG) to Wood047: a light blonde ash with a
+; strong cathedral figure. The table (table.tscn) still wears Wood067, a dark walnut - a pale tray
+; on a dark table reads as an object standing ON the table instead of dissolving into it, which is
+; the whole reason for the swap. NormalGL, not DX - Godot reads green-up normals.
+; uv1_scale and the parallax match the old tray material so nothing about the throw feel changes;
+; only the wood changes.
+
+[ext_resource type="Texture2D" path="res://textures/tray_wood047/color.jpg" id="1_color"]
+[ext_resource type="Texture2D" path="res://textures/tray_wood047/roughness.jpg" id="2_rough"]
+[ext_resource type="Texture2D" path="res://textures/tray_wood047/normalgl.jpg" id="3_normal"]
+[ext_resource type="Texture2D" path="res://textures/tray_wood047/displacement.jpg" id="4_height"]
+
+[resource]
+; darkened from the raw blonde ash: the untinted texture read almost as light as the parchment map
+; and the two competed. this multiplies it down to a mid-brown oak (luma ~0.32 vs the map's ~0.72)
+; so the tray frames the map instead of blending into it, while staying well clear of the near-black
+; walnut table. the grain is untouched - only the overall tone drops
+albedo_color = Color(0.62, 0.55, 0.46, 1)
+albedo_texture = ExtResource("1_color")
+roughness_texture = ExtResource("2_rough")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_texture = ExtResource("3_normal")
+heightmap_enabled = true
+heightmap_scale = 0.01
+heightmap_texture = ExtResource("4_height")
+uv1_scale = Vector3(4, 4, 4)

@@ -80,7 +80,7 @@ Downloaded 2026-08-04. All three sources publish under CC0 1.0: commercial use f
 | `Wood067`, 1K | Tray frame. In the project at `game/textures/tray_wood/` |
 | `Fabric034`, 1K felt | Tray floor. `game/textures/tray_felt/`, tinted green and teal |
 | `Onyx011`, 1K | Dice. `game/textures/die_onyx/`, triplanar |
-| `Plastic018B`, 2K/4K | Map surface. change to sepia/parchment color scheme. |
+| `Plastic018B`, 2K | Map surface — the wet-erase battle map. Recoloured grey → mottled sepia/parchment into `game/textures/map_parchment/` (color, normalgl, roughness at 1K), roughness biased matte. See the note below. |
 
 ### Poly Haven — https://polyhaven.com
 
@@ -241,6 +241,20 @@ Turned out not to be the texture. Measured against the onyx it's sharper on ever
 The cause is `uv1_scale`, and it's a mistake about what kind of stone this is. Onyx is broad banding, so magnifying it gives sweeping veins that read well. Amethyst is fine crystal structure, and magnified the same amount that becomes large soft blobs.
 
 When I come back to it: raise `uv1_scale` a long way, try 25 to 40. Turn off `ao_enabled`, since at high magnification a 1K AO map adds mushy dark patches. Then raise `normal_scale` back toward 1.0 if the facets still look soft. Maybe half an hour of work, and not urgent.
+
+### Recolouring the map to parchment
+
+`Plastic018B`'s colour map is a mottled, scuffed grey — perfectly neutral (saturation 0.0, luminance ~0.33–0.68), which is exactly what a wet-erase battle map wants underneath: the scuffs and veins read as an aged, used surface. It just needed to be sepia instead of grey.
+
+A flat `albedo_color` multiply — the felt trick — was the wrong tool here. Felt is near-white, so a multiply tints it cleanly; multiplying a mid-grey by a warm colour only ever gives a muddy tan, because there is no brightness range left to spread a parchment across. So the colour is a **gradient map instead of a tint**: the grey's luminance is stretched from its compressed range into a four-stop sepia ramp — deep sepia in the crevices, tan and warm parchment through the mids, cream on the scuffs. That is a baked colour map rather than a material tint, the one deliberate exception to "tint in the material," and it is baked because a duotone is the only thing that turns neutral grey into parchment.
+
+Several variants were rendered and looked at, from a deep aged-scroll tan down to a pale washed cream. What shipped is a **light parchment** — warm off-white with the sepia mottle still clearly reading, light enough that the grid and the minis sit clearly on top. The ramp stops are the tuning knob if it ever wants to go deeper or paler.
+
+`NormalGL` (not DX, per the ambientCG note above) and `Roughness` are the plastic's own, downscaled to 1K. The roughness is biased matte — `0.60 + 0.40 × r`, so it floors well short of glossy — because parchment is never shiny and the raw plastic would have caught the table lamp like a laminate. `normal_scale` is dropped to 0.5 in the material: a battle map is nearly flat, and the full plastic relief swims at this camera angle.
+
+The board wears it in `game/Board/board.tscn` as the `Mat` material, with the grid lines changed from the felt era's near-black to a soft sepia ink. B2 replaces the whole placeholder mat with tiles from a data file; until then this is the map.
+
+>**FLAG (2026-09-10) — the "all CC0" line below is no longer strictly true, and is left as-is on purpose until it matters.** Two Freesound clips added 2026-09-10, `432917` (paper) and `258249` (wood bowl), are **CC-BY (Attribution)**, not CC0 — and neither is used in the game yet. If either ever ships, its author must be credited by name and the blanket line loosened. The standing intent (Kathleen, 2026-09-10) is to **credit every asset author regardless of licence anyway** — goodwill, and it future-proofs against any pack quietly moving from CC0 to CC-BY — so this section becomes a per-author list rather than one line. Not done yet because nothing here needs it; revisit when the first credits screen is built.
 
 ## Credits
 
