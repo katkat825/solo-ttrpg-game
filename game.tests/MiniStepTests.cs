@@ -213,6 +213,197 @@ namespace Game.Tests
             }
         }
 
+        // ---- a route round a wall (B3) ----
+
+        // the way round a pillar: out, along, and back in. what a hand does with a piece
+        static Vector3[] RoundAWall() => new[]
+        {
+            new Vector3(-0.15f, 0f, 0.09f),
+            new Vector3(-0.09f, 0f, 0.03f),
+            new Vector3(-0.03f, 0f, -0.03f),
+            new Vector3(0.03f, 0f, -0.03f),
+            new Vector3(0.09f, 0f, 0.03f),
+        };
+
+        // the distance from a point to the route itself - zero if the piece is on the path it was
+        // given, and the whole of "it walks round the wall rather than through it"
+        static float OffTheRoute(Vector3 point, Vector3[] through)
+        {
+            float nearest = float.MaxValue;
+
+            for (int i = 1; i < through.Length; i++)
+            {
+                Vector3 a = Flat(through[i - 1]);
+                Vector3 b = Flat(through[i]);
+                Vector3 leg = b - a;
+
+                float along = leg.LengthSquared() <= 0f
+                    ? 0f
+                    : Mathf.Clamp((Flat(point) - a).Dot(leg) / leg.LengthSquared(), 0f, 1f);
+
+                nearest = Mathf.Min(nearest, (Flat(point) - (a + leg * along)).Length());
+            }
+
+            return nearest;
+        }
+
+        [Fact]
+        public void ARouteStartsAndEndsOnItsOwnSquares()
+        {
+            Vector3[] through = RoundAWall();
+            var step = new MiniStep(through);
+
+            Assert.Equal(through[0], step.At(0f));
+            Assert.Equal(through[through.Length - 1], step.At(step.Duration));
+            Assert.Equal(5, step.Waypoints);
+        }
+
+        // THE POINT OF THE WHOLE THING. a route that eased between its two ends would cut the
+        // corner and walk the piece straight through the wall it was routed around, and would look
+        // perfectly smooth doing it
+        [Fact]
+        public void ThePieceStaysOnTheRoute()
+        {
+            Vector3[] through = RoundAWall();
+            var step = new MiniStep(through);
+
+            for (float t = 0f; t <= step.Duration; t += 0.004f)
+                Assert.True(OffTheRoute(step.At(t), through) < 0.0005f,
+                            $"it left the route at {t}s, by {OffTheRoute(step.At(t), through):0.0000}m");
+        }
+
+        [Fact]
+        public void ItPassesThroughEveryWaypointInOrder()
+        {
+            Vector3[] through = RoundAWall();
+            var step = new MiniStep(through);
+
+            int reached = 0;
+
+            for (float t = 0f; t <= step.Duration && reached < through.Length; t += 0.001f)
+                if (Flat(step.At(t) - through[reached]).Length() < 0.003f)
+                    reached++;
+
+            Assert.Equal(through.Length, reached);
+        }
+
+        // the long way round takes longer than the short way there - the duration is the path's,
+        // not the destination's
+        [Fact]
+        public void TheLongWayRoundTakesLonger()
+        {
+            Vector3[] through = RoundAWall();
+
+            var round = new MiniStep(through);
+            var straight = new MiniStep(through[0], through[through.Length - 1]);
+
+            Assert.True(round.SlideSeconds > straight.SlideSeconds);
+        }
+
+        // one lift, one hesitation, one set-down for the whole route - not ceremony at every square
+        [Fact]
+        public void AWholeRouteIsSetDownOnce()
+        {
+            var step = new MiniStep(RoundAWall());
+
+            int clicks = 0;
+            float was = 0f;
+
+            for (float t = 0f; t <= step.Duration + 0.5f; t += 0.016f)
+            {
+                if (step.SetsDownBetween(was, t)) clicks++;
+                was = t;
+            }
+
+            Assert.Equal(1, clicks);
+        }
+
+        [Fact]
+        public void ARouteOfNowhereIsNotACrash()
+        {
+            var nothing = new MiniStep(new Vector3[0]);
+
+            Assert.Equal(Vector3.Zero, nothing.At(0f));
+            Assert.Equal(Vector3.Zero, nothing.At(nothing.Duration));
+
+            var one = new MiniStep(new[] { new Vector3(0.1f, 0f, 0.2f) });
+
+            Assert.Equal(one.From, one.At(one.Duration));
+        }
+
+        // ---- a refusal (B3) ----
+
+        static readonly Vector3 Here = new Vector3(-0.03f, 0f, 0.09f);
+
+        static readonly Vector3 Denied = new Vector3(0.15f, 0f, -0.21f);
+
+        // the invariant that matters, and it holds by construction rather than by care: a refusal
+        // is a path that ends where it began
+        [Fact]
+        public void ARefusedMoveEndsExactlyWhereItStarted()
+        {
+            MiniStep step = MiniStep.Refusing(Here, Denied);
+
+            Assert.Equal(Here, step.At(0f));
+            Assert.Equal(Here, step.At(step.Duration));
+            Assert.Equal(Here, step.At(step.Duration + 5f));
+        }
+
+        [Fact]
+        public void ItLeansAtTheSquareItCannotHave()
+        {
+            MiniStep step = MiniStep.Refusing(Here, Denied);
+
+            Vector3 furthest = Here;
+
+            for (float t = 0f; t <= step.Duration; t += 0.002f)
+                if (Flat(step.At(t) - Here).Length() > Flat(furthest - Here).Length())
+                    furthest = step.At(t);
+
+            // it went toward the refused square, and only a fraction of the way
+            Assert.True(Flat(furthest - Here).Normalized().Dot(Flat(Denied - Here).Normalized()) > 0.99f);
+            Assert.Equal(MiniStep.RefusalLean, Flat(furthest - Here).Length(), 3);
+        }
+
+        // unmistakably a move being started, unmistakably not one being made
+        [Fact]
+        public void ARefusalNeverReachesTheNextSquare()
+        {
+            MiniStep step = MiniStep.Refusing(Here, Denied);
+
+            for (float t = 0f; t <= step.Duration; t += 0.002f)
+                Assert.True(Flat(step.At(t) - Here).Length() < 0.03f);
+        }
+
+        [Fact]
+        public void ARefusalIsSetBackDownOnce()
+        {
+            MiniStep step = MiniStep.Refusing(Here, Denied);
+
+            int clicks = 0;
+            float was = 0f;
+
+            for (float t = 0f; t <= step.Duration + 0.5f; t += 0.016f)
+            {
+                if (step.SetsDownBetween(was, t)) clicks++;
+                was = t;
+            }
+
+            Assert.Equal(1, clicks);
+        }
+
+        [Fact]
+        public void ARefusalTowardNowhereStandsStill()
+        {
+            MiniStep step = MiniStep.Refusing(Here, Here);
+
+            for (float t = 0f; t <= step.Duration; t += 0.01f)
+            {
+                Assert.Equal(Here.X, step.At(t).X, 5);
+                Assert.Equal(Here.Z, step.At(t).Z, 5);
+            }
+        }
+
         // ---- the click ----
 
         [Fact]

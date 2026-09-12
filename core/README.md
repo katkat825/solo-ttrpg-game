@@ -17,10 +17,22 @@ Core.Combat        the fight loop, targeting, the observer seam
 ```
 
 The four at the bottom don't know about each other either. `Core.Space` is the newest of them
-(B0) and the only one nothing above it uses yet: a `Cell` and a `Grid` of them, extent and
-occupancy and no terrain. `game/Board` draws it; `COMBAT_LOOP.md` decides how much of it the
-dice care about; B3 adds pathfinding and line of sight, which is exactly the fiddly geometry
-that is miserable to check by eye and trivial to check with a test.
+(B0–B3) and the only one nothing above it uses yet — the board, as geometry:
+
+| | |
+|---|---|
+| `Cell` | a square, by integer coordinates. two dimensions and no opinion about which two |
+| `Grid<T>` | extent and occupancy: who is standing where, and nothing about terrain |
+| `Tile`, `MapLayout` | what each square is made of. immutable, because a map is content and an open door is runtime state |
+| `MapReader` | text in, map out. one character per square, and every failure named with its line |
+| `Route` | A* over the map. diagonals count as one square, and a corner where two walls touch is a seal |
+| `Sight` | is the line between two squares clear. symmetric by construction, and it agrees with `Route` about corners |
+
+`game/Board` draws all of it; `COMBAT_LOOP.md` decides how much of it the dice care about. The
+pathfinding and the line of sight are exactly the fiddly geometry that is miserable to check by
+eye and trivial to check with a test — `RouteTests` checks every route on a map against a flood
+fill that knows nothing about heuristics, and `SightTests` checks symmetry on all 4,900 pairs of
+squares in a room rather than on three examples.
 
 Namespaces match folders, so if this ever needs to become several assemblies it's a project-file change rather than a rename. `Localization`, `Statistics` and `Space` aren't game rules, and they belong here anyway: the membership test is *pure, headless and Godot-free*, not *is it literally a rule*. That's why this folder is `core/` and not `rules/`.
 

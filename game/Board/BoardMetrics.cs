@@ -17,8 +17,9 @@ namespace Game.Board
     // can hold the derivations without an engine behind them.
     //
     // WHAT IT IS NOT: it holds no occupancy and no terrain. Core.Space.Grid says which squares
-    // exist and who is standing on them; this says where those squares are. The extent is stated
-    // once, on the Board node, and both are built from it.
+    // exist and who is standing on them, MapLayout says what each one is made of, and this says
+    // where any of it is on the table. The extent is stated once - in the map file, by the shape
+    // of the room drawn in it - and all three are built from that.
     public sealed class BoardMetrics
     {
         public int Columns { get; }
@@ -70,13 +71,14 @@ namespace Game.Board
         // true when these numbers describe a board a piece could actually stand on
         public bool IsUsable => Columns > 0 && Rows > 0 && CellSize > 0f;
 
-        // the board the game ships with, and the fallback when the node is given nonsense.
+        // the size of a square the game ships with, and the room the board falls back to when the
+        // map file cannot be read at all.
         //
-        // THE ONE STATEMENT OF THESE NUMBERS. Board's exports default to them and board.tscn does
-        // not restate them, so unlike TrayBounds.Shipped - which is a second copy of dice_tray
-        // .tscn's floor and needs a test holding the two together - there is nothing here to
-        // drift. Resizing the board in the inspector overrides them for that scene, which is what
-        // "unless the scene says otherwise" means and is the point of a fallback
+        // THE EXTENT HERE IS NOT THE GAME'S EXTENT ANY MORE. Since B2 the room comes from the map
+        // file and states its own width by being that wide, so these 8 x 8 are only the empty room
+        // Board draws while you read the error that says why. CellSize is the real default: how big
+        // a square is belongs to the table, not to the room, and the same map is the same map
+        // whatever size mat it is played on
         public static readonly BoardMetrics Shipped = new BoardMetrics(8, 8, 0.06f);
 
         // DEVELOPER ONLY - not localized, must never reach the screen

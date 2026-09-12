@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 using Game.Audio;
 
@@ -55,12 +56,31 @@ namespace Game.Board
             Position = boardLocal;
         }
 
+        // the way round, square by square, as ONE movement - lifted once, traced round the wall,
+        // set down at the far end.
+        //
         // FROM WHERE IT IS NOW, not from the square it was told to leave. a second click during a
         // move retargets rather than being swallowed: a piece that ignores you mid-slide feels
-        // broken, and one that snaps back to re-start feels worse
-        public void SlideTo(Vector3 boardLocal)
+        // broken, and one that snaps back to re-start feels worse. the route the board hands over
+        // starts at the square being left, so the first waypoint is replaced rather than prepended
+        public void Follow(IReadOnlyList<Vector3> route)
         {
-            _step = new MiniStep(Position, boardLocal);
+            if (route == null || route.Count == 0) return;
+
+            var through = new List<Vector3>(route) { [0] = Position };
+
+            _step = new MiniStep(through);
+            _elapsed = 0f;
+        }
+
+        // a square it cannot have: lean at it, think better of it, settle back.
+        //
+        // the board decides WHETHER a move is refused; this is only what that looks like. the piece
+        // ends exactly where it started, which MiniStep.Refusing guarantees by building a path that
+        // returns to its own beginning rather than by being careful
+        public void Refuse(Vector3 toward)
+        {
+            _step = MiniStep.Refusing(Position, toward);
             _elapsed = 0f;
         }
 

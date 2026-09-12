@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 
 namespace Game.Board
@@ -15,7 +16,9 @@ namespace Game.Board
     //   lift      2 mm off the felt. not a pick-up - the piece SLIDES, THE_BOARD.md B1 - but a
     //             piece dragged flat scrapes, and a piece floating flies. this is a shove
     //   slide     the travel, eased in and out, at a speed rather than a fixed duration, so a
-    //             square next door is quick and the far corner takes a moment
+    //             square next door is quick and the far corner takes a moment. B3 made it a
+    //             ROUTE rather than a straight line - the piece traces its way round a wall as
+    //             one movement, because that is what a hand does with a piece
     //   hover     the hesitation. rises, then HOLDS. the hold is the whole beat: motion that
     //             merely slows reads as damping, motion that stops reads as a decision
     //   set down  fast and accelerating. the click lands at the end of it
@@ -53,25 +56,68 @@ namespace Game.Board
         // short and accelerating - a placement, not a landing
         public const float SetDownSeconds = 0.07f;
 
+        // how far a refused move leans before it thinks better of it. a bit over a third of a
+        // square: unmistakably a move being started, unmistakably not one being made
+        public const float RefusalLean = 0.022f;
+
         // ---- one move ----
 
-        public Vector3 From { get; }
+        public Vector3 From => _through[0];
 
-        public Vector3 To { get; }
+        public Vector3 To => _through[_through.Count - 1];
 
         public float SlideSeconds { get; }
 
-        public MiniStep(Vector3 from, Vector3 to)
+        // where the piece goes, in order. ONE STEP FOR A WHOLE ROUTE, not one per square: a hand
+        // moving a piece round a wall lifts it once, traces the way round, and sets it down at the
+        // far end. Ceremony at every square between would be a piece being placed six times, which
+        // is slower, fussier, and not what anyone does at a table (THE_BOARD.md B3).
+        readonly IReadOnlyList<Vector3> _through;
+
+        // how far along the whole path each waypoint sits, measured flat. built once so At() is a
+        // lookup rather than a walk
+        readonly float[] _reached;
+
+        readonly float _length;
+
+        public MiniStep(Vector3 from, Vector3 to) : this(new[] { from, to }) { }
+
+        public MiniStep(IReadOnlyList<Vector3> through)
         {
-            From = from;
-            To = to;
+            // a step to nowhere is still a step - the choreography holds either way, and a caller
+            // handing over nothing has a bug that must not become a crash in _Process
+            _through = through != null && through.Count > 0 ? through : new[] { Vector3.Zero };
+
+            _reached = new float[_through.Count];
+
+            for (int i = 1; i < _through.Count; i++)
+                _reached[i] = _reached[i - 1] + Flat(_through[i] - _through[i - 1]);
+
+            _length = _reached[_reached.Length - 1];
 
             // measured on the felt, not through the lift - the height is choreography and must
             // not make a move take longer
-            float across = new Vector2(to.X - from.X, to.Z - from.Z).Length();
-
-            SlideSeconds = Mathf.Clamp(across / SlideSpeed, MinSlideSeconds, MaxSlideSeconds);
+            SlideSeconds = Mathf.Clamp(_length / SlideSpeed, MinSlideSeconds, MaxSlideSeconds);
         }
+
+        // the piece leans at a square it cannot have and settles back where it was.
+        //
+        // A REFUSAL IS A MOVE THAT DOES NOT HAPPEN, so it is built out of the same phases and needs
+        // no second animation path: out, back, hesitate, set down - and because the path ends where
+        // it started, the invariant that matters holds without being argued for. The piece cannot
+        // end up anywhere but its own square.
+        public static MiniStep Refusing(Vector3 from, Vector3 toward)
+        {
+            var away = new Vector3(toward.X - from.X, 0f, toward.Z - from.Z);
+
+            Vector3 lean = away.LengthSquared() > 0f ? away.Normalized() * RefusalLean : Vector3.Zero;
+
+            return new MiniStep(new[] { from, from + lean, from });
+        }
+
+        public int Waypoints => _through.Count;
+
+        static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
 
         public float LiftEnds => LiftSeconds;
 
@@ -107,7 +153,10 @@ namespace Game.Board
             {
                 float through = Smooth((seconds - LiftEnds) / SlideSeconds);
 
-                return Raised(From.Lerp(To, through), LiftHeight);
+                // eased over the WHOLE route rather than leg by leg: one hand movement that starts
+                // at rest, carries the piece round the corner and arrives at rest. Easing each leg
+                // would stop the piece dead at every waypoint, which reads as five moves
+                return Raised(Along(through * _length), LiftHeight);
             }
 
             if (seconds < HoverEnds)
@@ -127,6 +176,25 @@ namespace Game.Board
             return Raised(To, HoverHeight * (1f - falling * falling));
         }
 
+        // the point this far along the path, measured flat. a route of one leg is a straight lerp,
+        // which is what B1's move was and still is
+        Vector3 Along(float distance)
+        {
+            if (_through.Count == 1 || _length <= 0f) return From;
+
+            for (int i = 1; i < _through.Count; i++)
+            {
+                if (distance > _reached[i] && i < _through.Count - 1) continue;
+
+                float leg = _reached[i] - _reached[i - 1];
+                float into = leg <= 0f ? 1f : Mathf.Clamp((distance - _reached[i - 1]) / leg, 0f, 1f);
+
+                return _through[i - 1].Lerp(_through[i], into);
+            }
+
+            return To;
+        }
+
         static Vector3 Raised(Vector3 point, float by) => new Vector3(point.X, point.Y + by, point.Z);
 
         // smoothstep: starts and ends at rest, which is what a hand does
@@ -138,6 +206,7 @@ namespace Game.Board
 
         // DEVELOPER ONLY - not localized, must never reach the screen
         public override string ToString() =>
-            $"{From} -> {To}, {Duration:0.00}s ({SlideSeconds:0.00}s of it sliding)";
+            $"{From} -> {To} through {Waypoints} points, {_length:0.000}m, " +
+            $"{Duration:0.00}s ({SlideSeconds:0.00}s of it sliding)";
     }
 }

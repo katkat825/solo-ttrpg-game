@@ -1,0 +1,36 @@
+; The Cellar - the map the board loads, and the whole of B2's point: THIS FILE IS THE MAP.
+; Move a wall, resize the room, turn a floor into rubble, save, run. No code, no .tscn, no editor.
+;
+; One character per square. Lines starting with ';' are notes; blank lines are ignored. Every row
+; has to be the same length, and the rows read top to bottom as FAR SIDE OF THE TABLE first - so
+; the picture below is what you see from your seat.
+;
+; The legend, which MapReader.Glyphs states properly and an unknown character will print at you:
+;
+;   .  floor          #  wall          +  door, shut          ~  difficult ground
+;   @  where the hero starts (the square under it is floor)
+;
+; What is drawn here, and why each part is here:
+;
+;   the block in the middle    something to walk AROUND. click the far side of it and watch the
+;                              route go the long way rather than through
+;   the closet inside it       sealed by a shut door, so clicking into it is refused - there is no
+;                              way there and the piece says so. B4 opens that door on a check
+;   the rubble on the right    difficult ground, double cost. a route crosses it when that is
+;                              genuinely shorter and goes round when it is not
+;   the corridor on the left   the long way round, one square wide
+;
+; Phase P moves maps like this inside a campaign package (ARCHITECTURE.md 4). Until then it lives
+; beside the game and the loader reads exactly one of them, named on the Board node.
+;
+; NOTE FOR THE FIRST EXPORT: this is not a Godot resource, so an export preset has to list
+; maps/*.map under "filters to export non-resource files" or it will not travel into the .pck.
+
+##########
+#........#
+#.####...#
+#.#..#.~~#
+#.#..#.~~#
+#.#+##...#
+#...@....#
+##########

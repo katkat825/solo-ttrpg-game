@@ -1,16 +1,20 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=11 format=3]
 
 ; The battle map. Almost empty on purpose: the squares are BUILT from the extent at load, not
 ; laid out here, because a scene full of hand-placed tiles would be a second description of the
 ; grid and free to disagree with it. See Board.cs.
 ;
-; Nothing states the extent here either - Board's exports default to BoardMetrics.Shipped, so the
-; 8 x 8 board of 60 mm squares is stated once, in code, and the inspector overrides it per scene.
+; Nothing states the extent here either, and since B2 nothing anywhere does: the room comes out of
+; maps/cellar.map, which states how wide it is by being that wide. Only the size of a SQUARE is set
+; here, and that is a property of the table rather than of the room.
 ;
 ; The mat is a WET-ERASE BATTLE MAP surface, not felt: ambientCG Plastic018B recoloured from its
 ; neutral grey to a mottled sepia/parchment (game/textures/map_parchment/, see THIRD_PARTY.md),
 ; with the roughness biased matte so it reads as paper rather than plastic. The grid is a soft
-; sepia ink over it. B2 replaces both with a tile set read from a data file.
+; sepia ink over it - both stay, because on a real table the map IS the floor and terrain stands on
+; top of it. What B2 added is that terrain: a material per tile kind, below, placed by BoardTiles
+; wherever the map file says. Placeholder blocks for now; B5 pulls real tiles through the asset
+; pipeline and the only thing that changes is the mesh.
 
 [ext_resource type="Script" path="res://Board/Board.cs" id="1_board"]
 [ext_resource type="PackedScene" path="res://Board/mini.tscn" id="2_mini"]
@@ -35,9 +39,30 @@ uv1_scale = Vector3(1, 1, 1)
 albedo_color = Color(0.58, 0.50, 0.38, 1)
 roughness = 1.0
 
+;  the terrain that stands on the map. told apart by SILHOUETTE first and colour second, because
+;  at the table's 60 degrees a low block and a tall one are obvious and two browns are not:
+;    wall   waist-high stone, cool grey, matte - the only thing on the board that occludes
+;    door   half the height and warm - a shut door reads as a way through that is not open yet
+;    rough  a patch on the mat rather than an object on it, darker and duller than the parchment
+[sub_resource type="StandardMaterial3D" id="Mat_wall"]
+albedo_color = Color(0.42, 0.41, 0.39, 1)
+roughness = 0.95
+metallic_specular = 0.1
+
+[sub_resource type="StandardMaterial3D" id="Mat_door"]
+albedo_color = Color(0.44, 0.29, 0.16, 1)
+roughness = 0.75
+
+[sub_resource type="StandardMaterial3D" id="Mat_rough"]
+albedo_color = Color(0.35, 0.30, 0.23, 1)
+roughness = 1.0
+
 [node name="Board" type="Node3D"]
 script = ExtResource("1_board")
 Mat = SubResource("Mat_map")
 Lines = SubResource("Mat_lines")
+Wall = SubResource("Mat_wall")
+Door = SubResource("Mat_door")
+Rough = SubResource("Mat_rough")
 
 [node name="Mini" parent="." instance=ExtResource("2_mini")]

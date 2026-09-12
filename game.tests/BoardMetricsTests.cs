@@ -23,8 +23,10 @@ namespace Game.Tests
 
         // ---- the board the game ships with ----
 
+        // since B2 this is the size of a square plus the empty room the board falls back to when
+        // the map file cannot be read - the real extent comes out of the map
         [Fact]
-        public void Shipped_IsTheBoardTheExportsDefaultTo()
+        public void Shipped_IsTheSquareTheGameShipsWith()
         {
             BoardMetrics b = BoardMetrics.Shipped;
 
