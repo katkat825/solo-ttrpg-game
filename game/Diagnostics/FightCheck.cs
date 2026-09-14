@@ -1,0 +1,1234 @@
+using System.Collections.Generic;
+using System.Linq;
+using Godot;
+using Core.Characters;
+using Core.Combat;
+using Core.Dice;
+using Core.Localization;
+using Core.Space;
+using Game.Board;
+using Game.Fight;
+using Game.Localization;
+using Game.Tray;
+
+// Game.Board and Game.Fight are namespaces that each hold a type of the same name, so both need
+// an alias to be referred to from anywhere else under Game - see Fight.cs
+using BoardNode = Game.Board.Board;
+using FightNode = Game.Fight.Fight;
+
+namespace Game.Diagnostics
+{
+    // THE FIGHT, PLAYED HEADLESS AND HELD TO WHAT THE FELT SAYS (COMBAT_LOOP.md, the verify lists).
+    //
+    // Every milestone in Phase C ends in something to watch, and watching is the developer's job -
+    // no test can tell you whether two actions a round feels like heroism. What a test CAN do is
+    // hold the invisible half to the visible one:
+    //
+    //   C0  the damage dealt is the number on the die with the ring round it
+    //   C1  a Condition steps the die down, the smaller die reaches the felt, and the mark beside
+    //       the piece says what the localizer says rather than a hardcoded word
+    //   C2  a Rabble goes down to any hit and to nothing else, a Rival soaks, a foe takes its one
+    //       action once, and a downed piece leaves its square
+    //   C3  the order is thrown once and written down the side of the map in words rather than
+    //       keys, everybody in the fight is in it, and a readied strike costs a reaction and
+    //       nobody's turn
+    //   C4  all four Nerve spends are reachable and each one does what it says - a fourth die
+    //       genuinely reaches the felt, a re-throw moves exactly one die, a shrug cancels a
+    //       Trouble, a push buys an action - and Nerve never changes by itself
+    //   C5  a caster throws Heart + Channeling + focus, the Heart die steps down every cast, and
+    //       a breather puts it back
+    //   C6  a Dread takes two actions to everybody else's one and changes at exactly half Vigor,
+    //       once, with bigger dice on the other side of it
+    //
+    // Those are the things that go wrong quietly, look fine in motion, and are miserable to notice
+    // by eye.
+    //
+    // IT PLAYS THE REAL TABLE. It instances table.tscn - the shipped scene, the real board, the
+    // real tray with real physics dice landing on real felt - and drives it through the same entry
+    // point a mouse click uses, `Board.Claims`. A mock table would be a different game. This is
+    // DiceFairness' argument applied to the fight: the thing measured is the thing played.
+    //
+    // Run it with check-fight.ps1.
+    // IT WATCHES THROUGH THE SEAM. `ICombatObserver` is how the rules narrate, and a check is
+    // exactly the sort of thing it exists for - so whose turn it is and what a blow did arrive as
+    // events rather than being sampled. The first version polled `Encounter.Acting` once a frame
+    // and raced `Fight._Process`: a foe whose whole turn happened between two samples looked like
+    // a foe that never got one, and the check reported it. What is still polled is only what the
+    // rules do not narrate - the felt, the pieces and the mat
+    public partial class FightCheck : HeadlessCheck, ICombatObserver
+    {
+        protected override string Subject => "fight";
+
+        // the shipped scene, named in the check's own scene rather than loaded by path here, so
+        // this file has no opinion about which table is the table
+        [Export] public PackedScene Table { get; set; }
+
+        // how many complete fights to play. every hero swing is a real handful of physics dice
+        // settling, so this is what decides how long the check takes - a fight is a dozen or so
+        // throws at about a second and a half each
+        [Export] public int Fights { get; set; } = 3;
+
+        // THE LAST FIGHT IS PLAYED BY THE CASTER (C5). The Barbarian is untrained in Channeling -
+        // two dice and no leftover, which is the rules working correctly and nothing to look at -
+        // so the placeholder roster has a Mage in it and this is what picks him up. Set to an
+        // empty string to play every fight as whoever the table's board names
+        [Export] public string CastingHero { get; set; } = EngineIds.Mage;
+
+        // AND THE LAST FIGHT IS THE BOSS (C6). One Dread, alone - no Rabble and no Rival - because
+        // the phase change fires at half its Vigor and a hero cut down in round three never gets
+        // it there. A duel is not what a boss fight should be at the table (the sim's boss report
+        // gives it two Rabble for exactly that reason) and it is what a CHECK of one wants.
+        //
+        // Off the board means no boss, and then this check never sees one
+        [Export] public Vector2I BossAt { get; set; } = new Vector2I(5, 2);
+
+        // PLAY IT STRAIGHT AND MEASURE IT. Everything this check does to reach a milestone is a
+        // handicap: it winds the hero on purpose to watch a die shrink, gives up a turn to arm a
+        // readied strike, spends Nerve on whatever is reachable rather than on whatever would
+        // help, and plays the last fight as a caster whose melee is two dice. Those are the right
+        // things for a check to do and they make the win rate meaningless.
+        //
+        // With this on it does none of them: the hero swings at the nearest thing until somebody
+        // falls over. That is the number to hold against SIMULATION.md section 5 - roughly 85%
+        // survival at about 6.6 rounds, plus whatever the geometry costs, which the sim has no
+        // model for. Run it as `.\check-fight.ps1 -Plain -Fights 10`
+        [Export] public bool Plain { get; set; }
+
+        // a fight that stops moving means the felt never settled, or the loop is waiting on
+        // something that is never going to happen. the fairness sweep has the same fail-safe, and
+        // this one is measured since the last thing that HAPPENED rather than since the start
+        [Export] public double StuckSeconds { get; set; } = 45.0;
+
+        // the same one the fight writes its marks with, so this compares what is on the mat against
+        // what the translation system would say rather than against a second opinion
+        readonly ILocalizer _text = new GodotLocalizer();
+
+        BoardNode _board;
+
+        DiceTray _tray;
+
+        FightNode _fight;
+
+        Actor _hero;
+
+        // ---- what the whole run adds up to ----
+
+        int _fought;
+
+        int _won;
+
+        int _rounds;
+
+        int _swings;
+
+        int _hits;
+
+        int _rabbleFelled;
+
+        int _readied;
+
+        int _nerveSpent;
+
+        int _nerveBanked;
+
+        // C4: each of the four spends, ticked off once. The point is not how many times - it is
+        // that every one of them was reachable through the gestures the game actually has
+        bool _spentOnHeart;
+
+        bool _spentOnReroll;
+
+        bool _spentOnPush;
+
+        bool _shrugged;
+
+        // the biggest pool that reached the felt, so a fourth die is provable rather than hoped for
+        int _widestPool;
+
+        // ---- C5: the caster's fight ----
+
+        bool _casting;
+
+        bool _fighting;
+
+        int _casts;
+
+        Die _heartBefore;
+
+        bool _breathed;
+
+        int _castsSeen;
+
+        int _phases;
+
+        int _bossFights;
+
+        int _bossActions;
+
+        int _reactions;
+
+        // the order cannot be checked at muster: the hero's initiative is a real throw on the real
+        // tray, so the fight has not begun yet when the room is set up
+        bool _orderChecked;
+
+        // a Trouble is on the felt and the window is open on it
+        bool _sawTrouble;
+
+        // ---- the swing in the air ----
+
+        bool _inFlight;
+
+        Actor _target;
+
+        int _targetVigorBefore;
+
+        // the throw that opened the swing. An exploding Impact die puts more throws on the felt
+        // for the SAME swing, so the opening one is the one whose Impact die the damage is
+        // measured against, and the rest are the chain
+        TrayThrow _opening;
+
+        int _explosions;
+
+        int _explosionsSeen;
+
+        // ---- C1: the first swing thrown from beside a foe is the condition swing ----
+
+        Die _mightBefore;
+
+        bool _conditionSwing;
+
+        bool _conditionChecked;
+
+        // ---- who has been seen acting, so a foe that never gets a turn is caught ----
+
+        int _watchingRound;
+
+        readonly HashSet<Actor> _acted = new HashSet<Actor>();
+
+        int _turnsWatched;
+
+        int _blowsWatched;
+
+        bool _finished;
+
+        double _waited;
+
+        public override void _Ready()
+        {
+            if (Table == null)
+            {
+                Problem("no table scene set on the check - there is nothing to play on");
+                Finish();
+                return;
+            }
+
+            ReadCommandLine(OS.GetCmdlineUserArgs());
+
+            Restart();
+        }
+
+        // A FRESH TABLE FOR EVERY FIGHT. The alternative is reviving the dead and putting the
+        // pieces back, which is a second, private idea of how a room is set up - and the one that
+        // would quietly stop matching the real one
+        void Restart()
+        {
+            foreach (Node child in GetChildren())
+            {
+                RemoveChild(child);
+                child.QueueFree();
+            }
+
+            // THE HERO IS CHOSEN BEFORE THE BOARD LOADS, which means before AddChild - Godot
+            // readies a subtree inside that call, and the board recruits in its _Ready. Walking
+            // the un-added instance is the only moment an export can still be set
+            Node table = Table.Instantiate();
+
+            // the last fight is the boss's and the one before it is the caster's, so a default
+            // run of three covers a plain fight, a caster and a Dread
+            _fighting = BossAt != FightNode.Nowhere && !Plain && _fought == Fights - 1;
+            _casting = !string.IsNullOrEmpty(CastingHero) && !_fighting &&
+                       _fought >= Fights - 2;
+
+            foreach (Node node in Descendants(table))
+            {
+                if (_casting && node is BoardNode board) board.HeroId = CastingHero;
+
+                if (node is not FightNode room) continue;
+
+                if (_fighting)
+                {
+                    _bossFights++;
+                    room.DreadAt = BossAt;
+                    room.RivalAt = FightNode.Nowhere;
+                    room.RabbleAt = new Godot.Collections.Array<Vector2I>();
+                }
+            }
+
+            AddChild(table);
+
+            // after the table's own _Ready has run, which is what AddChild above guarantees: Godot
+            // readies a subtree bottom-up before the call returns
+            _board = Find<BoardNode>();
+            _tray = Find<DiceTray>();
+            _fight = Find<FightNode>();
+
+            if (_board == null || _tray == null || _fight == null)
+            {
+                Problem($"the table is missing a board ({_board != null}), a tray ({_tray != null}) " +
+                        $"or a fight ({_fight != null})");
+                Finish();
+                return;
+            }
+
+            _hero = _fight.Hero;
+
+            if (_fight.Foes.Count == 0)
+            {
+                Problem("the fight mustered no foes - there is nobody to swing at");
+                Finish();
+                return;
+            }
+
+            // LAST, so the fight's own handler has already applied the outcome by the time this one
+            // looks. Delegates fire in subscription order and the fight subscribed in its _Ready,
+            // which ran inside the AddChild above
+            _tray.Resolved += OnThrown;
+            _fight.Watch(this);
+
+            _inFlight = false;
+            _target = null;
+            _opening = null;
+            _orderChecked = false;
+            _sawTrouble = false;
+            _casts = 0;
+            _breathed = false;
+            _watchingRound = 0;
+            _acted.Clear();
+            _explosions = 0;
+            _waited = 0.0;
+
+            CheckTheRoom();
+
+            if (_fighting && _fight.Boss == null)
+                Problem("the boss fight was set up and the fight mustered no Dread");
+
+            if (_casting && !TheEffect.Offered(_hero))
+                Problem($"the casting fight was set up with {_hero.DebugName}, who is not trained " +
+                        "in Channeling - there is nothing to look at");
+
+            GD.Print("");
+            GD.Print($"fight {_fought + 1} of {Fights} - {_hero.DebugName} against " +
+                     $"{_fight.Foes.Count(f => f.Tier == Tier.Rabble)} Rabble, " +
+                     $"{_fight.Foes.Count(f => f.Tier == Tier.Rival)} Rival and " +
+                     $"{_fight.Foes.Count(f => f.Tier == Tier.Dread)} Dread");
+        }
+
+        // the room as it is set up, before a die is thrown
+        void CheckTheRoom()
+        {
+            foreach (Piece piece in _fight.Pieces)
+            {
+                bool tracked = piece.Actor.Tier.HasHealthTrack();
+
+                if (tracked && piece.Vigor == null)
+                    Problem($"{piece.Actor.DebugName} has a health track and no tally beside it");
+
+                if (!tracked && piece.Vigor != null)
+                    Problem($"{piece.Actor.DebugName} has no health track and a tally beside it anyway");
+
+                if (tracked && piece.Vigor != null && piece.Vigor.Max != piece.Actor.MaxVigor)
+                    Problem($"{piece.Actor.DebugName}'s tally is {piece.Vigor.Max} long for " +
+                            $"{piece.Actor.MaxVigor} vigor");
+
+                if (_board.CellOf(piece.Mini) == null)
+                    Problem($"{piece.Actor.DebugName} was mustered onto no square at all");
+            }
+
+            // ordinals, because "Rabble 3" has to come out of one key with a {0} in it rather than
+            // an integer glued onto a translated name
+            foreach (Actor mook in _fight.Foes.Where(f => f.Tier == Tier.Rabble))
+                if (mook.Ordinal <= 0)
+                    Problem($"a Rabble was mustered unnumbered - '{mook.NameKey}' takes no ordinal");
+        }
+
+        // C3: THE ORDER IS WRITTEN DOWN THE SIDE OF THE MAP, in words. The margin is where a
+        // hardcoded name or a missing locale line would show up, and it is the first place in the
+        // game that formats an ordinal into a key - "Rabble 3" out of one string with a {0} in it
+        // rather than an integer glued onto a translated word (CONVENTIONS.md 7)
+        void CheckTheOrder()
+        {
+            Encounter fight = _fight.Encounter;
+            TurnOrder margin = _fight.Order;
+
+            if (fight == null || margin == null)
+            {
+                Problem("the fight began with no turn order at all");
+                return;
+            }
+
+            if (fight.Round == 0)
+            {
+                Problem("the fight was mustered and never began - the order was never thrown");
+                return;
+            }
+
+            if (margin.Listed.Count != fight.Order.Count)
+                Problem($"{fight.Order.Count} in the fight and {margin.Listed.Count} written in the margin");
+
+            foreach (Actor actor in fight.Order)
+            {
+                Label3D line = margin.LineFor(actor);
+
+                if (line == null)
+                {
+                    Problem($"{actor.DebugName} is in the order and not in the margin");
+                    continue;
+                }
+
+                string words = actor.Ordinal > 0
+                    ? _text.Format(actor.NameKey, actor.Ordinal)
+                    : _text.Get(actor.NameKey);
+
+                if (words == actor.NameKey)
+                    Problem($"'{actor.NameKey}' has no words in the locale - the margin would read the key");
+
+                if (line.Text != words)
+                    Problem($"the margin reads '{line.Text}' for {actor.DebugName} and the localizer " +
+                            $"says '{words}'");
+
+                // a numbered foe's line must actually carry its number, or four Rabble are four
+                // identical words in a list nobody can read
+                if (actor.Ordinal > 0 && !line.Text.Contains(actor.Ordinal.ToString()))
+                    Problem($"{actor.DebugName} is numbered {actor.Ordinal} and the margin reads " +
+                            $"'{line.Text}' - the ordinal never reached the string");
+            }
+
+            GD.Print($"order   {margin}");
+        }
+
+        // the script passes on only what it was actually given, so every default is stated here and
+        // the two cannot drift - F5's lesson from check-fairness.ps1
+        void ReadCommandLine(string[] args)
+        {
+            const string fights = "--fights=";
+
+            foreach (string arg in args)
+            {
+                if (arg.StartsWith(fights, System.StringComparison.Ordinal) &&
+                    int.TryParse(arg.Substring(fights.Length), out int n) && n > 0)
+                    Fights = n;
+
+                if (arg == "--plain") Plain = true;
+            }
+
+            if (Plain) CastingHero = "";
+        }
+
+        T Find<T>() where T : Node
+        {
+            foreach (Node node in Descendants(this))
+                if (node is T found) return found;
+
+            return null;
+        }
+
+        static IEnumerable<Node> Descendants(Node node)
+        {
+            foreach (Node child in node.GetChildren())
+            {
+                yield return child;
+
+                foreach (Node deeper in Descendants(child)) yield return deeper;
+            }
+        }
+
+        // ---- the loop: play the hero, and let the table play everybody else ----
+
+        public override void _Process(double delta)
+        {
+            if (_finished || _fight == null) return;
+
+            _waited += delta;
+
+            if (_waited > StuckSeconds)
+            {
+                Problem($"fight {_fought + 1} stopped moving for {StuckSeconds}s at " +
+                        $"{_fight.Encounter} - the felt never settled, or nobody's turn came round");
+                Conclude();
+                return;
+            }
+
+            // A SWING IS OVER WHEN THE FIGHT SAYS SO, not when a throw comes back. An exploding
+            // Impact die puts a second, third and fourth throw on the felt for one swing, and the
+            // check has no business guessing which of them was the last - `Fight.Settled` means
+            // nothing is in the air, nothing is walking and the blow has landed
+            if (_inFlight)
+            {
+                // C4: the felt is being read, and the player has a moment to spend a Nerve on it.
+                // Both spends that live in that moment are taken here, once each
+                if (_fight.Reading) { ReadTheFelt(); return; }
+
+                if (!_fight.Settled) return;
+
+                Read();
+                return;
+            }
+
+            Encounter fight = _fight.Encounter;
+
+            if (fight == null) return;
+
+            if (fight.IsOver) { Finished(fight); return; }
+
+            // the order is thrown for on the real tray, so it does not exist until the felt has
+            // stopped moving - which is some frames after the room was set up
+            if (!_orderChecked && fight.Round > 0)
+            {
+                _orderChecked = true;
+                CheckTheOrder();
+            }
+
+            // the tray is answering somebody, or a piece is still walking, or a beat is being held
+            if (_tray.IsAnswering || !_fight.Settled) return;
+
+            // not the hero's turn: the fight drives the foes itself, and that is the thing being
+            // watched rather than the thing being driven
+            if (!fight.AwaitingHero) return;
+
+            // C4: OUT OF ACTIONS AND STILL HOLDING THE TURN, which is what a Nerve is for. The
+            // hero's turn does not end itself while he has one (Encounter.Done), so this is both
+            // the push and the proof that the turn waited for it
+            if (fight.ActionsLeft <= 0)
+            {
+                if (!Plain && !_spentOnPush && _hero.Nerve > 0)
+                {
+                    int nerve = _hero.Nerve;
+
+                    _fight.NerveClicked();
+                    _spentOnPush = true;
+
+                    if (fight.ActionsLeft != 1)
+                        Problem($"pushing bought {fight.ActionsLeft} actions rather than one");
+
+                    if (_hero.Nerve != nerve - 1)
+                        Problem($"pushing took {nerve - _hero.Nerve} nerve rather than one");
+
+                    _waited = 0.0;
+                    return;
+                }
+
+                _fight.Done();
+                _waited = 0.0;
+                return;
+            }
+
+            Swing(fight);
+        }
+
+        // ---- what the rules narrate (ICombatObserver) ----
+
+        // EVERY FOE STILL STANDING GETS A TURN, EVERY ROUND. That is the half of the turn loop the
+        // rules cannot enforce for the driver: `Encounter` hands out turns, and a fight that
+        // silently skipped one - because a piece could not find a route, or a beat swallowed it -
+        // would look exactly like a fight where that foe chose not to move. Four Rabble standing
+        // still is four Rabble standing still either way.
+        //
+        // Settled at the ROUND BOUNDARY against who is still standing, so a foe cut down before
+        // its turn came round is not owed one
+        public void RoundBegan(int round)
+        {
+            if (_watchingRound > 0 && _fight?.Encounter != null)
+                foreach (Actor owed in _fight.Encounter.Order.Where(a => !a.IsDown && !_acted.Contains(a)))
+                    Problem($"round {_watchingRound} ended and {owed.DebugName} never had a turn");
+
+            _watchingRound = round;
+            _acted.Clear();
+        }
+
+        public void TurnBegan(Actor actor, int round)
+        {
+            if (actor == null) return;
+
+            if (!_acted.Add(actor))
+                Problem($"{actor.DebugName} was given a second turn in round {round}");
+
+            // C6: TWO ACTIONS AND EVERYBODY ELSE HAS ONE. The fields were set and never read
+            // anywhere in the repo until Phase C, so a Dread LOOKED like it acted twice and did
+            // not (SEAMS.md section 3)
+            if (actor.Tier == Tier.Dread)
+            {
+                _bossActions = _fight.Encounter?.ActionsLeft ?? 0;
+
+                if (_bossActions != 2)
+                    Problem($"{actor.DebugName} began its turn with {_bossActions} actions and a " +
+                            "Dread has two");
+            }
+
+            _turnsWatched++;
+        }
+
+        // a blow is the rules speaking, so this is where the two halves of one are held together:
+        // a hit takes the damage it reported, and a miss takes nothing
+        public void AttackResolved(AttackOutcome outcome)
+        {
+            _blowsWatched++;
+
+            // a blow struck by somebody whose turn it is not is a reaction, and the only one the
+            // game has is the readied strike
+            Encounter fight = _fight?.Encounter;
+
+            if (fight != null && !fight.IsOver && fight.Acting != null &&
+                !ReferenceEquals(outcome.Attacker, fight.Acting))
+            {
+                _reactions++;
+
+                if (!ReferenceEquals(outcome.Attacker, _hero))
+                    Problem($"{outcome.Attacker.DebugName} struck out of turn and is not the hero - " +
+                            "nothing but the hero has a reaction");
+            }
+
+            if (!outcome.Hit && outcome.Damage != 0)
+                Problem($"{outcome.Attacker.DebugName} missed {outcome.Target.DebugName} for " +
+                        $"{outcome.Damage} damage");
+
+            if (outcome.Hit && outcome.Damage <= 0)
+                Problem($"{outcome.Attacker.DebugName} hit {outcome.Target.DebugName} for nothing");
+        }
+
+        public void ConditionApplied(Actor actor, Condition condition)
+        {
+        }
+
+        // the piece has to leave the board the moment the rules take the actor out of the fight.
+        // The table's own observer runs before this one, so by the time this is called it has
+        // already had its chance to topple the model and free the square
+        public void ActorDowned(Actor actor)
+        {
+            Mini piece = _fight.PieceFor(actor);
+
+            if (piece == null)
+            {
+                Problem($"{actor.DebugName} went down and the fight has no piece for it");
+                return;
+            }
+
+            if (_board.CellOf(piece) != null)
+                Problem($"{actor.DebugName} went down and is still standing on {_board.CellOf(piece)} - " +
+                        "the square never came free");
+
+            if (!piece.IsToppled)
+                Problem($"{actor.DebugName} went down and its piece is still on its feet");
+        }
+
+        // heroic effort, spent and banked. Counted rather than judged: what a run should show is
+        // that all four spends were reachable and that nothing changed by itself
+        public void NerveChanged(Actor actor, int was, int now)
+        {
+            if (now < was) _nerveSpent += was - now;
+            else _nerveBanked += now - was;
+
+            if (now < 0 || now > actor.NerveCap)
+                Problem($"{actor.DebugName} has {now} nerve and a cap of {actor.NerveCap}");
+        }
+
+        // C6: EXACTLY AT THE THRESHOLD, EXACTLY ONCE, AND THE DICE ARE ACTUALLY BIGGER. All three
+        // are things that look completely fine in motion if they are wrong - a phase that fired a
+        // round late, or twice, or that re-rated nothing, is a boss behaving oddly rather than a
+        // bug anybody would report
+        public void PhaseChanged(Actor actor)
+        {
+            _phases++;
+
+            if (actor.Tier != Tier.Dread)
+                Problem($"{actor.DebugName} changed phase and is a {actor.Tier}");
+
+            if (actor.Vigor * 2 > actor.MaxVigor)
+                Problem($"{actor.DebugName} changed phase at {actor.Vigor} of {actor.MaxVigor}, " +
+                        "which is above half");
+
+            if (_fight.Boss == null || !_fight.Boss.Turned)
+                Problem($"{actor.DebugName} changed phase and the fight's boss says it has not");
+
+            GD.Print($"        {actor.DebugName} CHANGES at {actor.Vigor}/{actor.MaxVigor}");
+        }
+
+        public void EncounterEnded(EncounterResult result)
+        {
+        }
+
+        // the hero swings at whatever is beside him, or walks at the nearest thing that is not.
+        // Deliberately a poor player - the point is that the loop holds together, not that it can
+        // be won cleverly
+        void Swing(Encounter fight)
+        {
+            Actor prey = Nearest(fight);
+
+            if (prey == null)
+            {
+                Problem($"the hero has {fight.ActionsLeft} actions and nothing to spend them on, with " +
+                        $"{fight.Foes.Count(f => !f.IsDown)} foes still standing");
+                Conclude();
+                return;
+            }
+
+            Cell? at = _board.CellOf(_fight.PieceFor(prey));
+
+            if (at == null)
+            {
+                Problem($"{prey.DebugName} is standing and has no square");
+                Conclude();
+                return;
+            }
+
+            // C3: GIVE UP AN ACTION TO WATCH, once a fight, on a turn where something is still
+            // walking toward us. Clicking the hero's own square is the gesture, so this goes
+            // through Board.Claims like everything else
+            // ROUND ONE, because that is the only round in which anything is still walking. By
+            // round two the Rabble are already in reach and strike rather than approach, so a
+            // readied strike armed then would sit there all fight with nothing to trigger it -
+            // which is a finding about the encounter rather than about the reaction, and worth
+            // knowing either way
+            if (!Plain && _readied == 0 && fight.Round == 1)
+            {
+                Cell? here = _board.CellOf(_fight.PieceFor(_hero));
+
+                if (here != null && _board.Claims(here.Value))
+                {
+                    _readied++;
+                    _waited = 0.0;
+
+                    if (!fight.IsReadied(_hero))
+                        Problem("the hero clicked his own square to watch and is not readied");
+
+                    if (fight.AwaitingHero)
+                        Problem("the hero readied and it is still his turn");
+
+                    return;
+                }
+            }
+
+            // C4: THE FOUR SPENDS, THROUGH THE GESTURES THE GAME HAS. A Nerve token is clicked
+            // by ray, so the check calls what a click on one calls - and the ordering inside
+            // Fight.OnNerve is what decides which of the four it buys, exactly as it would for a
+            // player. Armed here, before the swing, because that is when the fourth die is bought
+            if (!Plain && !_spentOnHeart && _hero.Nerve > 0 && fight.ActionsLeft > 0)
+            {
+                int nerve = _hero.Nerve;
+
+                _fight.NerveClicked();
+                _spentOnHeart = true;
+                _wantsAFourthDie = true;
+
+                if (_hero.Nerve != nerve)
+                    Problem("arming the Heart die spent a Nerve before the dice left the hand - " +
+                            "a player who changes their mind would have paid for nothing");
+
+                return;
+            }
+
+            _target = prey;
+            _targetVigorBefore = prey.Vigor;
+            _heartBefore = _hero.Attribute(Attr.Heart);
+            _wasChannelling = _casting && at != null &&
+                              !Adjacent(at.Value) && TheEffect.Offered(_hero);
+            _opening = null;
+            _explosions = 0;
+            // NOT ON THE BOSS FIGHT. Winding the hero on purpose costs him a die and seven
+            // vigor, and the phase change only fires if he can get a Dread to half - handicapping
+            // the one fight whose whole point is the second half would be checking that he cannot
+            _conditionSwing = !Plain && !_fighting && !_conditionChecked && Adjacent(at.Value);
+
+            if (_conditionSwing) Wind();
+
+            int actionsBefore = fight.ActionsLeft;
+
+            // THE SAME ENTRY POINT A MOUSE CLICK USES. Board.Claims is what a click on a square is
+            // offered to, so this drives the fight through the seam rather than round it
+            if (_board.Claims == null || !_board.Claims(at.Value))
+            {
+                Problem($"a click on {at}, where {prey.DebugName} is standing, was not taken by the fight");
+                Conclude();
+                return;
+            }
+
+            _waited = 0.0;
+
+            // a click that started a throw is a swing, to be read when the felt stops; one that
+            // started a walk is finished already
+            if (_tray.IsAnswering)
+            {
+                _inFlight = true;
+                _swings++;
+                return;
+            }
+
+            // neither a throw nor a move: the click cost nothing and nothing happened, which would
+            // spin this loop until the stuck timer caught it
+            if (fight.ActionsLeft == actionsBefore && !fight.IsOver && fight.AwaitingHero)
+            {
+                Problem($"a click on {at} cost the hero no action and threw no dice");
+                Conclude();
+            }
+        }
+
+        bool _wantsAFourthDie;
+
+        bool _wasChannelling;
+
+        // C5: THE POOL IS Heart + Channeling + focus AND THE HEART DIE WENT DOWN. Both halves,
+        // because either one alone is a mechanic with no cost or a cost with no mechanic
+        void CheckTheCast(TrayThrow thrown)
+        {
+            _wasChannelling = false;
+            _casts++;
+            _castsSeen++;
+
+            string[] want = { Attr.Heart.Key(), Skill.Channeling.Key(), _hero.WeaponKey };
+            string[] got = thrown.Slots.Select(t => t.LabelKey).ToArray();
+
+            if (!want.SequenceEqual(got))
+                Problem($"a cast threw [{string.Join(", ", got)}] and Channeling is " +
+                        $"[{string.Join(", ", want)}]");
+
+            if (thrown.ImpactIsFallback)
+                Problem("a cast left no die over - the effect has no power, so the pool was too small");
+
+            Die now = _hero.Attribute(Attr.Heart);
+
+            if (now != _heartBefore.StepDown())
+                Problem($"a cast took the Heart die from {_heartBefore.Label()} to {now.Label()} - " +
+                        $"strain steps it down one (CORE_RULES section 10)");
+
+            if (_hero.Strain != _casts)
+                Problem($"{_casts} casts and {_hero.Strain} strain on the caster");
+
+            GD.Print($"        cast {_casts}: Heart {_heartBefore.Label()} -> {now.Label()}, " +
+                     $"power is the leftover {thrown.Result.Impact.Label()} showing {thrown.ImpactValue}");
+
+            // and a breather puts it back, once the die has been watched shrinking a couple of times
+            if (!_breathed && _casts >= 2 && now == Die.D4)
+            {
+                _breathed = true;
+
+                Die floored = now;
+                _fight.Breathe();
+
+                if (_hero.Strain != 0)
+                    Problem($"a breather left {_hero.Strain} strain on the caster");
+
+                if (_hero.Attribute(Attr.Heart) == floored)
+                    Problem($"a breather shed the strain and the Heart die is still {floored.Label()}");
+
+                GD.Print($"        a breather: Heart {floored.Label()} back to " +
+                         $"{_hero.Attribute(Attr.Heart).Label()}");
+
+                _casts = 0;
+            }
+        }
+
+        // one re-throw and one shrug, through the same gestures a player has: a click on a die,
+        // and a click on a Nerve token
+        void ReadTheFelt()
+        {
+            if (!Plain && _sawTrouble && !_shrugged && _hero.Nerve > 0)
+            {
+                int nerve = _hero.Nerve;
+                Die axe = _hero.Weapon;
+
+                _fight.NerveClicked();
+                _shrugged = true;
+
+                if (_hero.Nerve != nerve - 1)
+                    Problem($"shrugging a Trouble took {nerve - _hero.Nerve} nerve rather than one");
+
+                if (_hero.Weapon != axe)
+                    Problem("a Trouble was shrugged off and the gear was notched anyway");
+
+                _waited = 0.0;
+                return;
+            }
+
+            if (!Plain && !_spentOnReroll && _hero.Nerve > 0 && _opening != null && _opening.Slots.Count > 1)
+            {
+                int nerve = _hero.Nerve;
+                int[] before = _opening.Slots.Select(t => t.Value).ToArray();
+
+                _rerollingSlot = 0;
+                _rerolledFrom = before;
+                _spentOnReroll = true;
+
+                _fight.DiePicked(0);
+
+                if (_hero.Nerve != nerve - 1)
+                    Problem($"a re-throw took {nerve - _hero.Nerve} nerve rather than one");
+
+                // the answer comes back through OnThrown as a fresh opening throw
+                _opening = null;
+                _waited = 0.0;
+                return;
+            }
+
+            // nothing left to spend on this throw - take it as it lies, the way a click on the
+            // board does
+            _fight.TakeTheThrow();
+            _waited = 0.0;
+        }
+
+        int _rerollingSlot = -1;
+
+        int[] _rerolledFrom;
+
+        // EXACTLY ONE DIE MOVED. A re-throw that kicked the whole handful would look completely
+        // fine - three new numbers is what a throw looks like - and would be a different rule
+        void CheckTheReroll(TrayThrow thrown)
+        {
+            if (_rerolledFrom == null || _rerollingSlot < 0) return;
+
+            if (thrown.Slots.Count != _rerolledFrom.Length)
+            {
+                Problem($"a re-throw changed the pool from {_rerolledFrom.Length} dice to " +
+                        $"{thrown.Slots.Count}");
+            }
+            else
+            {
+                for (int i = 0; i < thrown.Slots.Count; i++)
+                    if (i != _rerollingSlot && thrown.Slots[i].Value != _rerolledFrom[i])
+                        Problem($"a re-throw of die {_rerollingSlot} also moved die {i}, " +
+                                $"{_rerolledFrom[i]} to {thrown.Slots[i].Value}");
+            }
+
+            GD.Print($"        re-throw: die {_rerollingSlot} went from {_rerolledFrom[_rerollingSlot]} " +
+                     $"to {thrown.Slots[_rerollingSlot].Value}, the rest lay still");
+
+            _rerolledFrom = null;
+            _rerollingSlot = -1;
+        }
+
+        bool Adjacent(Cell cell)
+        {
+            Cell? hero = _board.CellOf(_fight.PieceFor(_hero));
+
+            return hero != null
+                && Mathf.Abs(hero.Value.X - cell.X) <= 1
+                && Mathf.Abs(hero.Value.Y - cell.Y) <= 1;
+        }
+
+        // whatever is standing and closest, Rabble first when two are equally close - which is what
+        // the engine's own targeting would do, and what a player does.
+        //
+        // A CASTER GOES FOR THE FAR ONE INSTEAD, because that is the click that channels: in reach
+        // is a swing, out of reach and in sight is a bolt (Fight.Engage). Picking the nearest would
+        // have this check play a wizard as a man with a stick
+        Actor Nearest(Encounter fight)
+        {
+            Cell? hero = _board.CellOf(_fight.PieceFor(_hero));
+
+            if (hero == null) return null;
+
+            var standing = fight.Foes
+                .Where(f => !f.IsDown && _board.CellOf(_fight.PieceFor(f)) != null)
+                .ToList();
+
+            if (_casting)
+            {
+                Actor far = standing
+                    .Where(f => Distance(hero.Value, _board.CellOf(_fight.PieceFor(f)).Value) > 1)
+                    .Where(f => Sight.Clear(_board.Map, hero.Value, _board.CellOf(_fight.PieceFor(f)).Value))
+                    .OrderByDescending(f => Distance(hero.Value, _board.CellOf(_fight.PieceFor(f)).Value))
+                    .FirstOrDefault();
+
+                if (far != null) return far;
+            }
+
+            return standing
+                .OrderBy(f => Distance(hero.Value, _board.CellOf(_fight.PieceFor(f)).Value))
+                .ThenBy(f => f.Tier == Tier.Rabble ? 0 : 1)
+                .FirstOrDefault();
+        }
+
+        static int Distance(Cell a, Cell b) =>
+            Mathf.Max(Mathf.Abs(a.X - b.X), Mathf.Abs(a.Y - b.Y));
+
+        // ---- C1: over a threshold, and the smaller die has to reach the felt ----
+
+        // OVER A VIGOR THRESHOLD ON PURPOSE, unless a foe got there first - which happens, and
+        // used to make this report a failure that was its own arithmetic: it compared the felt
+        // against the CURRENT Might die stepped down again, having already been stepped down
+        //
+        // What it wants to know is the base die and the current one. The Condition is what puts a
+        // gap between them, and the felt has to show the current one
+        void Wind()
+        {
+            _mightBefore = _hero.BaseAttribute(Attr.Might);
+
+            if (_hero.HasCondition(Condition.Winded)) return;
+
+            _hero.Damage(_hero.MaxVigor / 3 + 1);
+
+            if (!_hero.HasCondition(Condition.Winded))
+                Problem($"{_hero.MaxVigor / 3 + 1} damage did not put the hero over a vigor threshold - " +
+                        $"he is on {_hero.Vigor} of {_hero.MaxVigor} and carrying nothing");
+        }
+
+        // C1: THE DIE THE PIPELINE SAYS IS THE DIE ON THE FELT, and a Condition is what makes it
+        // smaller than the base. Two assertions and neither of them does its own arithmetic - the
+        // trait pipeline is the one place that composes a die (F3) and this compares against it
+        void CheckTheShrunkenDie(TrayThrow thrown)
+        {
+            string might = Attr.Might.Key();
+            Die want = _hero.Attribute(Attr.Might);
+
+            TraySlot slot = thrown.Slots.FirstOrDefault(t => t.LabelKey == might);
+
+            if (slot.LabelKey != might)
+            {
+                Problem($"the hero threw {thrown.Slots.Count} dice and none of them was his {might} - " +
+                        "a swing is Might + Blades + gear");
+                return;
+            }
+
+            if (slot.Die != want)
+                Problem($"the hero's Might is {want.Label()} and a {slot.Die.Label()} reached the " +
+                        "felt - the pool was not built from the pipeline's die");
+            else if (want == _mightBefore)
+                Problem($"the hero is Winded and his Might is still his base {want.Label()} - " +
+                        "the Condition stepped nothing down");
+            else
+                GD.Print($"        Winded: the hero threw {want.Label()} for Might, base is " +
+                         $"{_mightBefore.Label()}");
+
+            _conditionChecked = true;
+        }
+
+        // the mark on the mat says what the localizer says, in words, and never the key. this is
+        // what would catch a hardcoded English string or a condition with no line in game.csv -
+        // both of which look completely fine until somebody switches language
+        void CheckMarks()
+        {
+            foreach (Piece piece in _fight.Pieces)
+            {
+                if (piece.Marks == null)
+                {
+                    Problem($"{piece.Actor.DebugName} has no condition marks beside it");
+                    continue;
+                }
+
+                foreach (Condition c in piece.Actor.Conditions)
+                {
+                    Label3D mark = piece.Marks.LabelFor(c);
+
+                    if (mark == null)
+                    {
+                        Problem($"{piece.Actor.DebugName} is {c} and nothing is written beside the piece");
+                        continue;
+                    }
+
+                    string key = c.Key();
+                    string words = _text.Get(key);
+
+                    if (words == key)
+                        Problem($"'{key}' has no words in the locale - the mat would read the key itself");
+
+                    if (mark.Text != words)
+                        Problem($"the mark beside {piece.Actor.DebugName} reads '{mark.Text}' and the " +
+                                $"localizer says '{words}' for '{key}'");
+                }
+            }
+        }
+
+        // ---- reading the felt ----
+
+        // every throw this swing puts on the felt: the opening handful, then the Impact die going
+        // back in the hand however many times it comes up its maximum. Nothing is decided here -
+        // the arithmetic waits until the fight has finished with the swing (Read below)
+        void OnThrown(TrayThrow thrown)
+        {
+            if (!_inFlight) return;
+
+            _waited = 0.0;
+
+            if (_opening == null)
+            {
+                _opening = thrown;
+
+                _widestPool = Mathf.Max(_widestPool, thrown.Slots.Count);
+                _sawTrouble = thrown.Result.Trouble;
+
+                CheckTheReroll(thrown);
+
+                if (_wasChannelling) CheckTheCast(thrown);
+
+                if (_wantsAFourthDie)
+                {
+                    _wantsAFourthDie = false;
+
+                    if (thrown.Slots.Count != 4)
+                        Problem($"a Nerve bought the Heart die and {thrown.Slots.Count} dice reached " +
+                                "the felt");
+                    else if (thrown.Slots.All(t => t.LabelKey != Attr.Heart.Key()))
+                        Problem("a Nerve bought the Heart die and no die on the felt is the hero's Heart");
+                }
+
+                return;
+            }
+
+            _explosions++;
+            _explosionsSeen++;
+
+            GD.Print($"        explosion {_explosions}: the die came back {thrown.Slots[0].Value}");
+        }
+
+        // the swing has landed, whatever it took to get there
+        void Read()
+        {
+            _inFlight = false;
+
+            if (_opening == null)
+            {
+                Problem($"swing {_swings} finished without a throw ever reaching the felt");
+                return;
+            }
+
+            bool beat = _opening.Result.Beats(_target.Defense);
+            int fell = _targetVigorBefore - _target.Vigor;
+
+            if (beat) _hits++;
+
+            if (_conditionSwing) CheckTheShrunkenDie(_opening);
+
+            CheckTheBlow(_opening, beat, fell);
+            CheckMarks();
+        }
+
+        void CheckTheBlow(TrayThrow thrown, bool beat, int fell)
+        {
+            if (!_target.Tier.HasHealthTrack())
+            {
+                // C2: RABBLE DIE TO ANY HIT AND TO NOTHING ELSE. Both halves - a miss has to leave
+                // one standing, which is what Actor.Damage(0) used to fail at (SEAMS.md section 5)
+                if (beat && !_target.IsDown)
+                    Problem($"swing {_swings}: {_target.DebugName} was hit and is still standing - " +
+                            "a Rabble has no health track");
+
+                if (!beat && _target.IsDown)
+                    Problem($"swing {_swings}: {_target.DebugName} was missed and went down anyway");
+
+                if (beat) _rabbleFelled++;
+
+                return;
+            }
+
+            // C0: the marked Impact die's value is the damage dealt, capped at what was left - Vigor
+            // clamps at 0 in its one write (F3), so a killing blow of 3 into 1 takes 1 and the die on
+            // the felt still reads 3
+            int expected = Mathf.Min(thrown.ImpactValue, _targetVigorBefore);
+
+            if (beat && _explosions == 0 && fell != expected)
+                Problem($"swing {_swings}: the felt's Impact die shows {thrown.ImpactValue} and " +
+                        $"{_target.DebugName} lost {fell} of the {_targetVigorBefore} it had - " +
+                        "the damage is not the die on the table");
+
+            // and when it exploded, the felt's last throw is only the tail of the chain, so the
+            // blow has to be at least the whole first die and more than the tail alone
+            if (beat && _explosions > 0 && fell < expected)
+                Problem($"swing {_swings}: the Impact die exploded {_explosions} times and " +
+                        $"{_target.DebugName} lost {fell}, less than the last throw of the chain");
+
+            if (!beat && fell != 0)
+                Problem($"swing {_swings}: {thrown.Result.Total} did not beat defense {_target.Defense} " +
+                        $"and {_target.DebugName} lost {fell} vigor anyway");
+        }
+
+        // ---- one fight over, and then the verdict ----
+
+        void Finished(Encounter fight)
+        {
+            // a boss that fell past half Vigor without turning is the one way a phase change can be
+            // wrong that nothing else here would notice
+            if (_fight.Boss != null && _fight.Boss.Due)
+                Problem($"{_fight.Boss.Actor.DebugName} finished the fight at " +
+                        $"{_fight.Boss.Actor.Vigor}/{_fight.Boss.Actor.MaxVigor} and never changed");
+
+            if (_fighting && _fight.Boss != null && !_fight.Boss.Turned)
+                GD.Print("        (the boss never reached half Vigor, so the phase change went " +
+                         "untested this run)");
+
+            _fought++;
+            _rounds += fight.Result.Rounds;
+
+            if (fight.Result.HeroWon) _won++;
+
+            GD.Print($"        {fight.Result}");
+
+            _tray.Resolved -= OnThrown;
+            _fight.Unwatch(this);
+
+            if (_fought >= Fights) { Conclude(); return; }
+
+            Restart();
+        }
+
+        void Conclude()
+        {
+            if (_finished) return;
+
+            _finished = true;
+
+            if (_tray != null) _tray.Resolved -= OnThrown;
+            _fight?.Unwatch(this);
+
+            GD.Print("");
+            GD.Print($"fights  {_fought} played, {_won} won" +
+                     (_fought > 0 ? $", {(double)_rounds / _fought:0.0} rounds on average" : ""));
+            GD.Print($"swings  {_swings} thrown on the felt, {_hits} beat the defense, " +
+                     $"{_rabbleFelled} Rabble removed");
+            GD.Print($"turns   {_turnsWatched} taken and {_blowsWatched} blows narrated, " +
+                     "every turn to somebody who was owed one");
+            GD.Print($"impact  {_explosionsSeen} exploding {(_explosionsSeen == 1 ? "die went" : "dice went")} " +
+                     "back in the hand");
+            GD.Print($"react   {_readied} readied, {_reactions} struck out of turn");
+            GD.Print($"nerve   {_nerveSpent} spent, {_nerveBanked} banked; widest pool " +
+                     $"{_widestPool} dice");
+            if (_phases > 1)
+                Problem($"a boss changed phase {_phases} times and a phase change happens once");
+
+            GD.Print("boss    " + (
+                _bossFights == 0 ? "none in this run"
+                : _phases == 1 ? $"fought {_bossFights}, changed phase once at half Vigor"
+                : _phases == 0 ? $"fought {_bossFights} and never got one to half - the phase change went untested"
+                : $"fought {_bossFights} and saw {_phases} phase changes"));
+            GD.Print($"channel {(_breathed ? "cast, strained to the floor and rested" : _castsSeen + " cast")}" +
+                     (_castsSeen == 0 ? " - NOTHING WAS CHANNELLED" : ""));
+
+            // a run of one fight is the boss's, so there was no casting fight to channel in
+            if (!Plain && !string.IsNullOrEmpty(CastingHero) && Fights >= 2 && _castsSeen == 0)
+                Problem("the casting fight never channelled anything - the gesture was never reached");
+            GD.Print($"        heart {(_spentOnHeart ? "yes" : "NO")}, " +
+                     $"reroll {(_spentOnReroll ? "yes" : "NO")}, " +
+                     $"push {(_spentOnPush ? "yes" : "NO")}, " +
+                     $"shrug {(_shrugged ? "yes" : "no trouble came up")}");
+
+            if (!Plain && (!_spentOnHeart || !_spentOnReroll || !_spentOnPush))
+                Problem("not every Nerve spend was reachable in this run - " +
+                        $"heart {_spentOnHeart}, reroll {_spentOnReroll}, push {_spentOnPush}");
+
+            if (_spentOnHeart && _widestPool < 4)
+                Problem($"a Nerve bought the Heart die and the widest pool on the felt was " +
+                        $"{_widestPool} dice");
+
+            if (_readied > 0 && _reactions == 0)
+                GD.Print("        (nothing walked into reach while he was watching - not a fault, " +
+                         "but the readied strike went untested this run)");
+            GD.Print("        SIMULATION.md section 5 predicts ~85% survival at ~6.6 rounds against " +
+                     "4 Rabble and a Rival - with no geometry in it, so the table should sit near " +
+                     "that and not on it");
+
+            if (!Plain)
+                GD.Print("        AND THIS RUN IS HANDICAPPED ON PURPOSE - the hero is Winded to " +
+                         "order, gives up a turn to watch, spends Nerve on whatever is reachable " +
+                         "and plays the last fight as a caster. Use --plain for a win rate that " +
+                         "means anything");
+
+            Finish();
+        }
+    }
+}

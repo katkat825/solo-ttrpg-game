@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3]
+
+; The dungeon pack, painted. One material for every tile in the game, because the whole pack
+; shares one atlas - so a new tile pulled through tools/pull-models.ps1 is already wearing this.
+;
+; Everything not named here is the shader's own default. The dials are on the shader
+; (game/shaders/painted_miniature.gdshader) and they are meant to be moved while looking.
+
+[ext_resource type="Shader" path="res://shaders/painted_miniature.gdshader" id="1_paint"]
+[ext_resource type="Texture2D" path="res://models/dungeon/dungeon_texture.png" id="2_atlas"]
+
+[resource]
+shader = ExtResource("1_paint")
+shader_parameter/atlas = ExtResource("2_atlas")

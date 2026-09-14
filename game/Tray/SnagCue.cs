@@ -63,9 +63,19 @@ namespace Game.Tray
 
         // starts the count again, and it has to: bigger dice snag less, so a tally carried across
         // a change of shapes measures a pool that no longer exists and reads as a finding
+        //
+        // THE SAME SHAPES ARE NOT A CHANGE OF SHAPES. Until Phase C the tray was rebuilt only when
+        // somebody pressed D, so "rebuilt" and "different pool" were the same event. A fight
+        // rebuilds it on every swing - the hero's pool arrives fresh each time - and resetting on
+        // each of those left the tally reading "0 of 1 throws" forever, which is not a measurement
+        // of anything. The count survives a rebuild that changed nothing, and only that
         public void Reset(IReadOnlyList<Die> pool)
         {
-            _pool = (pool ?? throw new ArgumentNullException(nameof(pool))).ToArray();
+            Die[] shapes = (pool ?? throw new ArgumentNullException(nameof(pool))).ToArray();
+
+            if (_pool != null && _pool.SequenceEqual(shapes)) return;
+
+            _pool = shapes;
 
             Throws = 0;
             Snags = 0;

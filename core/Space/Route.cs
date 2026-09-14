@@ -12,17 +12,23 @@ namespace Core.Space
     // game/ for the same reason the grid is: it is pure, it is headless, and a balance sim that
     // one day gives enemies positions needs it without an engine behind it.
     //
+    // SINCE EDGE_WALLS.md A WALL IS ON THE LINE, so a step is refused by the LINE it crosses rather
+    // than by the square it lands on. The square only has to be one a piece can stand on - and
+    // almost all of them are now, because the squares that used to be walls are floor with a wall
+    // drawn beside them.
+    //
     // The rules it enforces, all three of them tabletop rather than clever:
     //
     //   DIAGONALS COUNT AS ONE SQUARE. What a table does, and what CORE_RULES' whole
     //   arithmetic-free spirit asks for. No 1.4s, no alternating 1-2-1.
     //
-    //   NO SQUEEZING THROUGH A SHUT CORNER. A diagonal step is refused when BOTH squares beside it
-    //   are blocked - two walls that touch corner to corner are a seal, not a slot. One wall beside
-    //   it is fine: rounding the outside corner of a wall is what a hand does with a piece, and a
-    //   rule against it would be a rule nobody at a table has ever kept. This is the same rule
-    //   `Sight` applies to a line crossing that corner, deliberately - a piece must not be able to
-    //   see through a gap it cannot walk through. It would never be spotted by watching either way.
+    //   A DIAGONAL IS A SHORTCUT THROUGH ONE OF THE TWO WAYS ROUND. It is allowed when at least one
+    //   of the two L-shaped orthogonal paths around the corner is open the whole way - so a piece
+    //   rounds the outside corner of a wall, and cannot squeeze through the corner where two walls
+    //   meet. Expressing it as "is there a way round" rather than "are both neighbours solid" is
+    //   what makes it correct for lines as well as for squares, and it is the same rule `Sight`
+    //   applies at the same corner, deliberately: a piece must not be able to see through a gap it
+    //   cannot walk through. Neither would ever be spotted by watching.
     //
     //   DIFFICULT GROUND COSTS DOUBLE, so a route goes round a rubble field it can walk round and
     //   through one it cannot - which is the entire behaviour Tile.Rough exists to produce.
@@ -53,7 +59,7 @@ namespace Core.Space
             // under a piece must not make it unable to move
             if (from == to) return new[] { from };
 
-            if (!Open(map, to, occupied)) return null;
+            if (!Standable(map, to, occupied)) return null;
 
             var cameFrom = new Dictionary<Cell, Cell>();
             var best = new Dictionary<Cell, int> { [from] = 0 };
@@ -75,15 +81,7 @@ namespace Core.Space
                 {
                     var next = new Cell(here.X + dx, here.Y + dy);
 
-                    if (!Open(map, next, occupied)) continue;
-
-                    // a shut corner: both squares beside the diagonal blocked. asked of the MAP
-                    // only - a piece standing beside the corner narrows the room, it does not
-                    // seal it, and a queue of minis must not be able to lock a doorway shut
-                    if (dx != 0 && dy != 0 &&
-                        !map.IsPassable(new Cell(here.X + dx, here.Y)) &&
-                        !map.IsPassable(new Cell(here.X, here.Y + dy)))
-                        continue;
+                    if (!CanStep(map, here, next, dx, dy, occupied)) continue;
 
                     int through = cost + map.At(next).MoveCost();
 
@@ -99,6 +97,26 @@ namespace Core.Space
 
             return null;
         }
+
+        // ONE STEP, and the only place the rules of movement are written down. Sight asks the same
+        // question of the same corner in its own terms, and the two are meant to agree
+        static bool CanStep(MapLayout map, Cell from, Cell to, int dx, int dy, Func<Cell, bool> occupied)
+        {
+            if (dx == 0 || dy == 0) return Crosses(map, from, to, occupied);
+
+            // a diagonal is a shortcut through one of the two ways round the corner. either L is
+            // enough; both blocked is a sealed corner and there is no way through it
+            var sideways = new Cell(from.X + dx, from.Y);
+            var forward = new Cell(from.X, from.Y + dy);
+
+            return (Crosses(map, from, sideways, occupied) && Crosses(map, sideways, to, occupied))
+                || (Crosses(map, from, forward, occupied) && Crosses(map, forward, to, occupied));
+        }
+
+        // one orthogonal crossing: nothing on the line, and a square at the far end a piece could
+        // stand on with nobody already standing on it
+        static bool Crosses(MapLayout map, Cell from, Cell to, Func<Cell, bool> occupied) =>
+            map.CanCross(from, to) && !occupied(to);
 
         // is there any way there at all - the same question, without building the route
         public static bool Exists(MapLayout map, Cell from, Cell to, Func<Cell, bool> occupied) =>
@@ -117,7 +135,44 @@ namespace Core.Space
             return cost;
         }
 
-        static bool Open(MapLayout map, Cell cell, Func<Cell, bool> occupied) =>
+        // AS FAR ALONG A ROUTE AS ONE MOVE REACHES (COMBAT_LOOP.md C2).
+        //
+        // Phase B had no reachability limit at all - one click walked a piece anywhere it could
+        // get to, deliberately, because "no turns, no whose-move-is-it" was the combat loop's
+        // problem. It is the combat loop's problem now: a fight where everyone crosses the room
+        // every turn is a fight where position means nothing, and Rabble exist to make position
+        // mean something (CORE_RULES.md section 8).
+        //
+        // The budget is counted in the same currency `Cost` counts - every square ENTERED, with
+        // difficult ground at double - so a piece wades four squares into rubble or walks eight
+        // round it, and the rule that makes Tile.Rough worth having keeps working when a move is
+        // finite. The square being left is free, and the route always includes it, so a piece with
+        // no budget at all stays where it is rather than falling off the board.
+        //
+        // Whole squares only: a piece never stops halfway into difficult ground because it could
+        // not afford the second half of the step.
+        public static IReadOnlyList<Cell> Within(MapLayout map, IReadOnlyList<Cell> route, int budget)
+        {
+            if (map == null || route == null || route.Count == 0) return route;
+
+            var reached = new List<Cell> { route[0] };
+
+            int spent = 0;
+
+            for (int i = 1; i < route.Count; i++)
+            {
+                int step = map.At(route[i]).MoveCost();
+
+                if (spent + step > budget) break;
+
+                spent += step;
+                reached.Add(route[i]);
+            }
+
+            return reached;
+        }
+
+        static bool Standable(MapLayout map, Cell cell, Func<Cell, bool> occupied) =>
             map.IsPassable(cell) && !occupied(cell);
 
         // Chebyshev, because a diagonal is one square. it never overestimates - every step costs at

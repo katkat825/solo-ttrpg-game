@@ -16,23 +16,77 @@ namespace Game.Tests
     // every bug this class can have is the two coming apart
     public class TrayResolutionTests
     {
-        // sizes in throw order, matching TrayResolution's own PoolLabels: attribute, skill, gear
+        // the hero's three traits in throw order - attribute, skill, gear - which is the shape
+        // Actor.BuildPool hands over and the shape the board throws at a door
+        static Pool Pool(Die a, Die b, Die c) => Core.Resolution.Pool.Of(
+            ("attr.might.name", a), ("skill.blades.name", b), ("gear.axe.name", c));
+
         static TrayThrow Throw(Die a, Die b, Die c, params int[] values) =>
-            new TrayResolution(new[] { a, b, c }).Resolve(values);
+            new TrayResolution(Pool(a, b, c)).Resolve(values);
 
         // ---- the pool it will accept ----
 
+        // since B4 the pool comes from whoever asked for the throw, so its SIZE is theirs to
+        // choose - what the tray cannot do is resolve a handful of nothing
         [Fact]
-        public void APoolThatIsNotThreeDice_IsRefused() =>
-            Assert.Throws<ArgumentException>(() => new TrayResolution(new[] { Die.D6, Die.D6 }));
+        public void APoolWithNoDiceInIt_IsRefused() =>
+            Assert.Throws<ArgumentException>(() => new TrayResolution(new Pool()));
 
         [Fact]
-        public void ADieThatIsNotThere_IsRefused() =>
-            Assert.Throws<ArgumentException>(() => new TrayResolution(new[] { Die.D6, Die.None, Die.D6 }));
+        public void NoPoolAtAll_IsRefused() =>
+            Assert.Throws<ArgumentNullException>(() => new TrayResolution(null));
+
+        // a die that is not there does not make a hole in the pool - Pool.Add drops it, which is
+        // how an untrained attempt arrives as two dice instead of three
+        [Fact]
+        public void ADieThatIsNotThere_ShrinksThePool()
+        {
+            var pool = Core.Resolution.Pool.Of(
+                ("attr.might.name", Die.D6), ("skill.none.name", Die.None), ("gear.axe.name", Die.D6));
+
+            Assert.Equal(2, new TrayResolution(pool).Size);
+        }
+
+        [Fact]
+        public void TheWrongNumberOfFaces_IsRefused() =>
+            Assert.Throws<ArgumentException>(() => Throw(Die.D6, Die.D6, Die.D6, 1, 2));
 
         [Fact]
         public void AFaceThatIsNotOnTheDie_IsRefused() =>
             Assert.Throws<ArgumentOutOfRangeException>(() => Throw(Die.D6, Die.D8, Die.D12, 7, 3, 3));
+
+        // ---- the impact die, read off the felt ----
+
+        // B4 spends this: a check that fails costs the hero what the Impact die is SHOWING, not
+        // what a second hidden roll of it would have said
+        [Fact]
+        public void ImpactValue_IsTheFaceOnTheDieTheRulesLeftOver()
+        {
+            TrayThrow thrown = Throw(Die.D8, Die.D6, Die.D6, 4, 4, 3);
+
+            Assert.False(thrown.ImpactValue == 0);
+            Assert.Equal(3, thrown.ImpactValue);
+
+            // and it is the die that is actually lying there, not a number from anywhere else
+            int impact = -1;
+
+            for (int i = 0; i < thrown.Roles.Count; i++)
+                if (thrown.Roles[i] == DieRole.Impact) impact = thrown.Slots[i].Value;
+
+            Assert.Equal(impact, thrown.ImpactValue);
+        }
+
+        // a pool where every die counted has no leftover, so there is nothing showing
+        [Fact]
+        public void ImpactValue_IsNothingWhenNothingWasLeftOver()
+        {
+            var two = Core.Resolution.Pool.Of(("attr.might.name", Die.D6), ("gear.axe.name", Die.D6));
+
+            TrayThrow thrown = new TrayResolution(two).Resolve(new[] { 3, 4 });
+
+            Assert.True(thrown.ImpactIsFallback);
+            Assert.Equal(0, thrown.ImpactValue);
+        }
 
         // ---- throw order is kept ----
 

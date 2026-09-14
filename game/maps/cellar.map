@@ -1,24 +1,37 @@
 ; The Cellar - the map the board loads, and the whole of B2's point: THIS FILE IS THE MAP.
 ; Move a wall, resize the room, turn a floor into rubble, save, run. No code, no .tscn, no editor.
 ;
-; One character per square. Lines starting with ';' are notes; blank lines are ignored. Every row
-; has to be the same length, and the rows read top to bottom as FAR SIDE OF THE TABLE first - so
-; the picture below is what you see from your seat.
+; DOUBLE RESOLUTION (EDGE_WALLS.md). The walls are drawn ON THE LINES between squares, because that
+; is where a wall is on a wet-erase battle map - and the squares on BOTH sides of one are ordinary
+; floor you can stand on. So the picture below is twice the size of the grid it describes: squares
+; sit where a line and a column are both odd, and everything else is the lines between them.
 ;
-; The legend, which MapReader.Glyphs states properly and an unknown character will print at you:
+;   .  floor                        |  wall, up a line between two columns
+;   ~  difficult ground, costs 2    -  wall, along a line between two rows
+;   #  rock - not part of the map   x  door, shut (which way it faces comes from where it is)
+;   @  where the hero starts        +  a corner. drawn for the eye, parsed for nothing
 ;
-;   .  floor          #  wall          +  door, shut          ~  difficult ground
-;   @  where the hero starts (the square under it is floor)
+; MapReader.Legend states that properly and a glyph in the wrong kind of position prints it at you,
+; with the line and column - which is the mistake this format makes likely and the one it catches.
 ;
-; What is drawn here, and why each part is here:
+; Two rules worth knowing before you edit:
+;   - a SPACE is a real glyph on a line position: it means "no wall there".
+;   - the first line sets the width, so keep a '+' at every corner including the ends of the top
+;     and bottom lines. Short lines are padded with open; long ones are refused by name.
 ;
-;   the block in the middle    something to walk AROUND. click the far side of it and watch the
-;                              route go the long way rather than through
-;   the closet inside it       sealed by a shut door, so clicking into it is refused - there is no
-;                              way there and the piece says so. B4 opens that door on a check
-;   the rubble on the right    difficult ground, double cost. a route crosses it when that is
-;                              genuinely shorter and goes round when it is not
-;   the corridor on the left   the long way round, one square wide
+; The rows read top to bottom as FAR SIDE OF THE TABLE first, so this is what you see from your
+; seat. What is drawn, and why each part is here:
+;
+;   the hall, west          the whole left half, one open room, with a rock outcrop to walk AROUND
+;   the wall down the middle  a THIN wall on one line: you can stand against it on either side,
+;                           which is the entire reason this format exists
+;   the door in it          shut, so the east half is unreachable until it is forced. B4 throws
+;                           the hero's own pool at it; a pass opens it cleanly, a fail gets you
+;                           through anyway and leaves the wreckage behind
+;   the spill in the hall   difficult ground, double cost - a route crosses it when that is
+;                           genuinely shorter and goes round when it is not
+;   the two east chambers   split by a wall with a gap at the far end, so the way between them is
+;                           the long way round
 ;
 ; Phase P moves maps like this inside a campaign package (ARCHITECTURE.md 4). Until then it lives
 ; beside the game and the loader reads exactly one of them, named on the Board node.
@@ -26,11 +39,20 @@
 ; NOTE FOR THE FIRST EXPORT: this is not a Godot resource, so an export preset has to list
 ; maps/*.map under "filters to export non-resource files" or it will not travel into the .pck.
 
-##########
-#........#
-#.####...#
-#.#..#.~~#
-#.#..#.~~#
-#.#+##...#
-#...@....#
-##########
++-+-+-+-+-+-+-+-+-+-+
+|. . . . . .|. . . .|
++ + + + + + + + + + +
+|. . . . . .|. . . .|
++ + + + + + + + + + +
+|. . # # . .|. . . .|
++ + + + + + + + + + +
+|. . # . . .x. . . .|
++ + + + + + + + + + +
+|. . . . . .|. . . .|
++ + + + + + +-+-+-+ +
+|. . . ~ . .|. . . .|
++ + + + + + + + + + +
+|. . @ . ~ .|. ~ ~ .|
++ + + + + + + + + + +
+|. . . . . .|. . ~ .|
++-+-+-+-+-+-+-+-+-+-+

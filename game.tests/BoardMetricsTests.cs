@@ -117,6 +117,63 @@ namespace Game.Tests
             Assert.Equal(0.15f, alongY.Z, 4);
         }
 
+        // ---- where the lines are (EDGE_WALLS.md) ----
+
+        // a wall is drawn ON the line between two squares, so the board has to be able to say
+        // where a line is - and it is exactly half a square from the middle of either square
+        [Fact]
+        public void ALineIsHalfwayBetweenTheSquaresItSeparates()
+        {
+            BoardMetrics b = Board(8, 8);
+
+            var west = new Cell(3, 4);
+            var east = new Cell(4, 4);
+
+            Vector3 between = b.Centre(Border.Between(west, east, out Border line) ? line : default);
+
+            Assert.Equal((b.Centre(west).X + b.Centre(east).X) * 0.5f, between.X, 5);
+            Assert.Equal(b.Centre(west).Z, between.Z, 5);
+        }
+
+        [Fact]
+        public void ALineAlongARowIsHalfASquareNorthOfIt()
+        {
+            BoardMetrics b = Board(8, 8);
+
+            Vector3 centre = b.Centre(new Cell(2, 5));
+            Vector3 north = b.Centre(Border.North(new Cell(2, 5)));
+
+            Assert.Equal(centre.X, north.X, 5);
+            Assert.Equal(centre.Z - b.CellSize * 0.5f, north.Z, 5);
+        }
+
+        // the lines round the outside of the map are named by a square one past the last, which
+        // does not exist - and they still have to land somewhere, because that is where the room's
+        // own walls are drawn
+        [Fact]
+        public void TheLinesRoundTheOutsideOfTheMapHaveAPlace()
+        {
+            BoardMetrics b = Board(8, 8);
+
+            Assert.Equal(-b.HalfWidth, b.Centre(Border.West(new Cell(0, 0))).X, 5);
+            Assert.Equal(b.HalfWidth, b.Centre(Border.East(new Cell(7, 0))).X, 5);
+            Assert.Equal(-b.HalfDepth, b.Centre(Border.North(new Cell(0, 0))).Z, 5);
+            Assert.Equal(b.HalfDepth, b.Centre(Border.South(new Cell(0, 7))).Z, 5);
+        }
+
+        // and they are on the mat, not above or below it - a wall stands on the board
+        [Fact]
+        public void EveryLineIsOnTheSurface()
+        {
+            BoardMetrics b = Board(8, 8);
+
+            foreach (Cell cell in new Grid<object>(b.Columns, b.Rows).Cells)
+            {
+                Assert.Equal(0f, b.Centre(Border.West(cell)).Y, 6);
+                Assert.Equal(0f, b.Centre(Border.North(cell)).Y, 6);
+            }
+        }
+
         // ---- and back again ----
 
         [Fact]

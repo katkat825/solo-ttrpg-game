@@ -1,0 +1,13 @@
+[gd_scene load_steps=2 format=3]
+
+; The map check, on its own scene like the locale audit. It reads every res://maps/*.map through
+; the same MapReader the board uses and fails naming any that don't parse - a shipped map that only
+; breaks at load is otherwise silent, because Board.Load falls back to an empty room and carries on.
+;
+; Like the locale audit and unlike the fairness sweep, this needs no real tray: it measures the map
+; files, which are the same wherever they are read from. Run it with check-maps.ps1.
+
+[ext_resource type="Script" path="res://Diagnostics/MapCheck.cs" id="1_check"]
+
+[node name="MapCheck" type="Node"]
+script = ExtResource("1_check")

@@ -83,5 +83,116 @@ namespace Core.Tests
             Assert.Equal(6, foes.Count(f => f.Tier == Tier.Rabble));
             Assert.Equal(1, foes.Count(f => f.Tier == Tier.Rival));
         }
+
+        // ---- the rule "Rabble die to any hit", stated once (COMBAT_LOOP.md C2, SEAMS.md 5) ----
+
+        [Fact]
+        public void ZeroDamage_DoesNotRemoveARabble()
+        {
+            var mook = Fixtures.Mook();
+
+            // this killed one until Phase C. a miss reports Damage 0, so the engine applying an
+            // outcome was one guard away from clearing the board with a whiff
+            mook.Damage(0);
+
+            Assert.False(mook.IsDown);
+        }
+
+        [Fact]
+        public void AMissOnARabble_LeavesItStanding()
+        {
+            var hero = Fixtures.Hero();
+            var mook = Fixtures.Mook();   // defense 7
+            var engine = Engine(new ScriptedRng(1, 1, 1));
+
+            var o = engine.Attack(hero, mook, Attr.Might, Skill.Blades);
+            engine.Apply(o);
+
+            Assert.False(o.Hit);
+            Assert.False(mook.IsDown);
+        }
+
+        [Fact]
+        public void AHitOnARabble_ReportsEnoughToRemoveIt_AndDoes()
+        {
+            var hero = Fixtures.Hero();
+            var mook = Fixtures.Mook();
+            var engine = Engine(new ScriptedRng(6, 6, 6));
+
+            var o = engine.Attack(hero, mook, Attr.Might, Skill.Blades);
+            engine.Apply(o);
+
+            Assert.True(o.Hit);
+            Assert.Equal(mook.MaxVigor, o.Damage);
+            Assert.True(mook.IsDown);
+        }
+
+        // ---- a swing resolved off dice that were already thrown (COMBAT_LOOP.md C0) ----
+
+        [Fact]
+        public void Resolve_TakesTheDamageOffTheFelt_RatherThanRollingAgain()
+        {
+            var hero = Fixtures.Hero();
+            var rival = Fixtures.Rival();       // defense 11
+
+            // the tray threw this: 6 + 6 counted, the leftover d6 showing 5 is the Impact die
+            var roll = Thrown(rival.Defense + 1, Die.D6);
+            var engine = Engine(new ScriptedRng(1));   // any roll here would be a hidden one
+
+            var o = engine.Resolve(hero, rival, roll, impact: 5);
+            engine.Apply(o);
+
+            Assert.True(o.Hit);
+            Assert.Equal(5, o.Damage);
+            Assert.Equal(rival.MaxVigor - 5, rival.Vigor);
+        }
+
+        [Fact]
+        public void Resolve_ShortOfDefense_IsAMissAndCostsNothing()
+        {
+            var hero = Fixtures.Hero();
+            var rival = Fixtures.Rival();
+
+            var o = Engine(new ScriptedRng(1)).Resolve(hero, rival, Thrown(rival.Defense - 1, Die.D6), impact: 6);
+
+            Assert.False(o.Hit);
+            Assert.Equal(0, o.Damage);
+        }
+
+        [Fact]
+        public void Resolve_OnARabble_IgnoresTheImpactDie()
+        {
+            var hero = Fixtures.Hero();
+            var mook = Fixtures.Mook();
+
+            var o = Engine(new ScriptedRng(1)).Resolve(hero, mook, Thrown(mook.Defense, Die.D12), impact: 11);
+
+            Assert.True(o.Hit);
+            Assert.Equal(mook.MaxVigor, o.Damage);
+        }
+
+        // the felt and the sim reach the same verdict about the same numbers
+        [Fact]
+        public void Resolve_AndAttack_AgreeOnTheSameThrow()
+        {
+            var hero = Fixtures.Hero();
+
+            // 4, 4, 4 with the impact die then rolling 3 - no explosion, one call each
+            var thrown = Engine(new ScriptedRng(4, 4, 4, 3)).Attack(hero, Fixtures.Rival(), Attr.Might, Skill.Blades);
+            var offTheFelt = Engine(new ScriptedRng(1)).Resolve(hero, Fixtures.Rival(), thrown.Roll, impact: 3);
+
+            Assert.Equal(thrown.Hit, offTheFelt.Hit);
+            Assert.Equal(thrown.Damage, offTheFelt.Damage);
+        }
+
+        // a pool result standing in for one the tray produced: a total, and a leftover die
+        static PoolResult Thrown(int total, Die impact) => new PoolResult(
+            new[]
+            {
+                new RolledDie(Attr.Might.Key(), Die.D8, total - 1, true),
+                new RolledDie(Skill.Blades.Key(), Die.D6, 1, true),
+            },
+            total, impact, ones: 0);
+
     }
 }

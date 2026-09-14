@@ -25,6 +25,18 @@ namespace Core.Characters
             Condition.Shaken => Attr.Heart,
             _ => Attr.Might
         };
+
+        // AND THE SAME MAPPING READ THE OTHER WAY - which Condition presses on this attribute.
+        // C4's Trouble needs it: over-committing with Might leaves you Winded, and the pairing
+        // must not be written down twice for the two directions to disagree over. DERIVED, so
+        // adding a fifth Condition needs no edit here (the EngineKeys rule, applied to a lookup)
+        public static Condition Pressing(this Attr a)
+        {
+            foreach (Condition c in System.Enum.GetValues<Condition>())
+                if (c.Affects() == a) return c;
+
+            return Condition.Winded;
+        }
     }
 
     public enum Tier

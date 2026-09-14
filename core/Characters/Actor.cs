@@ -52,8 +52,50 @@ namespace Core.Characters
         // by far the strongest balance lever - tune encounters here, not with Vigor
         public int Defense { get; set; }
 
-        public int Nerve { get; set; }
+        // CORE_RULES.md section 7. Read by Encounter, which is what makes it mean something -
+        // it was set and never read anywhere in the repo until Phase C (SEAMS.md section 3)
+        public int Nerve { get; private set; }
+
+        // five, and a Rabble has none at all. Settable because a campaign's hero may not be an
+        // ordinary one, and defaulted from the tier so nothing has to say it twice
+        public int NerveCap { get; set; }
+
+        // one act of heroic effort. false when there is none to spend, which is the caller's
+        // answer to "can I" as well as "do it" - there is no separate question worth asking
+        public bool SpendNerve(int amount = 1)
+        {
+            if (amount <= 0 || Nerve < amount) return false;
+
+            Nerve -= amount;
+            return true;
+        }
+
+        // and taking a complication to bank one. Returns how much actually landed, which is 0 at
+        // the cap - a player at five who accepts a Trouble for nothing has been robbed, so the
+        // caller is told and can offer the shrug instead
+        public int GainNerve(int amount = 1)
+        {
+            if (amount <= 0) return 0;
+
+            int room = Math.Max(0, NerveCap - Nerve);
+            int landed = Math.Min(room, amount);
+
+            Nerve += landed;
+            return landed;
+        }
+
+        // for a rest, and for a check that wants a known starting state (CORE_RULES.md section 11)
+        public void RestoreNerve(int to) => Nerve = Math.Clamp(to, 0, NerveCap);
+
+        // how many actions this actor gets in a round. defaulted from the tier and settable,
+        // because a campaign's boss may not be an ordinary Dread. the HERO's count is not here:
+        // it is CombatOptions.HeroActionsPerRound, the balance lever SIMULATION.md section 2
+        // measured, and Encounter reads that for the hero and this for everyone else
         public int ActionsPerRound { get; set; }
+
+        // one reaction for a Dread, none for anything else. named here so C3's minimal reaction
+        // and C6's boss read the same number
+        public int ReactionsPerRound { get; set; }
 
         public IReadOnlyList<Condition> Conditions => _conditions;
 
@@ -86,8 +128,10 @@ namespace Core.Characters
             MaxVigor = maxVigor;
             Vigor = maxVigor;
             Defense = defense;
-            Nerve = tier == Tier.Rabble ? 0 : 3;
-            ActionsPerRound = tier == Tier.Dread ? 2 : 1;
+            NerveCap = tier.NerveCap();
+            Nerve = tier.StartingNerve();
+            ActionsPerRound = tier.ActionsPerRound();
+            ReactionsPerRound = tier.ReactionsPerRound();
         }
 
         // ---- construction ----
@@ -113,7 +157,80 @@ namespace Core.Characters
         {
             WeaponId = weaponId;
             Weapon = d;
+            BaseWeapon = d;
             return this;
+        }
+
+        // ---- gear takes Conditions too (CORE_RULES.md section 9) ----
+
+        // what the weapon was before anything happened to it, so a repair has something to go back
+        // to and the tray can be asked how far it has fallen
+        public Die BaseWeapon { get; private set; } = Die.None;
+
+        public int Notches { get; private set; }
+
+        // A NOTCHED BLADE DROPS ITS GEAR DIE. The engine's answer to a Trouble (Core.Combat.Trouble)
+        // and the same mechanic as every other consequence in this game: the dice are the stats, so
+        // the cost of something going wrong is a smaller die, and the player sees it on the next
+        // throw rather than reading it anywhere.
+        //
+        // False at the d4 floor and false with nothing in hand, which is what makes the caller
+        // look for somewhere else to put the consequence rather than quietly dropping it
+        public bool NotchGear()
+        {
+            if (!Weapon.IsReal()) return false;
+
+            Die was = Weapon;
+            Weapon = Weapon.StepDown();
+
+            if (Weapon == was) return false;
+
+            Notches++;
+            return true;
+        }
+
+        // a rest, an armourer, a campaign's own repair - none of which exist yet, and all of which
+        // want the same one line
+        public void MendGear()
+        {
+            Weapon = BaseWeapon;
+            Notches = 0;
+        }
+
+        // ---- strain, the cost of channelling (CORE_RULES.md section 10) ----
+
+        // ONE SOURCE, STACKING. Channelling steps the Heart die down until you rest, and the
+        // pipeline F3 built is what makes that work without a special case: the steps sum and the
+        // die moves once, the ladder clamps and remembers the overflow, and a rest takes off
+        // exactly what channelling put on (`RemoveAllFrom`) without disturbing a Condition or a
+        // cursed ring sitting on the same attribute.
+        //
+        // NOT A CONDITION, deliberately. A strained Heart at the d4 floor does not drop you -
+        // "gear alone cannot do this... it is a Condition landing on a die with no room that
+        // finishes you" (CORE_RULES.md section 9) - but it leaves you with nothing to absorb one
+        // with, which is exactly the fragility to Shaken that section 10 promises
+        public static readonly ModifierSource StrainSource = ModifierSource.Effect("strain");
+
+        public int Strain { get; private set; }
+
+        public void AddStrain(int steps = 1)
+        {
+            for (int i = 0; i < steps; i++)
+            {
+                AddModifier(new TraitModifier(StrainSource, Attr.Heart, -1));
+                Strain++;
+            }
+        }
+
+        // a Breather or a Camp - CORE_RULES.md section 11, both of which clear it
+        public int MendStrain()
+        {
+            int was = Strain;
+
+            Strain = 0;
+            RemoveModifiers(StrainSource);
+
+            return was;
         }
 
         public Actor Numbered(int ordinal)
@@ -183,9 +300,17 @@ namespace Core.Characters
         // crossing 2/3 and 1/3 of max vigor applies Winded then Reeling
         // returns what was newly applied, so callers can report it
         // without the Actor knowing anything about observers
+        //
+        // NOTHING HAPPENED IS NOTHING HAPPENING. this took no amount at all and zeroed a Rabble's
+        // vigor regardless, so Actor.Damage(0) - a miss, a resisted blow, a Trouble that cost
+        // nothing - removed one from the board. that is the disagreement SEAMS.md section 5
+        // recorded between this method and CombatEngine.Attack, and the guard is half the fix;
+        // the other half is that both now ask Tier.HasHealthTrack rather than each naming Rabble
         public IReadOnlyList<Condition> Damage(int amount)
         {
-            if (Tier == Tier.Rabble)
+            if (amount <= 0) return Array.Empty<Condition>();
+
+            if (!Tier.HasHealthTrack())
             {
                 Vigor = 0;
                 return Array.Empty<Condition>();

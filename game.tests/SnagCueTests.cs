@@ -19,7 +19,10 @@ namespace Game.Tests
         static readonly Die[] Starting = { Die.D8, Die.D6, Die.D6 };
 
         static TrayThrow Throw(params int[] values) =>
-            new TrayResolution(Starting).Resolve(values);
+            new TrayResolution(Pool.Of(
+                ("attr.might.name", Starting[0]),
+                ("skill.blades.name", Starting[1]),
+                ("gear.axe.name", Starting[2]))).Resolve(values);
 
         static SnagCue Cue(int seed = 4242) => new SnagCue(Starting, new SeededRng(seed));
 
@@ -113,5 +116,37 @@ namespace Game.Tests
 
             Assert.Equal(Session().ToList(), Session().ToList());
         }
+
+        // ---- a rebuild is not a change of shapes (Phase C) ----
+
+        // the tray rebuilds its pool on every throw a fight asks for, so the tally has to survive
+        // a Reset that changed nothing. it did not, and the running count read "0 of 1 throws"
+        // after every swing - a measurement of the last throw and of nothing else
+        [Fact]
+        public void ResettingToTheSameShapes_KeepsTheCount()
+        {
+            SnagCue cue = Cue();
+
+            cue.Watch(Throw(1, 4, 3));
+            cue.Watch(Throw(2, 4, 3));
+            cue.Reset(new[] { Die.D8, Die.D6, Die.D6 });
+
+            Assert.Equal(2, cue.Throws);
+            Assert.Equal(1, cue.Snags);
+        }
+
+        [Fact]
+        public void ResettingToDifferentShapes_StartsTheCountAgain()
+        {
+            SnagCue cue = Cue();
+
+            cue.Watch(Throw(1, 4, 3));
+            cue.Reset(new[] { Die.D12, Die.D12, Die.D12 });
+
+            Assert.Equal(0, cue.Throws);
+            Assert.Equal(0, cue.Snags);
+            Assert.Null(cue.LastKey);
+        }
+
     }
 }

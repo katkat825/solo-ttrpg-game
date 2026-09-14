@@ -82,6 +82,18 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.24, 0.19)
 [node name="ThrowPoint3" type="Marker3D" parent="ThrowPoints" unique_id=1357251618]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.2, 0.22, 0.15)
 
+; A FOURTH THROW POINT AND A FOURTH DIE (COMBAT_LOOP.md C4). Pool size 3 was assumed in five
+; places plus this scene (SEAMS.md section 8); the code stopped assuming it in C2 and this is the
+; scene catching up. A Nerve adds the Heart die to a pool that does not use it (CORE_RULES.md
+; section 7), which makes a genuine fourth solid on the felt - and DiceTray sits it out again for
+; every pool that does not want it, so nothing changes for an ordinary three-die swing.
+;
+; Behind the other three and off to the near side, so the four launch as a spread rather than a
+; line: dice that leave the hand on the same arc land on top of each other, which is where most
+; cocked landings came from (M2).
+[node name="ThrowPoint4" type="Marker3D" parent="ThrowPoints" unique_id=1357251619]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.1, 0.26, 0.1)
+
 [node name="Dice" type="Node3D" parent="." unique_id=1459590901]
 
 [node name="Die1" parent="Dice" unique_id=115038676 instance=ExtResource("2_die")]
@@ -93,3 +105,8 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.24, 0.19)
 
 [node name="Die3" parent="Dice" unique_id=2123804337 instance=ExtResource("2_die")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.2, 0.22, 0.15)
+
+; the Heart die's seat. A d6 like the other two, because that is what a starting hero's Heart is -
+; and like every other die here, the SIZE is whatever the pool that arrives says it is
+[node name="Die4" parent="Dice" unique_id=2123804338 instance=ExtResource("2_die")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.1, 0.26, 0.1)

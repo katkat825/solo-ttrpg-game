@@ -1,27 +1,35 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
-; One piece, as a placeholder - the mini equivalent of the d6 starting life as a BoxMesh.
+; ONE PIECE ON THE BOARD - and since B5 an actual miniature rather than a lump.
 ;
-; A wide, slightly flared base and a body that is heaviest low down, because B0 asks for a piece
-; that LOOKS WEIGHTED. That is the only thing this shape is trying to say: it is not a hero, it
-; is not a class, it is a lump on a square whose job is to prove that a piece on a board reads as
-; a piece on a board. B5 pulls a real figure out of KayKit Adventurers and puts the
-; painted-miniature shader on it, and everything below is thrown away then.
+; The figure is KayKit's Barbarian, culled out of the Adventurers pack by tools/pull-models.ps1,
+; its atlas recoloured to the game's fourteen colours by tools/bake-palette.ps1, and wearing the
+; painted-miniature shader. Which hero it is matters: the hardcoded hero the board throws checks
+; with is the Barbarian (Might, Blades, an axe), so the piece standing on the map is the character
+; the dice belong to.
 ;
-; About 70 mm tall standing on a 60 mm square, beside 50 mm dice - deliberately a set.
+; It stands on a BASE, because a miniature does - and because the base is what reads as "a piece on
+; a square" from across the table when the figure itself is 75 mm of dark paint. The base is the
+; same shader with no atlas behind it, which is what the shader's white default is for.
+;
+; Mini.cs sizes the figure and paints it at load rather than this scene baking a scale in: a model
+; swapped for another is then a one-line change here and no arithmetic anywhere.
 
 [ext_resource type="Script" path="res://Board/Mini.cs" id="1_mini"]
+[ext_resource type="PackedScene" path="res://models/heroes/Barbarian.glb" id="2_hero"]
+[ext_resource type="Material" path="res://models/heroes/barbarian_painted.tres" id="3_paint"]
+[ext_resource type="Shader" path="res://shaders/painted_miniature.gdshader" id="4_shader"]
 
-[sub_resource type="StandardMaterial3D" id="Mat_base"]
-albedo_color = Color(0.07, 0.07, 0.08, 1)
-roughness = 0.85
+; slate, nearly black - a based figure reads by its silhouette and the base must not compete with
+; it. no atlas set, so the shader samples its white default and the tint is the whole colour;
+; heavier brushwork than a model gets, because a base is the one part a painter does not fuss over
+[sub_resource type="ShaderMaterial" id="Mat_base"]
+shader = ExtResource("4_shader")
+shader_parameter/tint = Color(0.23, 0.22, 0.25, 1)
+shader_parameter/brush_strength = 0.14
+shader_parameter/varnish = 0.08
 
-[sub_resource type="StandardMaterial3D" id="Mat_body"]
-albedo_color = Color(0.44, 0.46, 0.52, 1)
-roughness = 0.6
-metallic = 0.15
-metallic_specular = 0.4
-
+; a slotta base, 42 mm across on a 60 mm square, flared the way a cast one is
 [sub_resource type="CylinderMesh" id="Mesh_base"]
 top_radius = 0.021
 bottom_radius = 0.024
@@ -29,24 +37,17 @@ height = 0.008
 radial_segments = 24
 rings = 1
 
-[sub_resource type="CapsuleMesh" id="Mesh_body"]
-radius = 0.013
-height = 0.062
-radial_segments = 20
-rings = 6
-
 [node name="Mini" type="Node3D"]
 script = ExtResource("1_mini")
+Paint = ExtResource("3_paint")
 
 [node name="Base" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.004, 0)
 mesh = SubResource("Mesh_base")
 material_override = SubResource("Mat_base")
 
-[node name="Body" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.039, 0)
-mesh = SubResource("Mesh_body")
-material_override = SubResource("Mat_body")
+[node name="Figure" parent="." instance=ExtResource("2_hero")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.008, 0)
 
 ; the set-down click. distance and width match the dice (unit_size, attenuation, panning) so a
 ; piece and a die placed side by side are heard at the same distance and the same width - see

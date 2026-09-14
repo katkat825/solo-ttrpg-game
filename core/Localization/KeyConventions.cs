@@ -77,6 +77,13 @@ namespace Core.Localization
 
         public static string GearName(string id) => Key(GearNs, id, "name");
 
+        // THE DIE NOBODY BROUGHT. A two-die pool counts both, so there is nothing left over and the
+        // Impact die is the d4 the rules hand you by default (CORE_RULES.md section 2) - "untrained
+        // and ungeared, you can succeed but you can't hit hard". At a table that d4 comes out of the
+        // box and gets thrown, so it lands on the felt with a name beside it like every other die,
+        // and the name is this. It belongs to no trait, which is why it is not an attr or a gear key
+        public static string DefaultImpactName => Key(CombatNs, "impact", "name");
+
         public static string Line(string speaker, string aspect, string situation, int index) =>
             Indexed(DialogueNs, speaker, aspect, situation, index);
 

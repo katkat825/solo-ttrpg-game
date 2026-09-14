@@ -34,21 +34,66 @@ namespace Core.Combat
 
         public CombatOptions Options => _options;
 
+        // who is watching, for Encounter - the player-driven path narrates through the same
+        // observer this engine was built with, so a fight has one audience however it is driven
+        public ICombatObserver Observer => _observer;
+
+        // the default behaviour a foe falls back to. Encounter lets one be attached per foe,
+        // which is what a Dread's phase change swaps (C6)
+        public ITargetSelector FoeTargeting => _foeTargeting;
+
+        public ITargetSelector HeroTargeting => _heroTargeting;
+
         // public so a single swing can be resolved outside a full encounter
+        //
+        // THE RESOLVER THROWS AND THE RESOLVER ROLLS THE IMPACT. right for the sim and for a fight
+        // nobody is watching. In front of a player the handful is already lying on the felt, so
+        // the game's path is Resolve below - one rule, two ways of learning what the dice said
         public AttackOutcome Attack(Actor attacker, Actor target, Attr attr, Skill skill)
         {
-            var roll = _resolver.Resolve(attacker.BuildPool(attr, skill));
+            PoolResult roll = _resolver.Resolve(attacker.BuildPool(attr, skill));
+
+            // the Impact die is rolled ONLY when something is going to be done with it. a miss and
+            // a Rabble both settle before it, exactly as they always have - moving that call moves
+            // every seeded number after it and SIMULATION.md's figures with them
+            if (!roll.Beats(target.Defense) || !target.Tier.HasHealthTrack())
+                return Resolve(attacker, target, roll, 0);
+
+            return Resolve(attacker, target, roll, _resolver.RollImpact(roll.Impact, _options.ImpactExplodes));
+        }
+
+        // THE SAME SWING, WHEN THE DICE HAVE ALREADY BEEN THROWN (COMBAT_LOOP.md C0).
+        //
+        // The board throws the hero's pool on the real tray and reads the answer off the felt, so
+        // by the time the rules are asked, both numbers exist: the PoolResult the resolver made of
+        // the faces, and the Impact die's value as it lies there with a ring round it. Rolling the
+        // Impact again here would be a hidden roll deciding how hard the hero hit something, and
+        // CORE_RULES.md pillar 1 says every roll is a visible handful hitting the table.
+        //
+        // Everything that makes a swing a swing is in this method and nowhere else - whether it
+        // beat Defense, and what happens to a Rabble - so the felt and the sim cannot come to
+        // different conclusions about the same numbers.
+        public AttackOutcome Resolve(Actor attacker, Actor target, PoolResult roll, int impact)
+        {
+            if (attacker == null) throw new ArgumentNullException(nameof(attacker));
+            if (target == null) throw new ArgumentNullException(nameof(target));
+            if (roll == null) throw new ArgumentNullException(nameof(roll));
 
             if (!roll.Beats(target.Defense))
                 return new AttackOutcome(attacker, target, roll, false, 0);
 
-            // Rabble have no health track - any hit removes them
-            if (target.Tier == Tier.Rabble)
-                return new AttackOutcome(attacker, target, roll, true, target.MaxVigor);
+            // no health track, so the number is not a measurement of anything - it is however much
+            // is left, because a hit removes one (CORE_RULES.md section 8, Tier.HasHealthTrack)
+            if (!target.Tier.HasHealthTrack())
+                return new AttackOutcome(attacker, target, roll, true, target.Vigor);
 
-            int damage = _resolver.RollImpact(roll.Impact, _options.ImpactExplodes);
-            return new AttackOutcome(attacker, target, roll, true, damage);
+            return new AttackOutcome(attacker, target, roll, true, impact);
         }
+
+        // WHO GOES FIRST. The rules' own throw, for anybody whose dice are not on the felt -
+        // which is everybody but the hero (Initiative.cs). Here rather than on Encounter because
+        // the resolver is this object's and stays this object's
+        public int RollInitiative(Actor actor) => Initiative.Roll(_resolver, actor);
 
         public EncounterResult Run(Actor hero, IList<Actor> foes)
         {
@@ -85,7 +130,7 @@ namespace Core.Combat
                 if (target == null) return;
 
                 var outcome = Attack(hero, target, _options.HeroAttackAttr, _options.HeroAttackSkill);
-                ApplyAndReport(outcome, target);
+                Apply(outcome);
             }
         }
 
@@ -96,28 +141,37 @@ namespace Core.Combat
                 var target = _foeTargeting.Choose(foe, heroOnly);
                 if (target == null) return;
 
-                var skill = foe.Tier == Tier.Rabble ? Skill.None : Skill.Blades;
-                var outcome = Attack(foe, target, Attr.Might, skill);
-                ApplyAndReport(outcome, target);
+                // stated once, on the tier - the sim's auto-player and the fight on the table
+                // ask the same question and got the same answer written out separately until C2
+                var outcome = Attack(foe, target, foe.Tier.AttackAttr(), foe.Tier.AttackSkill());
+                Apply(outcome);
 
                 if (hero.IsDown) return;
             }
         }
 
-        void ApplyAndReport(AttackOutcome outcome, Actor target)
+        // what an outcome DOES, and the only place it is done. public since C0 because the
+        // player-driven path resolves a swing off the felt and then needs exactly this - the
+        // damage applied, the conditions it triggered narrated, and a downed actor announced,
+        // in that order. a second copy of this in game/ would be the fight and the sim applying
+        // the same outcome two different ways
+        public void Apply(AttackOutcome outcome)
         {
-            if (outcome.Hit)
-            {
-                var applied = target.Damage(outcome.Damage);
-                _observer.AttackResolved(outcome);
+            if (outcome == null) throw new ArgumentNullException(nameof(outcome));
 
-                foreach (var c in applied) _observer.ConditionApplied(target, c);
-                if (target.IsDown) _observer.ActorDowned(target);
-            }
-            else
+            Actor target = outcome.Target;
+
+            if (!outcome.Hit)
             {
                 _observer.AttackResolved(outcome);
+                return;
             }
+
+            IReadOnlyList<Condition> applied = target.Damage(outcome.Damage);
+            _observer.AttackResolved(outcome);
+
+            foreach (Condition c in applied) _observer.ConditionApplied(target, c);
+            if (target.IsDown) _observer.ActorDowned(target);
         }
     }
 }

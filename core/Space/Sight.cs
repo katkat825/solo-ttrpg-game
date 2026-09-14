@@ -9,24 +9,29 @@ namespace Core.Space
     // against cases drawn on paper, rather than one of them being written in a hurry inside
     // COMBAT_LOOP.md with a fight on top of it.
     //
+    // SINCE EDGE_WALLS.md IT IS THE LINES THAT STOP IT. The walk steps from square to square and
+    // each step CROSSES a line; a wall or a shut door on that line blocks the view. A square can
+    // still stop it too - solid rock is opaque - but a thin wall between two floor squares is a
+    // line, and it always was at a table.
+    //
     // TWO PROPERTIES, AND THEY ARE THE WHOLE SPECIFICATION:
     //
     //   SYMMETRY. If A can see B then B can see A. A line of sight that disagrees with itself is
     //   the bug players report as "it shot me through a wall", and it is the reason this traces one
     //   segment between two centres rather than casting a ray outward from an eye: the segment is
-    //   the same segment whichever end it is drawn from. A test walks every pair on a map and holds
-    //   it to this.
+    //   the same segment whichever end it is drawn from, and a line between two squares is the same
+    //   line from both. A test walks every pair on a map and holds it to this.
     //
-    //   NEITHER END BLOCKS. You can see the wall you are standing next to, and you can see out of a
-    //   doorway you are standing in. Only what is BETWEEN can stop a line, which also makes "is
-    //   that wall visible from here" a question with an answer.
+    //   NEITHER END BLOCKS. You can see the rock you are standing against, and out of the square
+    //   you are in. Only what is BETWEEN can stop a line, which also makes "is that pillar visible
+    //   from here" a question with an answer. The LINES are not exempt: a wall between you and the
+    //   next square blocks the view into it, even though the square itself is see-through.
     //
-    // The corner rule is the one judgement call. Where the line crosses exactly through the point
-    // where four squares meet, it touches two of them, and the line is stopped only if BOTH are
-    // opaque. That matches the movement rule - Route will not cut a corner where two walls touch -
-    // so a piece cannot see through a gap it cannot walk through, and can see through the diagonal
-    // slot between two walls that only touch at one corner. Getting these two rules to agree is
-    // worth more than either answer is on its own.
+    // The corner rule is the one judgement call, and it is `Route`'s: where the line passes exactly
+    // through the point four squares meet, it goes through if EITHER way round the corner is clear
+    // the whole way. That is the same rule a piece walks by, so a piece can never see through a gap
+    // it could not walk through, and can see down the diagonal slot between two walls that only
+    // touch at a corner. Getting these two to agree is worth more than either answer on its own.
     public static class Sight
     {
         public static bool Clear(MapLayout map, Cell from, Cell to)
@@ -57,15 +62,21 @@ namespace Core.Space
 
             while (across < nx || along < ny)
             {
+                var here = new Cell(x, y);
                 long decision = (long)(1 + 2 * across) * ny - (long)(1 + 2 * along) * nx;
 
                 if (decision == 0)
                 {
-                    // straight through the point where four squares meet. the line touches both of
-                    // the two it passes between, and is stopped only if they are both opaque
-                    if (!map.IsTransparent(new Cell(x + sx, y)) &&
-                        !map.IsTransparent(new Cell(x, y + sy)))
-                        return false;
+                    // straight through the point where four squares meet. it goes through if either
+                    // way round is clear - Route's rule, in sight's terms
+                    var corner = new Cell(x + sx, y + sy);
+                    var sideways = new Cell(x + sx, y);
+                    var forward = new Cell(x, y + sy);
+
+                    bool round = (Steps(map, here, sideways, to) && Steps(map, sideways, corner, to))
+                              || (Steps(map, here, forward, to) && Steps(map, forward, corner, to));
+
+                    if (!round) return false;
 
                     x += sx;
                     y += sy;
@@ -74,23 +85,28 @@ namespace Core.Space
                 }
                 else if (decision < 0)
                 {
+                    if (!Steps(map, here, new Cell(x + sx, y), to)) return false;
+
                     x += sx;
                     across++;
                 }
                 else
                 {
+                    if (!Steps(map, here, new Cell(x, y + sy), to)) return false;
+
                     y += sy;
                     along++;
                 }
 
-                var here = new Cell(x, y);
-
-                if (here == to) break;
-
-                if (!map.IsTransparent(here)) return false;
+                if (new Cell(x, y) == to) break;
             }
 
             return true;
         }
+
+        // one square to the next: nothing on the line between them, and the square arrived at is
+        // see-through - unless it is the far end of the whole line, which never blocks
+        static bool Steps(MapLayout map, Cell from, Cell to, Cell target) =>
+            map.CanSee(from, to) && (to == target || map.IsTransparent(to));
     }
 }

@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3]
+
+; The hero, painted. A second material rather than a second shader: the adventurers pack has its
+; own atlas, and the paint is the same paint.
+
+[ext_resource type="Shader" path="res://shaders/painted_miniature.gdshader" id="1_paint"]
+[ext_resource type="Texture2D" path="res://models/heroes/barbarian_texture.png" id="2_atlas"]
+
+[resource]
+shader = ExtResource("1_paint")
+shader_parameter/atlas = ExtResource("2_atlas")

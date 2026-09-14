@@ -1,0 +1,63 @@
+[gd_scene load_steps=6 format=3]
+
+; THE CHAPTER BOSS, AS A PROXY - see rival.tscn for why the foes are pawns rather than models.
+;
+; It is TALLER AND HEAVIER THAN ANYTHING ELSE ON THE BOARD, because that is the only thing a
+; player needs to read about it at a glance: a Dread is the piece you do not walk up to casually.
+; CORE_RULES.md section 8 gives it two actions, a reaction and a phase change at half Vigor, none
+; of which is visible from across the table - what is visible is that it is bigger.
+;
+; A bigger base as well, 50 mm against the hero's 42 and a Rabble's 32, so a room reads as three
+; sizes of threat before anybody counts anything.
+
+[ext_resource type="Script" path="res://Board/Mini.cs" id="1_mini"]
+[ext_resource type="Shader" path="res://shaders/painted_miniature.gdshader" id="2_shader"]
+
+; near-black with a cold cast, and the least brushwork of anything on the board - a Rabble is
+; sketched, a Rival is painted, this is lacquered
+[sub_resource type="ShaderMaterial" id="Mat_dread"]
+shader = ExtResource("2_shader")
+shader_parameter/tint = Color(0.14, 0.13, 0.18, 1)
+shader_parameter/brush_strength = 0.10
+shader_parameter/varnish = 0.30
+
+[sub_resource type="ShaderMaterial" id="Mat_base"]
+shader = ExtResource("2_shader")
+shader_parameter/tint = Color(0.23, 0.22, 0.25, 1)
+shader_parameter/brush_strength = 0.14
+shader_parameter/varnish = 0.08
+
+[sub_resource type="CylinderMesh" id="Mesh_base"]
+top_radius = 0.025
+bottom_radius = 0.028
+height = 0.009
+radial_segments = 28
+rings = 1
+
+; broader at the shoulder than the hero is tall is wide - a slab rather than a post
+[sub_resource type="CylinderMesh" id="Mesh_pawn"]
+top_radius = 0.013
+bottom_radius = 0.019
+height = 0.1
+radial_segments = 14
+rings = 2
+
+[node name="Dread" type="Node3D"]
+script = ExtResource("1_mini")
+FigureHeight = 0.1
+Paint = SubResource("Mat_dread")
+
+[node name="Base" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.0045, 0)
+mesh = SubResource("Mesh_base")
+material_override = SubResource("Mat_base")
+
+[node name="Figure" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.009, 0)
+mesh = SubResource("Mesh_pawn")
+
+[node name="Voice" type="AudioStreamPlayer3D" parent="."]
+unit_size = 0.9
+max_db = 4.0
+attenuation_model = 0
+panning_strength = 1.2

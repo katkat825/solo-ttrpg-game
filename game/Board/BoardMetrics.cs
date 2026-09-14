@@ -57,6 +57,16 @@ namespace Game.Board
             0f,
             (cell.Y + 0.5f) * CellSize - HalfDepth);
 
+        // the middle of a LINE between two squares - half a square west of the square it is named
+        // for, or half a square north of it.
+        //
+        // Centre(Cell) is arithmetic rather than a lookup, which is what makes this work for the
+        // lines along the map's outer boundary: their square is one past the last column or row and
+        // does not exist, and the line still has a place on the table (EDGE_WALLS.md)
+        public Vector3 Centre(Border border) => Centre(border.Cell) - (border.Vertical
+            ? new Vector3(CellSize * 0.5f, 0f, 0f)
+            : new Vector3(0f, 0f, CellSize * 0.5f));
+
         // which square a point on the mat falls in. HEIGHT IS IGNORED: a click arrives as a ray
         // that has already been met with the surface, and a piece being lifted is still over the
         // square it left

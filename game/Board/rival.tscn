@@ -1,0 +1,70 @@
+[gd_scene load_steps=6 format=3]
+
+; A RIVAL, AS A PROXY. The one hero model the project owns is the Barbarian (KayKit Adventurers,
+; pulled and palette-baked in B5); there is no monster pack in the tree yet, so the foes are
+; PAWNS - the tapered blanks anybody reaches for at a real table when the right miniature is in
+; somebody else's box. That is a truthful placeholder rather than a lazy one: a proxy on a base is
+; what a table looks like mid-campaign, and it reads instantly at the camera's 60 degrees because
+; it is told apart by silhouette and colour rather than by detail.
+;
+; Swapping in a real model is one line - point Figure at a .glb the way mini.tscn does - and
+; Mini.cs sizes and paints whatever is there, so no arithmetic anywhere changes. Phase P has a
+; campaign naming its own models, and this scene is what it replaces.
+;
+; A RIVAL IS THE TALL ONE. Same height as the hero, so a fight reads as two people; the Rabble
+; (rabble.tscn) are shorter and paler, which is the whole of the tiering at a glance.
+
+[ext_resource type="Script" path="res://Board/Mini.cs" id="1_mini"]
+[ext_resource type="Shader" path="res://shaders/painted_miniature.gdshader" id="2_shader"]
+
+; oxblood, dark enough to hold its silhouette against the parchment mat
+[sub_resource type="ShaderMaterial" id="Mat_rival"]
+shader = ExtResource("2_shader")
+shader_parameter/tint = Color(0.44, 0.15, 0.16, 1)
+shader_parameter/brush_strength = 0.18
+shader_parameter/varnish = 0.12
+
+; slate, the same base every piece in the game stands on - see mini.tscn
+[sub_resource type="ShaderMaterial" id="Mat_base"]
+shader = ExtResource("2_shader")
+shader_parameter/tint = Color(0.23, 0.22, 0.25, 1)
+shader_parameter/brush_strength = 0.14
+shader_parameter/varnish = 0.08
+
+[sub_resource type="CylinderMesh" id="Mesh_base"]
+top_radius = 0.021
+bottom_radius = 0.024
+height = 0.008
+radial_segments = 24
+rings = 1
+
+; the pawn itself. Mini.cs scales whatever is here to FigureHeight, so these numbers only set the
+; SHAPE - a tapered post, wider at the shoulder than at the foot
+[sub_resource type="CylinderMesh" id="Mesh_pawn"]
+top_radius = 0.008
+bottom_radius = 0.014
+height = 0.075
+radial_segments = 12
+rings = 2
+
+[node name="Rival" type="Node3D"]
+script = ExtResource("1_mini")
+FigureHeight = 0.075
+Paint = SubResource("Mat_rival")
+
+[node name="Base" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.004, 0)
+mesh = SubResource("Mesh_base")
+material_override = SubResource("Mat_base")
+
+[node name="Figure" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.008, 0)
+mesh = SubResource("Mesh_pawn")
+
+; the set-down click, matched to the hero's piece - see mini.tscn for why max_db sits above the
+; dice ceiling
+[node name="Voice" type="AudioStreamPlayer3D" parent="."]
+unit_size = 0.9
+max_db = 4.0
+attenuation_model = 0
+panning_strength = 1.2

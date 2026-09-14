@@ -209,5 +209,49 @@ namespace Core.Tests
             Assert.Equal(0, hero.Vigor);
             Assert.True(hero.IsDown);
         }
+
+        // ---- the point of the whole mechanic: the NEXT pool is smaller (COMBAT_LOOP.md C1) ----
+
+        // "getting hurt shrinks your dice and you SEE it" is only true if the die that reaches the
+        // table is the shrunken one. This is that sentence as a test: the pool is built from the
+        // pipeline's current die, not from the base, so a Winded hero throws a smaller solid
+        [Fact]
+        public void AWindedHero_ThrowsASmallerMightDie()
+        {
+            var hero = Fixtures.Hero();
+
+            Assert.Equal(Die.D8, hero.BuildPool(Attr.Might, Skill.Blades).Dice[0].Die);
+
+            hero.ApplyCondition(Condition.Winded);
+
+            Assert.Equal(Die.D6, hero.BuildPool(Attr.Might, Skill.Blades).Dice[0].Die);
+            Assert.Equal(Attr.Might.Key(), hero.BuildPool(Attr.Might, Skill.Blades).Dice[0].LabelKey);
+        }
+
+        // and the pool does not lose a die - the hero is worse off, not untrained. a condition
+        // that dropped a die out of the pool would change the Impact rule underneath it
+        [Fact]
+        public void AConditionShrinksTheDie_AndNeverRemovesIt()
+        {
+            var hero = Fixtures.Hero();
+            int before = hero.BuildPool(Attr.Might, Skill.Blades).Count;
+
+            hero.ApplyCondition(Condition.Winded);
+
+            Assert.Equal(before, hero.BuildPool(Attr.Might, Skill.Blades).Count);
+        }
+
+        // crossing both thresholds in one blow reports both, in the order they were crossed -
+        // the view writes one mark per Condition and gets them from this list
+        [Fact]
+        public void OneBigHit_CanReportTwoConditionsAtOnce()
+        {
+            var hero = Fixtures.Hero();   // 20 vigor: Winded at 13, Reeling at 6
+
+            var applied = hero.Damage(15);
+
+            Assert.Equal(new[] { Condition.Winded, Condition.Reeling }, applied);
+        }
+
     }
 }

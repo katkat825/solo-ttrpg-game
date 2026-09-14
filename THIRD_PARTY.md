@@ -116,7 +116,24 @@ Added 2026-09-09. All CC0 1.0 — commercial use fine, modification fine, no att
 
 I confirmed Quaternius's CC0 directly on the itch page on 2026-09-09. KayKit's CC0 is long-standing and already documented in LEGAL_NOTES.md. The standing rule still applies: whoever downloads a pack checks its own page at download time — these were pulled 2026-09-09.
 
-Kept zipped in `assets/`, gitignored like everything else here. **These rows are provenance only — the models are not in the game yet.** Using a pack means unzipping it, pulling just the models this game needs into `game/`, and putting them through the one-palette recolour and the painted-miniature shader in ART_DIRECTION.md §9 so four packs read as one game. That's an in-editor pass, not done here.
+Kept zipped in `assets/`, gitignored like everything else here. Using a pack means pulling just the models this game needs into `game/models/` and putting them through the one-palette recolour and the painted-miniature shader in ART_DIRECTION.md §9, so four packs read as one game.
+
+**Since `THE_BOARD.md` B5 that is three commands rather than an afternoon**, and the first models are through it:
+
+```
+.\tools\pull-models.ps1 -Pack KayKit_Dungeon_Pack_1.1_FREE -Into dungeon -Models wall,wall_doorway,rubble_large
+.\tools\bake-palette.ps1 -Texture game\models\dungeon\dungeon_texture.png
+   ... then open the project once so Godot imports them
+```
+
+| In the game | From | Used for |
+|---|---|---|
+| `game/models/dungeon/wall.gltf` | KayKit Dungeon Pack | every Wall square on the board |
+| `game/models/dungeon/wall_doorway.gltf` | KayKit Dungeon Pack | a Door square — the frame stands, its door panel swings |
+| `game/models/dungeon/rubble_large.gltf` | KayKit Dungeon Pack | difficult ground, turned to a per-square angle |
+| `game/models/heroes/Barbarian.glb` | KayKit Adventurers | the hero's mini — the same Barbarian the dice belong to |
+
+Both atlases (`dungeon_texture.png`, `barbarian_texture.png`) are **baked to the palette in place**: the file in `game/` is the treated one and the untouched original is still in the zip, which is the whole reason raw packs stay zipped. Importing a `.glb` makes Godot extract the texture it had embedded and drop a raw copy beside the model, so bake the FOLDER rather than the file, and bake again after any re-import.
 
 ### KayKit — Kay Lousberg, https://kaylousberg.itch.io (CC0)
 

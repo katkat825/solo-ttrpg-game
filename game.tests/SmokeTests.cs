@@ -1,4 +1,5 @@
-using Game.Tray;
+using Core.Characters;
+using Game.Board;
 
 namespace Game.Tests
 {
@@ -14,6 +15,7 @@ namespace Game.Tests
     {
         [Fact]
         public void AGodotFreeHelperInGame_IsReachableFromATestProject() =>
-            Assert.Equal(3, TrayResolution.PoolSize);
+            Assert.Equal(3, DoorCheck.PoolFor(
+                new BuiltInArchetypes().Create(EngineIds.Barbarian)).Count);
     }
 }

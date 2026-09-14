@@ -28,11 +28,12 @@ dotnet run --project sim 50000  # more trials
 
 To run the game, open `game/` in Godot 4.7 (.NET build) and press F5. It doesn't run from the CLI.
 
-Two PowerShell checks run headless and exit non-zero on failure:
+Three PowerShell checks run headless and exit non-zero on failure:
 
 ```
 .\check-fairness.ps1 [-Dice 3] [-Shape N] [-Tray name]   # chi-squared, are the dice uniform
 .\check-locale.ps1                                       # every key has text, every string has a key
+.\check-maps.ps1                                         # every shipped map parses
 ```
 
 ## Layout
@@ -94,6 +95,8 @@ When two implementations both work, I pick whichever feels more like sitting at 
 The dice tray works. Three dice of mixed shapes thrown together, real collisions, face reading off the resting orientation, per-skin tray physics, force-driven audio, and the outcome readable off the felt without a UI panel. Fairness is swept per shape and per tray skin, since colliding dice are a different physical system from solo throws and I didn't want to assume.
 
 Next is the Snag cue, then the grid and tiles, one mini moving, and the combat loop. After that comes the part I actually care about, which is writing a short campaign entirely in data with no new code. If that doesn't work then neither does the rest of the plan, so it's better to find out now than in year three.
+
+That "campaign is a folder, no new code" goal is also why I'm building this to sell: a commercial release on Steam with Steam Workshop support, so other people can build and share campaigns the same way I add them. The architecture doesn't change for that — the same engine/content boundary that lets me add campaigns for a decade is the one that lets players make their own — so the ambition grew and the plan didn't. The design docs carry the specifics: `ARCHITECTURE.md` §8–§9 for the framing, `CONTENT_PIPELINE.md` for the Workshop-ready campaign format and the Steam integration, and `LEGAL_NOTES.md` for what selling and hosting other people's content adds.
 
 ## Still undecided
 

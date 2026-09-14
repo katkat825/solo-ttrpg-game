@@ -18,6 +18,9 @@ namespace Sim
             SnagReport.Run(trials);
             EncounterReport.ActionEconomy(trials);
             EncounterReport.RabbleSensitivity(trials);
+            PlayerPathReport.Run(trials);
+            TroubleReport.Run(trials);
+            DreadReport.Run(trials);
 
             Console.WriteLine();
         }

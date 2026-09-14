@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
+using Core.Characters;
 using Core.Dice;
 using Core.Localization;
 using Core.Resolution;
@@ -51,8 +53,50 @@ namespace Game.Tray
         // what the shape key steps through, after the pool the scene was authored with
         static readonly Die[] ShapeTour = { Die.D4, Die.D6, Die.D8, Die.D10, Die.D12 };
 
+        // WHOSE POOL THE TRAY THROWS WHEN NOBODY HAS ASKED FOR ONE.
+        //
+        // The same roster Main.cs names, and named in exactly one place here, so swapping in a
+        // data-backed source is this line - the whole reason nothing below reaches past
+        // IArchetypeSource to build a fighter. Until B4 the labels lived in TrayResolution as
+        // three constants with a comment promising this swap.
+        //
+        // The tray still throws whatever SIZES the scene was saved with: the pool says which
+        // trait each die is, the felt says how many sides it has, and the D key changes the
+        // second without touching the first.
+        private readonly IArchetypeSource _archetypes = new BuiltInArchetypes();
+
+        // what is on the felt right now - each die with the key of the trait it came from
+        private Pool _pool;
+
+        // the traits the tray labels its own dice with, in throw order
+        private string[] _labels;
+
+        // the last throw's answer, for whoever asked for it. C# rather than a Godot signal
+        // because a TrayThrow is not a Variant and must not become one - the board wants the
+        // PoolResult, not a dictionary of numbers
+        public event Action<TrayThrow> Resolved;
+
         private readonly List<DieBody> _dice = new();
         private readonly List<Node3D> _throwPoints = new();
+
+        // THE DICE ACTUALLY IN THIS THROW - a prefix of _dice, and the whole of SEAMS.md section 8.
+        //
+        // Pool size 3 was assumed in five places plus the scene, and it stopped being true the
+        // moment a fight asked the tray to throw one die on its own: a Nerve-bought Heart die
+        // makes a pool of four (C4), an untrained attempt makes one of two, and an exploding
+        // Impact die is picked up and thrown ALONE (C2). None of those is a special case - they
+        // are all "throw this pool", and the tray sits out whatever it does not need.
+        //
+        // A prefix rather than a chosen subset, because the pool and the throw points pair by
+        // index and always have. The dice that are sitting out are frozen, hidden and off every
+        // collision layer, so they cannot be knocked into by the ones in play and cannot be read
+        // by mistake - a benched die still reports its last settled face, which is exactly the
+        // sort of thing that would resolve silently and wrongly.
+        private readonly List<DieBody> _active = new();
+
+        // what each die's layers were before it was benched, so putting it back is exact rather
+        // than a guess at what the scene said
+        private readonly Dictionary<DieBody, (uint Layer, uint Mask)> _benched = new();
 
         // each die's voice, same order, null where a die has none
         // found by type rather than node name, so a renamed audio node keeps its voice
@@ -82,6 +126,20 @@ namespace Game.Tray
         // also the guard that stops one throw resolving twice
         // three dice settling means three chances to try
         private bool _awaitingSettle;
+
+        // SOMEBODY ELSE'S QUESTION IS ON THE FELT: the tray threw a pool it was handed and the
+        // answer has not been read yet. True between Throw(pool) and Resolved.
+        //
+        // The tray's own keys - space, D, T - re-throw, and until Phase C that was harmless
+        // because nothing was waiting on an answer. It is not harmless now: pressing space with a
+        // door check or a swing in the air throws the same pool again and the asker reads THAT,
+        // which is a free re-roll for anyone who knows about the key. The dice are the game
+        // (CORE_RULES.md pillar 1), so a re-roll has to cost a Nerve (C4), never a keystroke
+        private bool _answering;
+
+        // and readable from outside: whoever is about to ask the tray a question has to know the
+        // felt is not already holding somebody else's
+        public bool IsAnswering => _answering;
 
         public override void _Ready()
         {
@@ -130,10 +188,26 @@ namespace Game.Tray
                 return;
             }
 
-            if (_dice.Count != TrayResolution.PoolSize)
-                GD.PushError($"dice tray: the pool is {TrayResolution.PoolSize} dice but the scene has {_dice.Count}");
+            // the hero's own check pool - attribute, skill, gear - which is what the board
+            // throws too. the tray is not a different game when it is played on its own
+            _labels = _archetypes.Create(EngineIds.Barbarian)
+                                 .BuildPool(Attr.Might, Skill.Blades).Dice
+                                 .Select(d => d.LabelKey).ToArray();
+
+            // FEWER DICE THAN A POOL NEEDS is a scene that cannot answer the question. More is
+            // fine and is now the shipped case: the tray carries four so a Nerve can put the Heart
+            // die on the felt (CORE_RULES.md section 7), and sits the fourth out for every pool
+            // that does not want it
+            if (_dice.Count < _labels.Length)
+                GD.PushError($"dice tray: the hero's pool is {_labels.Length} dice and the scene has " +
+                             $"{_dice.Count} - add another die and throw point");
 
             _authored = _dice.Select(d => d.Size).ToArray();
+
+            // the hero's own pool decides how many are on the felt to begin with, not how many the
+            // scene happens to hold
+            Seat(_labels.Length);
+
             Rebuild();
 
             AddChild(_marks = new TrayMarks { Name = "Marks", Text = _text, Bounds = _bounds });
@@ -336,19 +410,209 @@ namespace Game.Tray
             ThrowAll();
         }
 
+        // HOW MANY DICE ARE IN THIS THROW. The first `count` of them play; the rest are taken off
+        // the felt - frozen, hidden, and off every collision layer so nothing in play can knock
+        // into them and nothing can read them by mistake.
+        //
+        // The reading is the part that matters. A benched die still answers ReadFace with
+        // whatever it settled on last time, so a tray that merely IGNORED the surplus would be one
+        // stale number away from resolving a pool nobody threw - and it would look completely
+        // fine, because the die really is showing that face.
+        //
+        // Idempotent, like ApplySkin, because this is called on every throw.
+        private void Seat(int count)
+        {
+            count = Mathf.Clamp(count, 0, _dice.Count);
+
+            _active.Clear();
+
+            for (int i = 0; i < _dice.Count; i++)
+            {
+                DieBody die = _dice[i];
+
+                if (i < count)
+                {
+                    _active.Add(die);
+                    Unbench(die);
+                }
+                else
+                {
+                    Bench(die);
+                }
+            }
+        }
+
+        // off the felt. its layers are remembered rather than assumed, so putting it back is what
+        // the scene said and not what this file guessed
+        private void Bench(DieBody die)
+        {
+            if (_benched.ContainsKey(die)) return;
+
+            _benched[die] = (die.CollisionLayer, die.CollisionMask);
+
+            die.CollisionLayer = 0;
+            die.CollisionMask = 0;
+            die.Freeze = true;
+            die.Visible = false;
+        }
+
+        private void Unbench(DieBody die)
+        {
+            if (!_benched.TryGetValue(die, out (uint Layer, uint Mask) was)) return;
+
+            die.CollisionLayer = was.Layer;
+            die.CollisionMask = was.Mask;
+            die.Freeze = false;
+            die.Visible = true;
+
+            _benched.Remove(die);
+        }
+
         // has to run every time the dice change
         // a d8 in the tray resolving as a d6 is the quiet lie the face table exists to prevent
         private void Rebuild()
         {
-            var sizes = _dice.Select(d => d.Size).ToList();
+            var sizes = _active.Select(d => d.Size).ToList();
 
-            _resolution = new TrayResolution(sizes);
+            // the pool the board handed over keeps its own labels; otherwise the felt is
+            // relabelled with the tray's hero, one trait per throw point
+            _pool = Relabelled(sizes);
+            _resolution = new TrayResolution(_pool);
 
             // the snag tally restarts with the pool, and has to: bigger dice snag less, so a count
             // carried across a change of shapes is measuring a table that no longer exists
             if (_cue == null) _cue = new SnagCue(sizes);
             else _cue.Reset(sizes);
         }
+
+        // the traits currently on the felt, wearing whatever sizes are currently on the felt
+        //
+        // the two are tracked apart because they change apart: a pool arrives from the board with
+        // both, and the D key changes only the sizes. a d12 labelled Might is still Might
+        private Pool Relabelled(IReadOnlyList<Die> sizes)
+        {
+            var pool = new Pool();
+
+            for (int i = 0; i < sizes.Count; i++)
+                pool.Add(i < _labels.Length ? _labels[i] : _labels[_labels.Length - 1], sizes[i]);
+
+            return pool;
+        }
+
+        // THROW THIS. the board's whole side of B4: build a pool out of a hero and hand it over.
+        //
+        // The tray takes the sizes AND the labels from it, so a check thrown from the board is
+        // the hero's own dice rather than whatever the scene was saved with - and the marks name
+        // the traits that were actually used. Every bit of M0-M9 does the rest; there is no
+        // second throwing path and there must never be one.
+        //
+        // The answer comes back through Resolved, once the last die has stopped.
+        public void Throw(Pool pool)
+        {
+            if (pool == null || pool.Count == 0)
+            {
+                GD.PushError("dice tray: asked to throw a pool with no dice in it - nothing thrown");
+                return;
+            }
+
+            if (pool.Count > _dice.Count)
+            {
+                // MORE DICE THAN THE TRAY HAS. A tray can sit a die out (Seat below) and cannot
+                // conjure one - the scene owns how many solids exist, and adding one is a scene
+                // edit. Named rather than silently truncated, because a pool thrown short is a
+                // check answered by the wrong handful
+                GD.PushError($"dice tray: asked to throw {pool.Count} dice and the tray has " +
+                             $"{_dice.Count} - add another die and throw point to the scene");
+                return;
+            }
+
+            _labels = pool.Dice.Select(d => d.LabelKey).ToArray();
+            _answering = true;
+
+            Seat(pool.Count);
+
+            for (int i = 0; i < _active.Count; i++) _active[i].Size = pool.Dice[i].Die;
+
+            // the tour is over: these are somebody's real dice now, and D goes back to the top
+            _tour = -1;
+
+            Rebuild();
+            ThrowAll();
+        }
+
+        // ONE DIE, PICKED UP AND THROWN AGAIN, WITH THE REST LEFT LYING WHERE THEY ARE.
+        //
+        // A Nerve re-throws any one die in a pool and you take the new result (CORE_RULES.md
+        // section 7), and at a table that is exactly what it looks like: you pick that one die
+        // back up and roll it, and the other two sit there. So this launches one and reads all of
+        // them - the answer that comes back through `Resolved` is the whole pool re-resolved,
+        // because the best two and the Impact die are properties of the handful and not of the die
+        // that moved.
+        //
+        // Nothing here decides whether a re-throw is allowed or what it costs. That is a Nerve,
+        // and Nerve is the fight's business.
+        public bool Rethrow(int slot)
+        {
+            if (_resolution == null || slot < 0 || slot >= _active.Count)
+            {
+                GD.PushError($"dice tray: asked to re-throw die {slot} of {_active.Count} on the felt");
+                return false;
+            }
+
+            _answering = true;
+            _awaitingSettle = true;
+            _pending.Clear();
+
+            // the marks go the moment the die does, for the same reason ThrowAll clears them:
+            // there must never be a frame with a ring drawn round a die that is in the air
+            _marks?.Clear();
+
+            Transform3D from = _throwPoints[slot].GlobalTransform;
+
+            _voices[slot]?.Rattle(from.Origin);
+            _pending.Add((_active[slot], from, RattleLeadTicks));
+
+            GD.Print("");
+            GD.Print($"reroll  {_active[slot].Name} {_active[slot].Size.Label()} goes back in the hand");
+
+            return true;
+        }
+
+        // ---- picking a die up (COMBAT_LOOP.md C4) ----
+
+        // WHICH DIE THE PLAYER JUST TOUCHED, in throw order. Armed by whoever is offering a
+        // re-throw and off the rest of the time, so a stray click on the felt during a foe's turn
+        // is a stray click on the felt
+        public bool Picking { get; set; }
+
+        public event Action<int> Picked;
+
+        // met with the die's own collision body rather than with a plane, because a die is a solid
+        // lying at an angle and the whole point is to hit THAT one. The board does the opposite
+        // and for the opposite reason - see Board.CellUnder
+        private int DieUnder(Vector2 at)
+        {
+            Camera3D camera = GetViewport()?.GetCamera3D();
+
+            if (camera == null) return -1;
+
+            var query = PhysicsRayQueryParameters3D.Create(
+                camera.ProjectRayOrigin(at),
+                camera.ProjectRayOrigin(at) + camera.ProjectRayNormal(at) * PickRange);
+
+            query.CollideWithAreas = false;
+
+            Godot.Collections.Dictionary hit = GetWorld3D()?.DirectSpaceState?.IntersectRay(query);
+
+            if (hit == null || hit.Count == 0) return -1;
+
+            var body = hit["collider"].As<GodotObject>() as DieBody;
+
+            return body == null ? -1 : _active.IndexOf(body);
+        }
+
+        // far enough to cross a table from any seat, short enough to be a ray and not a search
+        private const float PickRange = 8f;
 
         // queue every die, a couple of physics ticks apart
         // all three on the identical frame collide before reaching the felt,
@@ -363,7 +627,7 @@ namespace Game.Tray
             // is drawn around a die that is already in the air
             _marks?.Clear();
 
-            for (int i = 0; i < _dice.Count; i++)
+            for (int i = 0; i < _active.Count; i++)
             {
                 Transform3D from = _throwPoints[i].GlobalTransform;
 
@@ -371,7 +635,7 @@ namespace Game.Tray
                 // only the release is
                 _voices[i]?.Rattle(from.Origin);
 
-                _pending.Add((_dice[i], from, RattleLeadTicks + i * LaunchStaggerTicks));
+                _pending.Add((_active[i], from, RattleLeadTicks + i * LaunchStaggerTicks));
             }
         }
 
@@ -411,26 +675,26 @@ namespace Game.Tray
             // settled on last throw's value - resolving now would read stale faces
             if (_pending.Count > 0) return;
 
-            if (!_dice.All(d => d.IsSettled && d.IsAtRest)) return;
+            if (!_active.All(d => d.IsSettled && d.IsAtRest)) return;
 
             _awaitingSettle = false;
 
             // read live rather than trusting each die's latched SettledValue
             // what the rules get must be what is on the felt at this instant, including a die
             // that was nudged after it first came to rest
-            var faces = _dice.Select(d => d.ReadFace()).ToList();
+            var faces = _active.Select(d => d.ReadFace()).ToList();
             List<int> values = faces.Select(f => f.Value).ToList();
 
             // every GD.Print here is developer diagnostic and exempt from localization
             GD.Print("");
-            GD.Print("tray   " + string.Join(", ", _dice.Select(
+            GD.Print("tray   " + string.Join(", ", _active.Select(
                 (d, i) => $"{d.Name} {d.Size.Label()} {faces[i].Value} ({faces[i].Alignment:0.00})")));
 
             _lastThrow = _resolution.Resolve(values);
 
             // dice and slots are both in throw order, which is why the marks can be handed
             // over without the view working anything out for itself
-            _marks.Show(_lastThrow, _dice);
+            _marks.Show(_lastThrow, _active);
 
             foreach (string line in _lastThrow.DebugLines(TargetDifficulty, _text))
                 GD.Print(line);
@@ -444,6 +708,24 @@ namespace Game.Tray
             // every throw, not only the ones that snag, so the running count is exact at the
             // moment you stop rather than as of the last time it fired
             GD.Print($"snags  {_cue.Tally}");
+
+            // LAST, after everything the tray does for itself. whoever asked for this throw gets
+            // the answer only once the felt is finished with it, so a listener can read the marks
+            // and the dice as they are rather than as they are about to be
+            _answering = false;
+            Resolved?.Invoke(_lastThrow);
+        }
+
+        // the tray's own affordances are refused while somebody is waiting on an answer. not an
+        // error and nothing is printed at the player: a key that does nothing for a second and a
+        // half is the felt saying the question already on it has not been answered
+        private bool Busy(string affordance)
+        {
+            if (!_answering) return false;
+
+            GD.Print($"tray    {affordance} ignored - a check is in the air and the answer is not " +
+                     "the tray's to re-throw");
+            return true;
         }
 
         // switch language and reprint the throw already on the table
@@ -478,8 +760,12 @@ namespace Game.Tray
         {
             _tour = _tour + 1 >= ShapeTour.Length ? -1 : _tour + 1;
 
-            for (int i = 0; i < _dice.Count; i++)
-                _dice[i].Size = _tour < 0 ? _authored[i] : ShapeTour[_tour];
+            // the shape tour is about the tray and not about anybody's pool, so it puts every die
+            // back on the felt first - otherwise D after a one-die throw tours one die
+            Seat(_dice.Count);
+
+            for (int i = 0; i < _active.Count; i++)
+                _active[i].Size = _tour < 0 ? _authored[i] : ShapeTour[_tour];
 
             Rebuild();
 
@@ -497,9 +783,24 @@ namespace Game.Tray
 
         public override void _UnhandledInput(InputEvent @event)
         {
+            // A DIE, PICKED UP. Offered before the board sees the click, which is free: Godot
+            // delivers unhandled input up the tree from the bottom, and the tray is a later sibling
+            // than the board. A click that misses every die falls through untouched
+            if (Picking && @event.IsActionPressed("place_piece") && @event is InputEventMouse mouse)
+            {
+                int slot = DieUnder(mouse.Position);
+
+                if (slot >= 0)
+                {
+                    Picked?.Invoke(slot);
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+            }
+
             if (@event.IsActionPressed("throw_dice"))
             {
-                ThrowAll();
+                if (!Busy("space")) ThrowAll();
                 GetViewport().SetInputAsHandled();
                 return;
             }
@@ -510,17 +811,19 @@ namespace Game.Tray
 
             if (key.Keycode == KeyToCycle)
             {
-                CycleShape();
+                if (!Busy((char)KeyToCycle + "")) CycleShape();
                 GetViewport().SetInputAsHandled();
             }
             else if (key.Keycode == KeyToSwitchLocale)
             {
+                // reads the throw already on the felt in another language and throws nothing, so
+                // it is safe with a check in the air - and is the one that most needs to be
                 SwitchLocale();
                 GetViewport().SetInputAsHandled();
             }
             else if (key.Keycode == KeyToSwitchTray)
             {
-                CycleSkin();
+                if (!Busy((char)KeyToSwitchTray + "")) CycleSkin();
                 GetViewport().SetInputAsHandled();
             }
         }

@@ -1,0 +1,18 @@
+[gd_scene load_steps=3 format=3]
+
+; The fight check, on its own scene, holding the SHIPPED table inside it.
+;
+; Same shape as the fairness sweep and for the same reason: the thing measured has to be the thing
+; played. The sweep runs inside the real tray because a copy of the tray is a different physical
+; system; this instances the real table.tscn because a mock board with mock dice would be a
+; different game. What it adds is only the driving and the arithmetic - it clicks squares through
+; Board.Claims, exactly as a mouse does, and checks what came back.
+;
+; Run it with check-fight.ps1.
+
+[ext_resource type="Script" path="res://Diagnostics/FightCheck.cs" id="1_check"]
+[ext_resource type="PackedScene" path="res://table.tscn" id="2_table"]
+
+[node name="FightCheck" type="Node"]
+script = ExtResource("1_check")
+Table = ExtResource("2_table")

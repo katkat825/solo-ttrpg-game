@@ -133,6 +133,44 @@ namespace Game.Tray
         // cannot happen with three dice, kept so a short pool never reads "impact d4" as a result
         public bool ImpactIsFallback => Result.Rolls.All(r => r.Counted);
 
+        // WHAT THE IMPACT DIE IS SHOWING, on the felt, right now - or 0 when nothing was left over.
+        //
+        // Read off the table rather than rolled again. CombatEngine asks its resolver to roll the
+        // Impact die a second time (and explode it), which is right for a fight nobody is watching;
+        // in front of a player it would be a hidden roll deciding how hard the hero hit something,
+        // and CORE_RULES 0 pillar 1 says every roll is a visible handful hitting the table. The
+        // magnitude is already lying there with a ring round it - B4 uses THIS one.
+        //
+        // Reads Roles and Slots and decides nothing: the rules said which die was left over.
+        public int ImpactValue
+        {
+            get
+            {
+                for (int i = 0; i < Roles.Count; i++)
+                    if (Roles[i] == DieRole.Impact) return Slots[i].Value;
+
+                return 0;
+            }
+        }
+
+        // AND WHICH TRAIT IT IS, so the die can be picked up and thrown again wearing the same
+        // name. An exploding Impact die (COMBAT_LOOP.md C2) is thrown alone as a pool of one, and
+        // a pool needs a label key for every die in it - taking the trait off the felt rather than
+        // inventing one is what keeps the mark on the second throw saying what the first said
+        //
+        // Reads Roles and Slots and decides nothing, exactly as ImpactValue does. Empty when
+        // nothing was left over
+        public string ImpactLabelKey
+        {
+            get
+            {
+                for (int i = 0; i < Roles.Count; i++)
+                    if (Roles[i] == DieRole.Impact) return Slots[i].LabelKey;
+
+                return "";
+            }
+        }
+
         // DEVELOPER ONLY - not localized, never reaches the screen
         // the best-two line is read out of PoolResult rather than recomputed,
         // so a mismatch is always a view bug and never a rules bug

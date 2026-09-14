@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=15 format=3]
 
 ; The battle map. Almost empty on purpose: the squares are BUILT from the extent at load, not
 ; laid out here, because a scene full of hand-placed tiles would be a second description of the
@@ -12,11 +12,16 @@
 ; neutral grey to a mottled sepia/parchment (game/textures/map_parchment/, see THIRD_PARTY.md),
 ; with the roughness biased matte so it reads as paper rather than plastic. The grid is a soft
 ; sepia ink over it - both stay, because on a real table the map IS the floor and terrain stands on
-; top of it. What B2 added is that terrain: a material per tile kind, below, placed by BoardTiles
-; wherever the map file says. Placeholder blocks for now; B5 pulls real tiles through the asset
-; pipeline and the only thing that changes is the mesh.
+; top of it. What B2 added is that terrain, placed by BoardTiles wherever the map file says, and
+; what B5 added is what it is made of: the four resources below are KayKit dungeon models pulled
+; through tools/pull-models.ps1, palette-baked, and wearing the painted-miniature shader. Clear
+; them and the three placeholder materials further down take over again.
 
 [ext_resource type="Script" path="res://Board/Board.cs" id="1_board"]
+[ext_resource type="PackedScene" path="res://models/dungeon/wall.gltf" id="6_wall"]
+[ext_resource type="PackedScene" path="res://models/dungeon/wall_doorway.gltf" id="7_doorway"]
+[ext_resource type="PackedScene" path="res://models/dungeon/rubble_large.gltf" id="8_rubble"]
+[ext_resource type="Material" path="res://models/dungeon/dungeon_painted.tres" id="9_paint"]
 [ext_resource type="PackedScene" path="res://Board/mini.tscn" id="2_mini"]
 [ext_resource type="Texture2D" path="res://textures/map_parchment/color.jpg" id="3_color"]
 [ext_resource type="Texture2D" path="res://textures/map_parchment/normalgl.jpg" id="4_normal"]
@@ -64,5 +69,9 @@ Lines = SubResource("Mat_lines")
 Wall = SubResource("Mat_wall")
 Door = SubResource("Mat_door")
 Rough = SubResource("Mat_rough")
+WallModel = ExtResource("6_wall")
+DoorwayModel = ExtResource("7_doorway")
+RubbleModel = ExtResource("8_rubble")
+Paint = ExtResource("9_paint")
 
 [node name="Mini" parent="." instance=ExtResource("2_mini")]

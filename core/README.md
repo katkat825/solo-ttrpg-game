@@ -22,17 +22,25 @@ The four at the bottom don't know about each other either. `Core.Space` is the n
 | | |
 |---|---|
 | `Cell` | a square, by integer coordinates. two dimensions and no opinion about which two |
+| `Border` | a LINE between two squares. canonical from both sides, which is why it is a type |
 | `Grid<T>` | extent and occupancy: who is standing where, and nothing about terrain |
-| `Tile`, `MapLayout` | what each square is made of. immutable, because a map is content and an open door is runtime state |
-| `MapReader` | text in, map out. one character per square, and every failure named with its line |
-| `Route` | A* over the map. diagonals count as one square, and a corner where two walls touch is a seal |
+| `Tile` | what a square IS — floor, difficult ground, solid rock. no wall among them |
+| `Edge` | what stands on a line — nothing, a wall, a shut door |
+| `MapLayout` | both layers over one extent, immutable, because a map is content and an open door is runtime state |
+| `MapReader` | text in, map out. double resolution, so the walls are drawn on the lines; every failure named with its line and column |
+| `Route` | A* over the map. diagonals count as one square, and a corner is open if there is a way round it |
 | `Sight` | is the line between two squares clear. symmetric by construction, and it agrees with `Route` about corners |
 
 `game/Board` draws all of it; `COMBAT_LOOP.md` decides how much of it the dice care about. The
 pathfinding and the line of sight are exactly the fiddly geometry that is miserable to check by
 eye and trivial to check with a test — `RouteTests` checks every route on a map against a flood
-fill that knows nothing about heuristics, and `SightTests` checks symmetry on all 4,900 pairs of
+fill that knows nothing about heuristics, and `SightTests` checks symmetry on all 784 pairs of
 squares in a room rather than on three examples.
+
+**The wall model was reworked in `EDGE_WALLS.md`** after the board was built once with walls as
+cells: a wall is a feature of the line between two squares, and the squares on both sides of it are
+ordinary floor. That is what a wall is on a wet-erase battle map, and a one-square-thick wall drawn
+the old way read as hollow because it was.
 
 Namespaces match folders, so if this ever needs to become several assemblies it's a project-file change rather than a rename. `Localization`, `Statistics` and `Space` aren't game rules, and they belong here anyway: the membership test is *pure, headless and Godot-free*, not *is it literally a rule*. That's why this folder is `core/` and not `rules/`.
 
@@ -98,7 +106,7 @@ absorb, and `Actor.IsOverwhelmed` makes it `IsDown`.
 
 ## Deliberately concrete
 
-`Actor` is a class, not an interface. Everything in the game is an actor and there's no second implementation waiting to happen. `Pool` and `PoolResult` are data. `Cell` and `Grid` are data too — `Grid` is generic in what stands on a square only because `Space` is a bottom layer and cannot name an `Actor`, and it has no business knowing what a piece is anyway. `Difficulty` is a static class of `const int` thresholds; a campaign needing different numbers passes them in rather than subclassing.
+`Actor` is a class, not an interface. Everything in the game is an actor and there's no second implementation waiting to happen. `Pool` and `PoolResult` are data. `Cell`, `Border` and `Grid` are data too — `Grid` is generic in what stands on a square only because `Space` is a bottom layer and cannot name an `Actor`, and it has no business knowing what a piece is anyway. `Difficulty` is a static class of `const int` thresholds; a campaign needing different numbers passes them in rather than subclassing.
 
 The dice system stays hard-coded. Letting a campaign redefine how the Impact die works would cost a lot of complexity for flexibility nobody will use, and it would stop the rules being simulatable, which is how every balance number in the project got checked.
 

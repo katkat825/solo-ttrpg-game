@@ -18,6 +18,10 @@ namespace Core.Characters
             KeyConventions.SkillNs,
             KeyConventions.ConditionNs,
             KeyConventions.GearNs,
+
+            // the engine puts one combat key in front of a player: the name beside the default
+            // Impact die when a pool left nothing over (KeyConventions.DefaultImpactName)
+            KeyConventions.CombatNs,
         };
 
         // THE ROSTER IS REQUIRED, AND THAT IS THE POINT (F4)
@@ -73,6 +77,8 @@ namespace Core.Characters
 
             foreach (Tier t in Enum.GetValues<Tier>())
                 yield return t.Key();
+
+            yield return KeyConventions.DefaultImpactName;
 
             foreach (string key in ForRoster(archetypes))
                 yield return key;
