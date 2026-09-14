@@ -48,6 +48,18 @@ namespace Core.Localization
         public const string SkillNs = "skill";
         public const string ConditionNs = "condition";
         public const string GearNs = "gear";
+
+        // WHAT A THING LOOKS LIKE ON THE TABLE, as opposed to what it IS - MINIS_AND_ART.md A1
+        // and MODDING.md section 2, which names `mini.grimdark.skeleton` beside
+        // `actor.ashfall.ghoul` as one of the kinds of id a pack emits.
+        //
+        // A TWELFTH NAMESPACE RATHER THAN A CORNER OF `gear` OR `ui`. A mini is a first-class
+        // thing a player picks off a list and subscribes to a pack of, so it names itself the way
+        // a monster does. Filing it under `ui` would say it is chrome and would put a pack
+        // author's strings in the engine's own bucket; filing it under `gear` would say a figure
+        // is equipment. The set is closed and stays closed - this is its first addition since it
+        // was written, and `class` is the one other MODDING.md already foresees
+        public const string MiniNs = "mini";
         public const string DifficultyNs = "difficulty";
         public const string DialogueNs = "dialogue";
         public const string CombatNs = "combat";
@@ -59,7 +71,7 @@ namespace Core.Localization
         public static readonly IReadOnlyCollection<string> Namespaces = new[]
         {
             ActorNs, AttrNs, SkillNs, ConditionNs, GearNs, DifficultyNs,
-            DialogueNs, CombatNs, QuestNs, CampaignNs, UiNs,
+            DialogueNs, CombatNs, QuestNs, CampaignNs, UiNs, MiniNs,
         };
 
         // ---- builders. Prefer these over hand-written strings. ----
@@ -76,6 +88,12 @@ namespace Core.Localization
         public static string ActorNameNumbered(string id) => Key(ActorNs, id, "name_numbered");
 
         public static string GearName(string id) => Key(GearNs, id, "name");
+
+        // `mini.grimdark.skeleton.name`, out of the scoped mini id `grimdark.skeleton`. DERIVED
+        // FROM THE ID rather than declared in the manifest, the same rule a monster's name and a
+        // campaign's title already follow: a name field in a data file is a second description of
+        // the id, free to disagree with it, and lets one pack point at another's string
+        public static string MiniName(string id) => Key(MiniNs, id, "name");
 
         // THE DIE NOBODY BROUGHT. A two-die pool counts both, so there is nothing left over and the
         // Impact die is the d4 the rules hand you by default (CORE_RULES.md section 2) - "untrained

@@ -136,14 +136,14 @@ namespace Game.Fight
 
             AddChild(line);
 
-            Name(actor, line);
+            Inscribe(actor, line);
 
             return line;
         }
 
         // ONE KEY, ONE WHOLE NAME. A numbered foe's key takes the ordinal as {0}; a lone one's
         // does not take anything. Never `name + " " + n`
-        void Name(Actor actor, Label3D line)
+        void Inscribe(Actor actor, Label3D line)
         {
             if (Text == null) return;
 
@@ -193,7 +193,7 @@ namespace Game.Fight
 
         public void Retranslate()
         {
-            foreach (KeyValuePair<Actor, Label3D> line in _lines) Name(line.Key, line.Value);
+            foreach (KeyValuePair<Actor, Label3D> line in _lines) Inscribe(line.Key, line.Value);
         }
 
         // DEVELOPER ONLY - not localized, never reaches the screen

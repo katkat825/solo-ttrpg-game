@@ -1,0 +1,6 @@
+{
+  "id": "cold_iron_axe",
+  "die": "d8",
+  "supports": "blades",
+  "inflicts": [ "reeling" ]
+}

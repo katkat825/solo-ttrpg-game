@@ -204,6 +204,68 @@ namespace Core.Combat
                 .Select(e => e.Actor));
         }
 
+        // ---- and picking one back up (CONTENT_PIPELINE.md P6) ----
+
+        // BEGIN'S COUNTERPART: a fight that is already under way, put back the way it was.
+        //
+        // `Begin` rolls for the order, which is exactly what a load must NOT do - re-rolling
+        // initiative on load would let a player reload until the order suited them, and would make
+        // "the fight resumes the way it was" false in the one respect a player would notice first.
+        // So the order is handed in, and with it whose turn it is and how much of that turn is
+        // left.
+        //
+        // IT DEGRADES RATHER THAN REFUSING, like everything else on the save path (SEAMS.md
+        // section 9). An order missing somebody gets them appended rather than losing them; a turn
+        // index off the end wraps to the top of the round; more actions than the actor has are
+        // clamped to what they have. A hand-edited save is the normal case and none of those is
+        // worth refusing to open somebody's afternoon over.
+        //
+        // <paramref name="initiative"/> is what each actor threw, which is cosmetic - it is what
+        // the table writes down the side of the map - and is carried so a reloaded fight shows the
+        // same numbers rather than blanks
+        public void Resume(IReadOnlyList<Actor> order, int round, int turn, int actionsLeft,
+                           IReadOnlyDictionary<Actor, int> initiative = null)
+        {
+            if (Round > 0) return;
+
+            _order.Clear();
+            _initiative.Clear();
+
+            var mustered = new List<Actor> { Hero };
+            mustered.AddRange(_foes);
+
+            foreach (Actor actor in order ?? Array.Empty<Actor>())
+                if (actor != null && mustered.Contains(actor) && !_order.Contains(actor))
+                    _order.Add(actor);
+
+            // NOBODY IS LEFT OUT OF THE ORDER. A save that named three of four foes would
+            // otherwise produce a fight in which one of them never gets a turn - which looks like
+            // a rules bug from every angle except the one it happened at
+            foreach (Actor actor in mustered)
+                if (!_order.Contains(actor)) _order.Add(actor);
+
+            if (initiative != null)
+                foreach (KeyValuePair<Actor, int> rolled in initiative)
+                    if (rolled.Key != null && _order.Contains(rolled.Key))
+                        _initiative[rolled.Key] = rolled.Value;
+
+            Round = Math.Max(1, round);
+            _turn = _order.Count == 0 ? 0 : ((turn % _order.Count) + _order.Count) % _order.Count;
+
+            _engine.Observer.RoundBegan(Round);
+
+            if (Decided()) { Finish(); return; }
+
+            // THE TURN IS NOT BEGUN AGAIN, it is resumed. `BeginTurn` would refill the actions and
+            // clear a readied strike, which is a turn STARTING - and this one started before the
+            // save was written. So the observer is told whose turn it is and the actions are put
+            // back as they were
+            _actionsLeft = Math.Clamp(actionsLeft, 0, ActionsFor(Acting));
+
+            if (Acting != null && Acting.IsDown) Advance();
+            else _engine.Observer.TurnBegan(Acting, Round);
+        }
+
         // what this actor threw for the order, or 0 before the fight began
         public int InitiativeOf(Actor actor) =>
             actor != null && _initiative.TryGetValue(actor, out int score) ? score : 0;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using Content.Minis;
 using Game.Audio;
 
 namespace Game.Board
@@ -43,6 +44,18 @@ namespace Game.Board
         // seam here would be abstracting past the point (CONVENTIONS.md 5). When pieces start
         // differing by material, this is where the interface goes
         public MiniVoice Voice { get; set; } = MiniVoice.Shared;
+
+        // WHAT A SUPPLIED MODEL DOES INSTEAD OF THE ENGINE'S OWN MOTION (MINIS_AND_ART.md A1).
+        //
+        // Null for every piece the base game ships and for every supplied one that named no
+        // clips, which is what "the clip contract degrades" means in code: each of the five
+        // moments below asks this first and does it procedurally if the answer is no. There is no
+        // branch anywhere on whether a mini came out of a pack
+        public MiniClips Clips { get; set; }
+
+        // and what it sounds like doing it (A3). Null means the shared pool, which is what every
+        // piece on this board used before a pack could supply its own
+        public PackVoice Foley { get; set; }
 
         AudioStreamPlayer3D _player;
 
@@ -111,6 +124,8 @@ namespace Game.Board
             _step = null;
             _elapsed = 0f;
             Position = boardLocal;
+
+            Clips?.Play(Motion.Placed);
         }
 
         // the way round, square by square, as ONE movement - lifted once, traced round the wall,
@@ -129,6 +144,8 @@ namespace Game.Board
             _step = new MiniStep(through);
             _elapsed = 0f;
             _refusing = false;
+
+            Clips?.Play(Motion.Move);
         }
 
         // a square it cannot have: lean at it, think better of it, settle back.
@@ -143,7 +160,34 @@ namespace Game.Board
         // which is exactly what a hand does at a table for either. The two words are kept apart
         // because the call sites mean different things and reading `Refuse` at a swing would send
         // the next reader looking for a rule that refused it
-        public void Strike(Vector3 toward) => Lean(toward);
+        public void Strike(Vector3 toward)
+        {
+            Clips?.Play(Motion.Strike);
+
+            Lean(toward);
+        }
+
+        // TOOK A CONDITION: a shudder where it stands, and nothing else moves. The one motion of
+        // the five the engine did not already have a gesture for - `ART_DIRECTION.md` section 5
+        // lists it, `ConditionMarks` writes the word on the mat beside the piece, and until now
+        // the piece itself did not react at all.
+        //
+        // IT IS DELIBERATELY SMALL AND IT IS DELIBERATELY IGNORED MID-MOVE. A piece being carried
+        // to a square is a hand's gesture and interrupting it to shudder would read as a glitch;
+        // a piece already lying on its side has nothing left to react with
+        public void Wobble()
+        {
+            if (_toppled) return;
+
+            if (Clips != null && Clips.Play(Motion.Wobble)) return;
+
+            if (IsMoving) return;
+
+            // a lean and a return, which is the same shape as a refusal and ends exactly where it
+            // began (MiniStep.Refusing) - a quarter of a figure's height toward the near edge of
+            // the table, so it reads from the one fixed camera
+            Lean(Position + new Vector3(0f, 0f, FigureHeight * 0.22f));
+        }
 
         void Lean(Vector3 toward)
         {
@@ -162,6 +206,18 @@ namespace Game.Board
 
             _toppled = true;
             _step = null;
+
+            // A SUPPLIED MODEL WITH A DEATH ANIMATION FALLS ITS OWN WAY, and one without tips over
+            // with the engine's procedural fall - which is A1's clip contract at the one moment
+            // where the two are most visibly different. The procedural fall is not a fallback in
+            // the apologetic sense: it is how every piece on this board has gone down since C1
+            if (Clips != null && Clips.Play(Motion.Topple))
+            {
+                Foley?.Play(_player, Motion.Topple);
+                return;
+            }
+
+            Foley?.Play(_player, Motion.Topple);
 
             // laid out away from the near edge of the table, so it reads as fallen from the one
             // fixed camera rather than as a piece standing at a strange angle. lifted by about
@@ -186,7 +242,12 @@ namespace Game.Board
 
             // the click goes with the placement, not with the arrival at the square - the piece
             // has been over its destination for the whole hover
-            if (_step.SetsDownBetween(was, _elapsed)) Voice?.SetDown(_player);
+            // THE PACK'S OWN SET FIRST, THE SHARED POOL OTHERWISE - one line, no branch on where
+            // the piece came from (A3). A mini with no foley of its own sounds exactly as it did
+            // before packs could supply any
+            if (_step.SetsDownBetween(was, _elapsed) &&
+                !(Foley?.Play(_player, Motion.Placed) ?? false))
+                Voice?.SetDown(_player);
 
             if (!_step.IsDone(_elapsed)) return;
 

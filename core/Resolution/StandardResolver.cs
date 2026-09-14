@@ -22,30 +22,15 @@ namespace Core.Resolution
             if (pool.Count == 0)
                 throw new InvalidOperationException("Cannot resolve an empty pool.");
 
+            // ROLL HERE, READ THERE. The dice are thrown in pool order - which is what makes a
+            // seeded run repeat - and what the throw MEANS is `PoolResult.From`, so the arithmetic
+            // has one implementation and save/load reads a throw the same way the table does
+            // (SEAMS.md section 9)
             var thrown = pool.Dice
                 .Select(d => (d.LabelKey, d.Die, Value: _rng.Roll(d.Die.Sides())))
                 .ToList();
 
-            var ordered = thrown
-                .OrderByDescending(t => t.Value)
-                .ThenBy(t => (int)t.Die)
-                .ToList();
-
-            int counted = Math.Min(2, ordered.Count);
-            int total = ordered.Take(counted).Sum(t => t.Value);
-
-            var unused = ordered.Skip(counted).ToList();
-            Die impact = unused.Count > 0 ? unused.Max(t => t.Die) : Die.D4;
-
-            var rolls = new List<RolledDie>();
-            for (int i = 0; i < ordered.Count; i++)
-            {
-                var t = ordered[i];
-                rolls.Add(new RolledDie(t.LabelKey, t.Die, t.Value, i < counted));
-            }
-
-            int ones = thrown.Count(t => t.Value == 1);
-            return new PoolResult(rolls, total, impact, ones);
+            return PoolResult.From(thrown);
         }
 
         // a maximum roll rolls again and adds

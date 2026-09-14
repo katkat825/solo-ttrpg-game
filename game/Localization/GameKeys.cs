@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Content.Minis;
 using Game.Tray;
 
 namespace Game.Localization
@@ -26,6 +27,26 @@ namespace Game.Localization
             foreach (KeyValuePair<string, string> skin in TrayNameKeys())
                 if (!string.IsNullOrWhiteSpace(skin.Value))
                     yield return skin.Value;
+
+            foreach (string key in MiniNameKeys()) yield return key;
+        }
+
+        // THE FIGURES THE BASE GAME SHIPS (MINIS_AND_ART.md A1). A mini is a thing a player picks
+        // and sees listed, so it has a name, so the name is a key - `mini.rabble.name`, derived
+        // from the id exactly as `actor.rabble.name` is (`MiniManifest`).
+        //
+        // THE SHARED ROSTER'S ONLY, AND THAT IS THE SAME SPLIT `EngineKeys` MAKES about actors: a
+        // PACK's minis are the pack's to name, in the pack's own locale/ folder, and demanding
+        // them of game.csv would be the one thing CONVENTIONS.md section 7 forbids of that file.
+        // `Game.Campaigns.Loaded.Keys` is the other half, per pack
+        //
+        // DERIVED FROM `SharedMinis`, NEVER LISTED - the same rule that made the tray skins a
+        // folder listing rather than a hand-written array, and for the same reason F4 wrote down:
+        // a checklist that covers less than the game is as wrong as one that covers a different
+        // game
+        public static IEnumerable<string> MiniNameKeys()
+        {
+            foreach (MiniManifest mini in SharedMinis.All) yield return mini.NameKey;
         }
 
         // skin bare name -> the key it names itself with, for every skin in the folder

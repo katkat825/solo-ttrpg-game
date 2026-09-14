@@ -107,3 +107,10 @@ RivalAt = Vector2i(4, 4)
 ; set DreadAt to a square (say Vector2i(8, 2), through the door in the east half) to fight one.
 ; Phase P reads the encounter out of the campaign and this export goes with it.
 DreadAt = Vector2i(-1, -1)
+
+; WHAT THE HERO IS CARRYING (P1). Empty means whatever his statblock gave him - a d6 axe. Put an
+; item id from a campaign's items/ folder here and he carries that instead: "cold_iron_axe" is a
+; d8 that leaves people Reeling, "scale_coat" is +1 Defense. That is the whole of what a better
+; weapon is (CORE_RULES.md pillar 3), and it is a line of scene data and a file.
+HeroWeapon = ""
+HeroArmour = ""

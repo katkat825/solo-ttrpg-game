@@ -1,0 +1,14 @@
+{
+  "id": "hollow_warden",
+  "tier": "rival",
+  "vigor": 9,
+  "defense": 11,
+  "attributes": { "might": "d8", "wits": "d6" },
+  "skills": { "blades": "d6" },
+  "gear": { "id": "pole_hook", "die": "d6" },
+  "behaviour": "rabble_first",
+  "loot": [
+    { "item": "wardens_hook", "weight": 1 },
+    { "weight": 4 }
+  ]
+}

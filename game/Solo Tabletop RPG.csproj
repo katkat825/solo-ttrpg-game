@@ -1,5 +1,6 @@
 <Project Sdk="Godot.NET.Sdk/4.7.1">
   <ItemGroup>
+    <ProjectReference Include="..\content\content.csproj" />
     <ProjectReference Include="..\core\core.csproj" />
   </ItemGroup>
   <PropertyGroup>

@@ -1,0 +1,17 @@
+[gd_scene load_steps=2 format=3]
+
+; The campaign check, on its own scene like the locale audit and the map check.
+;
+; It runs Content.Campaigns.Package over every campaign folder on this machine - which is the SAME
+; read the game does when it loads a shelf, not a second opinion about it - and prints what each
+; one turned into, with every schema and cross-reference problem named by file and field.
+;
+; It needs no board, no tray and no dice: a campaign folder is files, and the reader that turns
+; them into a campaign has no Godot in it. The one thing this scene is here for is the translation
+; server, so a campaign's title can be printed as a player would read it. Run it with
+; check-campaign.ps1.
+
+[ext_resource type="Script" path="res://Diagnostics/CampaignCheck.cs" id="1_check"]
+
+[node name="CampaignCheck" type="Node"]
+script = ExtResource("1_check")

@@ -1,0 +1,30 @@
+; THE STAIR - the way down into Greyhollow, and the first room of campaign #2.
+;
+; NARROW AND DEEP on purpose: 5 wide and 9 down, where the ash yard is 12 wide and 4 down. A
+; corridor is a different fight from a yard - there is one way past anything standing in it, and
+; the Rabble that were a positioning problem in the open are a wall here.
+;
+; Authored for CONTENT_PIPELINE.md P7: three rooms, four monsters and a boss, all in data.
+;
+;   .  floor      ~  difficult ground   #  rock      @  the hero starts
+;   1-9 a spawn   |  wall up a line     -  wall along a line   x  door, shut   +  a corner
+
++-+-+-+-+-+
+|. . 2 . .|
++ + + + + +
+|. . . . .|
++ + + + + +
+|. .|. . .|
++ + + + + +
+|~ .|. 1 .|
++ + + + + +
+|. .|. . .|
++ +-+-+ + +
+|. . . . .|
++ + + + + +
+|. .|# . .|
++ + + + + +
+|. .|. . .|
++ + + + + +
+|. @ . . .|
++-+-+-+-+-+

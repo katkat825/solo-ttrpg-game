@@ -1,0 +1,8 @@
+{
+  "id": "blight_rat",
+  "tier": "rabble",
+  "vigor": 1,
+  "defense": 8,
+  "attributes": { "grace": "d6" },
+  "gear": { "id": "teeth", "die": "d4" }
+}

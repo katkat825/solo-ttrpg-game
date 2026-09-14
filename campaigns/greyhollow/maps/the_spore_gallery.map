@@ -1,0 +1,26 @@
+; THE SPORE GALLERY - a square room with a soft middle.
+;
+; 7 by 7, and the shape is the point: the short way across is through the difficult ground, and
+; the fast way round is the long way. The rock in the centre means nothing can be seen straight
+; across it, so the two halves of the room fight each other before they meet.
+;
+; Four spawn slots and the encounter uses all four (CONTENT_PIPELINE.md P7).
+;
+;   .  floor      ~  difficult ground   #  rock      @  the hero starts
+;   1-9 a spawn   |  wall up a line     -  wall along a line   x  door, shut   +  a corner
+
++-+-+-+-+-+-+-+
+|. . . . 3|. .|
++ + + + + + + +
+|. 1 . . .|. .|
++ + + + + + + +
+|. . ~ ~ ~x. .|
++ + + + + + + +
+|@ . ~ # ~ . 4|
++ + + + + + + +
+|. . ~ ~ ~ . .|
++ + + + + + + +
+|. . . . . 2 .|
++ +-+-+-+ + + +
+|. . . . . . .|
++-+-+-+-+-+-+-+

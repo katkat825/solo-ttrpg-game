@@ -1,0 +1,16 @@
+{
+  "id": "old_bones",
+
+  // A0's first and safest gesture: the figure the game already ships, re-dressed. No model file,
+  // no code, no re-bake in the editor - a recolour and a rescale over a mini the build has
+  // already parsed. See MINIS_AND_ART.md A0.
+  "variant": "rabble",
+
+  // bone, in the game's own range but stated as hex rather than by name - the palette is written
+  // down once, in tools/palette.ps1, and naming its colours here would be a second copy of it
+  // free to drift (content/Minis/Tint.cs)
+  "tint": "#D8CFB8",
+
+  // a head taller than a rabble pawn, which is 50 mm
+  "height": 0.062
+}

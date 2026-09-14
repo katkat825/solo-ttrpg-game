@@ -63,7 +63,7 @@ namespace Game.Tray
         // The tray still throws whatever SIZES the scene was saved with: the pool says which
         // trait each die is, the felt says how many sides it has, and the D key changes the
         // second without touching the first.
-        private readonly IArchetypeSource _archetypes = new BuiltInArchetypes();
+        private readonly IArchetypeSource _archetypes = Game.Campaigns.Library.Load(quiet: true);
 
         // what is on the felt right now - each die with the key of the trait it came from
         private Pool _pool;
@@ -120,8 +120,25 @@ namespace Game.Tray
         // held as the interface so this file cannot start reaching for TranslationServer
         private readonly ILocalizer _text = new GodotLocalizer();
 
+        // the fairness sweep has the dice and this is not a tray any more - see _Ready
+        private bool _sweeping;
+
         // the last throw, so switching locale can reprint it rather than roll again
         private TrayThrow _lastThrow;
+
+        // WHAT IS LYING ON THE FELT RIGHT NOW: which trait threw each die, how big it is, and what
+        // it is showing. Empty before the first throw of a fight.
+        //
+        // For a save (CONTENT_PIPELINE.md P6), and it is the whole of what a save needs to know
+        // about the tray - the faces, and nothing about what they mean. What a throw MEANS is read
+        // back with `TrayThrow.Read`, which is the same arithmetic that read it the first time,
+        // so a reloaded fight cannot disagree with the one that was saved (SEAMS.md section 9)
+        public IReadOnlyList<TraySlot> Felt =>
+            _lastThrow?.Slots ?? (IReadOnlyList<TraySlot>)System.Array.Empty<TraySlot>();
+
+        // and what it added up to, for a check that wants to hold a reloaded reading against the
+        // one the table made. Null before the first throw
+        public TrayThrow LastThrow => _lastThrow;
 
         // also the guard that stops one throw resolving twice
         // three dice settling means three chances to try
@@ -175,6 +192,15 @@ namespace Game.Tray
             // copies signal connections along with them
             if (sweeping)
             {
+                // AND THE TRAY STOPS BEING A TRAY. Everything below this branch is what makes it
+                // one - the marks, the pool it reads a throw against, the handler that reads the
+                // felt when the dice stop - and none of it is built, because the sweep owns the
+                // dice from here on and measures them itself. `_sweeping` is what stops the
+                // leftovers of the other half firing: `_Process` polls `TryResolve` for a die
+                // knocked loose after its flight tracking was disarmed, and during a sweep that
+                // poll reached a `TrayMarks` that was never made
+                _sweeping = true;
+
                 AddChild(new DiceFairness
                 {
                     SceneDice = _dice,
@@ -669,6 +695,9 @@ namespace Game.Tray
         // can never be read mid-tumble
         private void TryResolve()
         {
+            // the sweep owns the dice and reads them itself - see _Ready
+            if (_sweeping) return;
+
             if (!_awaitingSettle) return;
 
             // a die still waiting in the stagger queue has not been thrown, so it reports
@@ -691,6 +720,15 @@ namespace Game.Tray
                 (d, i) => $"{d.Name} {d.Size.Label()} {faces[i].Value} ({faces[i].Alignment:0.00})")));
 
             _lastThrow = _resolution.Resolve(values);
+
+            // AND IF THE POOL AND THE FELT HAVE COME APART, SAY SO. `TrayThrow` used to throw here
+            // and stopped in P6, because the same class has to read a SAVED throw and a save is a
+            // thing to report and carry on from (SEAMS.md section 9). At the live table it is
+            // still a bug and still gets shouted about - the difference is that the fight
+            // continues with unmarked dice rather than ending mid-swing
+            if (!_lastThrow.Agrees)
+                GD.PushError("tray: " + _lastThrow.Disagreement +
+                             " The dice are left unmarked rather than marked wrongly.");
 
             // dice and slots are both in throw order, which is why the marks can be handed
             // over without the view working anything out for itself

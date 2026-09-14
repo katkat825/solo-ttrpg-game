@@ -32,6 +32,39 @@ namespace Game.Board
         // this with a campaign package naming its own maps (ARCHITECTURE.md 4)
         [Export(PropertyHint.File, "*.map")] public string MapPath { get; set; } = "res://maps/cellar.map";
 
+        // WHICH CAMPAIGN'S ROOM (P2). Both set, and the board plays `<campaign>/maps/<map>.map` out
+        // of whichever campaign root has it; either left empty, and it falls back to `MapPath`
+        // above - the map that ships with the game, so a fresh install with no campaigns installed
+        // still has a room to stand in.
+        //
+        // Godot's FileAccess reads an absolute path as happily as a `res://` one, which is what
+        // lets one line below open either - a campaign lives OUTSIDE the .pck (see
+        // Campaigns/CampaignFolders.cs) and the shipped map lives inside it
+        [Export] public string Campaign { get; set; } = "";
+
+        // `MapName` and not `Map`, because `Map` is already this board's loaded `MapLayout` - one
+        // is which file to open and the other is what came out of it
+        [Export] public string MapName { get; set; } = "";
+
+        // OR NAME AN ENCOUNTER AND LET IT SAY WHICH ROOM (P4). This is the one the game actually
+        // uses: an encounter names its map, its foes and what happens when they are down, and a
+        // board and a fight that each named the room separately would be one fact written twice
+        // and free to disagree.
+        //
+        // IT IS ON THE BOARD AND NOT ON THE FIGHT, which looks backwards for about a second. The
+        // board loads its room inside its own `_Ready`, and Godot readies children before parents
+        // and in tree order - so by the time the fight exists the room is already down. Whoever
+        // picks the room has to be whoever loads it. The fight then reads the SAME plan off this
+        // board (`Plan`) rather than being told a second time
+        [Export] public string Encounter { get; set; } = "";
+
+        // both from `Package`, which is where a campaign's layout is described (P4) - the board
+        // opening a different folder from the one the loader validates would be a validator that
+        // proves nothing about what gets played
+        public const string MapsFolder = Content.Campaigns.Package.MapsFolder;
+
+        public const string MapExtension = Content.Campaigns.Package.MapExtension;
+
         // how big a square is on THIS table, which is a property of the table and not of the map -
         // the same room is the same room whether it is played on a small mat or a large one
         [Export] public float CellSize { get; set; } = 0.06f;
@@ -96,10 +129,10 @@ namespace Game.Board
 
         MapLayout _map;
 
-        // THE ONE HERO, HARDCODED, exactly as Main.cs names one. Character creation is
-        // ROOM_AND_SHEET.md and a roster read from a campaign is Phase P; naming the roster in one
-        // place is what keeps that swap to this line
-        readonly IArchetypeSource _archetypes = new BuiltInArchetypes();
+        // THE ROSTER, which is the engine's own plus every campaign on disk (P0). This line was
+        // `new BuiltInArchetypes()` and said "naming the roster in one place is what keeps that
+        // swap to this line" - and it was: this is the swap
+        readonly IArchetypeSource _archetypes = Game.Campaigns.Library.Load();
 
         Actor _hero;
 
@@ -241,21 +274,119 @@ namespace Game.Board
         // hands it, which is what keeps the reader testable headless.
         MapLayout Load()
         {
-            string text = FileAccess.FileExists(MapPath) ? FileAccess.GetFileAsString(MapPath) : null;
+            string path = Chosen();
+
+            string text = FileAccess.FileExists(path) ? FileAccess.GetFileAsString(path) : null;
 
             if (text == null)
             {
-                GD.PushError($"board: there is no map at '{MapPath}' - " +
+                GD.PushError($"board: there is no map at '{path}' - " +
                              $"falling back to an empty room, {BoardMetrics.Shipped}");
                 return EmptyRoom();
             }
 
-            if (MapReader.TryRead(text, out MapLayout map, out string problem)) return map;
+            if (MapReader.TryRead(text, out MapLayout map, out string problem))
+            {
+                Loaded = path;
+                return map;
+            }
 
-            GD.PushError($"board: {MapPath} is not a map - {problem}. " +
+            GD.PushError($"board: {path} is not a map - {problem}. " +
                          $"falling back to an empty room, {BoardMetrics.Shipped}");
 
             return EmptyRoom();
+        }
+
+        // what was actually opened, for a report and for a check that wants to know which room it
+        // is standing in
+        public string Loaded { get; private set; }
+
+        // THIS BOARD WAS TOLD EXACTLY WHAT TO LOAD, so `--campaign=` is not about it.
+        //
+        // One caller, and it is the reason the property exists: `check-fight.ps1` plays several
+        // fights in one run, and only the first of them is the campaign's - the other two are the
+        // caster and the boss, deliberately in the room that ships. Without this, an argument
+        // naming a campaign would quietly replace all three, and the boss fight would muster
+        // somebody else's encounter instead of the Dread it put there (a P7 finding, found by
+        // exactly that happening).
+        //
+        // Not an `[Export]`: a scene has no business declaring itself immune to what the game was
+        // launched with. It is set by a composition root that is building more than one board
+        public bool Fixed { get; set; }
+
+        // AND WHAT IS SUPPOSED TO BE STANDING IN IT, when the room came from an encounter. Read
+        // here because the room is chosen here; the fight musters from it (Fight.Muster)
+        public Content.Encounters.EncounterPlan Plan { get; private set; }
+
+        // THE CAMPAIGN'S ROOM IF THERE IS ONE, and the shipped one otherwise. B2 read exactly one
+        // hardcoded path and CONTENT_PIPELINE.md P2 is where that stops being true - "the loader
+        // builds a playable board from a maps/ file, replacing B2's single hardcoded path"
+        string Chosen()
+        {
+            // TOLD RATHER THAN BUILT WITH (P7). `--campaign=` and `--encounter=` beat the scene,
+            // so a second campaign can be played without editing `table.tscn` - which is the
+            // finding the second-campaign test turned up, written down on `Requested`
+            if (!Fixed)
+            {
+                if (Game.Campaigns.Requested.Campaign.Length > 0)
+                    Campaign = Game.Campaigns.Requested.Campaign;
+
+                if (Game.Campaigns.Requested.Encounter.Length > 0)
+                    Encounter = Game.Campaigns.Requested.Encounter;
+            }
+
+            if (string.IsNullOrWhiteSpace(Campaign)) return MapPath;
+
+            string map = Named();
+
+            if (map == null) return MapPath;
+
+            foreach (string root in Game.Campaigns.CampaignFolders.Roots())
+            {
+                string path = System.IO.Path.Combine(root, Campaign, MapsFolder, map + MapExtension);
+
+                if (System.IO.File.Exists(path)) return path;
+            }
+
+            GD.PushError($"board: no campaign on disk has {Campaign}/{MapsFolder}/{map}{MapExtension} - " +
+                         $"falling back to {MapPath}");
+
+            return MapPath;
+        }
+
+        // WHICH ROOM, out of the encounter when there is one and out of the export when there is
+        // not. Null means "nothing was asked for", which is the shipped cellar and not an error.
+        //
+        // A whole `Library.Load` for one file name looks heavy and is the right call: it is the
+        // load that VALIDATES the campaign, so a board pointed at a folder with a broken manifest
+        // finds out here, with the reason, rather than opening a map out of a campaign the rest of
+        // the game has refused to load
+        string Named()
+        {
+            if (string.IsNullOrWhiteSpace(Encounter))
+                return string.IsNullOrWhiteSpace(MapName) ? null : MapName;
+
+            Game.Campaigns.Loaded campaign = Game.Campaigns.Library.Load(quiet: true).Campaign(Campaign);
+
+            if (campaign == null || campaign.Failed)
+            {
+                GD.PushError($"board: '{Campaign}' " +
+                             (campaign == null ? "is not installed" : "failed to load") +
+                             $" - falling back to {MapPath}");
+                return null;
+            }
+
+            Plan = campaign.Encounters.Of(Encounter);
+
+            if (Plan == null)
+            {
+                GD.PushError($"board: '{Campaign}' has no encounter called '{Encounter}' - it has " +
+                             $"{string.Join(", ", campaign.Encounters.Ids)}. " +
+                             $"Falling back to {MapPath}");
+                return null;
+            }
+
+            return Plan.Map;
         }
 
         // four walls and nothing else, at the size the game ships with. NOT a map anyone plays on -
@@ -472,14 +603,7 @@ namespace Game.Board
         {
             if (piece == null) return null;
 
-            if (!_grid.Contains(cell) || !_map.IsPassable(cell) || _grid.IsOccupied(cell))
-            {
-                GD.PushError($"board: nothing can stand on {cell} - " +
-                             (!_grid.Contains(cell) ? "it is not a square on this board"
-                              : !_map.IsPassable(cell) ? _map.At(cell).ToString()
-                              : "somebody is already there"));
-                return null;
-            }
+            if (!Free(cell, name)) return null;
 
             var mini = piece.Instantiate<Mini>();
 
@@ -490,12 +614,82 @@ namespace Game.Board
             }
 
             mini.Name = name;
+
+            return Stood(mini, cell);
+        }
+
+        // AND THE SAME THING FOR A PIECE THAT WAS BUILT RATHER THAN INSTANCED (MINIS_AND_ART.md
+        // A1). A mini out of a pack has no `PackedScene` behind it - `MiniMaker` assembles it from
+        // a supplied model, or stands a placeholder box in for one that failed - so the board
+        // needs a way to be handed a finished piece.
+        //
+        // IT IS THE SAME THREE LINES AND NOT A SECOND PATH. Whatever built the piece, the board
+        // owns where it stands: one occupancy map, one refusal, one placement. A fight that kept
+        // its own idea of who is on which square would be a second map free to disagree
+        public Mini Place(Mini piece, Cell cell, string name)
+        {
+            if (piece == null) return null;
+
+            if (!Free(cell, name)) { piece.QueueFree(); return null; }
+
+            piece.Name = name;
+
+            return Stood(piece, cell);
+        }
+
+        Mini Stood(Mini mini, Cell cell)
+        {
             AddChild(mini);
 
             _grid.Place(mini, cell);
             mini.PlaceAt(_metrics.Centre(cell));
 
             return mini;
+        }
+
+        // the same three refusals, asked once, so the two `Place` overloads cannot drift apart
+        // about what a square being available means
+        bool Free(Cell cell, string name)
+        {
+            if (_grid.Contains(cell) && _map.IsPassable(cell) && !_grid.IsOccupied(cell)) return true;
+
+            GD.PushError($"board: nothing can stand on {cell} - " +
+                         (!_grid.Contains(cell) ? "it is not a square on this board"
+                          : !_map.IsPassable(cell) ? _map.At(cell).ToString()
+                          : "somebody is already there") +
+                         $", so '{name}' is not on the board");
+
+            return false;
+        }
+
+        // PUT A PIECE ON A SQUARE WITHOUT WALKING IT THERE (CONTENT_PIPELINE.md P6).
+        //
+        // The only caller is a save being loaded, and it is the only caller there should be: a
+        // piece that moves without a route is a piece that has teleported, and at a table pieces
+        // do not teleport. A load is the exception because nothing is being played - the room is
+        // being SET UP, exactly as `Place` sets it up, and what this does is the same thing to a
+        // mini that already exists.
+        //
+        // False when the square is off the board, solid or taken - the same three refusals
+        // `Place` gives, and silent rather than shouted, because a save naming an impossible
+        // square is a sentence for the loader to collect rather than an error in the board
+        public bool Stand(Mini piece, Cell cell)
+        {
+            if (piece == null) return false;
+
+            Cell? standing = _grid.CellOf(piece);
+
+            if (standing == cell) return true;
+
+            if (!_grid.Contains(cell) || !_map.IsPassable(cell) || _grid.IsOccupied(cell))
+                return false;
+
+            if (standing != null) _grid.Remove(piece);
+
+            _grid.Place(piece, cell);
+            piece.PlaceAt(_metrics.Centre(cell));
+
+            return true;
         }
 
         // off the board and out of the scene - what happens to a piece that has been removed
@@ -688,6 +882,11 @@ namespace Game.Board
             GD.Print("");
             GD.Print($"check   the door on {_door} - {DoorCheck.Attribute} + {DoorCheck.Skill} + " +
                      $"{_hero.WeaponId}, {pool.Count} dice vs {DoorCheck.Against}");
+
+            // the felt's readout compares to this, so set it to the door's own difficulty - a fight
+            // swing may have last set it to a foe's Defense, and the door is measured on its own
+            // number (DoorCheck.Against), not on whatever was struck last
+            _tray.TargetDifficulty = DoorCheck.Against;
 
             // EVERY BIT OF M0-M9 DOES THE REST. there is no second throwing path, no board dice,
             // and no number decided here - the tray throws the hero's own pool and the answer is

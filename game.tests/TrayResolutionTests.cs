@@ -210,9 +210,12 @@ namespace Game.Tests
             Assert.All(thrown.Roles, r => Assert.Equal(DieRole.Counted, r));
         }
 
-        // the felt and the pool coming apart is the one thing this class must never shrug at
+        // THE FELT AND THE POOL COMING APART is the one thing this class must never shrug at -
+        // and since P6 it does not throw either (SEAMS.md section 9). It says so, in a sentence,
+        // and leaves the dice unmarked: a die with no ring round it makes no claim about the
+        // rules, which is the only honest thing to draw when nobody knows which die is which
         [Fact]
-        public void ARollNoDieThrew_Throws()
+        public void ARollNoDieThrew_IsNamedAndLeavesTheDiceUnmarked()
         {
             var slots = new List<TraySlot> { new("attr.might.name", Die.D6, 4) };
 
@@ -220,7 +223,63 @@ namespace Game.Tests
                 new[] { new RolledDie("attr.might.name", Die.D6, 5, true) },
                 total: 5, impact: Die.D4, ones: 0);
 
-            Assert.Throws<InvalidOperationException>(() => new TrayThrow(result, slots));
+            var thrown = new TrayThrow(result, slots);
+
+            Assert.False(thrown.Agrees);
+            Assert.Contains("no die on the felt threw", thrown.Disagreement);
+            Assert.All(thrown.Roles, r => Assert.Equal(DieRole.None, r));
+        }
+
+        [Fact]
+        public void ASnagWithNoOneUnderItIsNamedAndPointsAtNothing()
+        {
+            var slots = new List<TraySlot> { new("attr.might.name", Die.D6, 4) };
+
+            var result = new PoolResult(
+                new[] { new RolledDie("attr.might.name", Die.D6, 4, true) },
+                total: 4, impact: Die.D4, ones: 1);
+
+            var thrown = new TrayThrow(result, slots);
+
+            Assert.False(thrown.Agrees);
+            Assert.Equal(-1, thrown.SnaggedSlot);
+        }
+
+        // A THROW READ OFF THE FELT (P6). The faces are the whole of what a saved throw is, and
+        // reading them cannot disagree with itself - which is the shape SEAMS section 9 asked for
+        [Fact]
+        public void AThrowReadOffTheFeltAgreesWithItselfAndScoresTheSame()
+        {
+            var slots = new List<TraySlot>
+            {
+                new("attr.might.name", Die.D6, 4),
+                new("skill.blades.name", Die.D8, 5),
+                new("gear.axe.name", Die.D6, 2),
+            };
+
+            TrayThrow read = TrayThrow.Read(slots);
+
+            Assert.True(read.Agrees);
+            Assert.Equal(9, read.Result.Total);
+            Assert.Equal(Die.D6, read.Result.Impact);
+            Assert.Equal(2, read.ImpactValue);
+            Assert.Equal("gear.axe.name", read.ImpactLabelKey);
+        }
+
+        // and it is the same reading the table gives, which is the whole point of there being one
+        // implementation of the arithmetic (PoolResult.From)
+        [Fact]
+        public void AThrowReadOffTheFeltMatchesTheOneTheTableMade()
+        {
+            TrayThrow made = Throw(Die.D6, Die.D8, Die.D6, 4, 5, 2);
+
+            TrayThrow read = TrayThrow.Read(made.Slots);
+
+            Assert.Equal(made.Result.Total, read.Result.Total);
+            Assert.Equal(made.Result.Impact, read.Result.Impact);
+            Assert.Equal(made.Result.Ones, read.Result.Ones);
+            Assert.Equal(made.Roles, read.Roles);
+            Assert.Equal(made.SnaggedSlot, read.SnaggedSlot);
         }
     }
 }

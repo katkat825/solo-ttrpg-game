@@ -56,6 +56,46 @@ namespace Core.Resolution
 
         public bool Beats(int difficulty) => Total >= difficulty;
 
+        // ---- reading a throw that has already happened ----
+
+        // THE RULES OF READING A HANDFUL OF DICE, separated from the rolling of them: sum the best
+        // two, the largest leftover die is Impact, and ties break toward the player by counting the
+        // SMALLER die so the larger one is free to be Impact (CORE_RULES.md section 2).
+        //
+        // `StandardResolver.Resolve` rolls and then calls this, so there is exactly ONE
+        // implementation of the arithmetic - which is the whole reason it is here rather than
+        // copied. The second caller is save/load (CONTENT_PIPELINE.md P6, SEAMS.md section 9): a
+        // saved throw is the FACES that were on the felt and nothing else, and it is read back
+        // with this. A save that stored the faces AND the verdict would be two fields that can
+        // disagree, and `SEAMS.md` names that disagreement as the specific obstacle to round
+        // tripping. Store one, derive the other, and there is nothing left to disagree.
+        public static PoolResult From(IReadOnlyList<(string LabelKey, Die Die, int Value)> thrown)
+        {
+            if (thrown == null || thrown.Count == 0)
+                return new PoolResult(System.Array.Empty<RolledDie>(), 0, Die.D4, 0);
+
+            var ordered = thrown
+                .OrderByDescending(t => t.Value)
+                .ThenBy(t => (int)t.Die)
+                .ToList();
+
+            int counted = System.Math.Min(2, ordered.Count);
+            int total = ordered.Take(counted).Sum(t => t.Value);
+
+            var unused = ordered.Skip(counted).ToList();
+            Die impact = unused.Count > 0 ? unused.Max(t => t.Die) : Die.D4;
+
+            var rolls = new List<RolledDie>();
+
+            for (int i = 0; i < ordered.Count; i++)
+                rolls.Add(new RolledDie(ordered[i].LabelKey, ordered[i].Die, ordered[i].Value,
+                                        i < counted));
+
+            int ones = thrown.Count(t => t.Value == 1);
+
+            return new PoolResult(rolls, total, impact, ones);
+        }
+
         // DEVELOPER ONLY - not localized, must never reach the screen
         public override string ToString() =>
             string.Join(", ", Rolls.Select(r => r.ToString())) +

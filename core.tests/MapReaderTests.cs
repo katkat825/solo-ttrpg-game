@@ -363,5 +363,95 @@ namespace Core.Tests
             Assert.Contains("squares", legend);
             Assert.Contains("lines", legend);
         }
+
+        // ---- numbered spawns: the map says where, the encounter says who (P2) ----
+
+        [Fact]
+        public void NumberedSquaresAreSpawnSlots()
+        {
+            MapLayout map = Read(
+                "+-+-+-+",
+                "|@ 1 2|",
+                "+-+-+-+");
+
+            Assert.Equal(new Cell(0, 0), map.Start);
+            Assert.Equal(2, map.Spawns.Count);
+            Assert.Equal(new Cell(1, 0), map.SpawnAt(1));
+            Assert.Equal(new Cell(2, 0), map.SpawnAt(2));
+        }
+
+        // the hero is slot 0 and keeps its own glyph, because every map must have one
+        [Fact]
+        public void TheHeroIsSlotZero()
+        {
+            MapLayout map = Read(
+                "+-+-+",
+                "|@ 1|",
+                "+-+-+");
+
+            Assert.Equal(map.Start, map.SpawnAt(MapLayout.HeroSlot));
+            Assert.DoesNotContain(MapLayout.HeroSlot, map.Spawns.Keys);
+        }
+
+        // a spawn stands on floor, for the same reason the hero's start does: a spawn you can see
+        // in the picture cannot drift into a wall
+        [Fact]
+        public void ASpawnStandsOnFloor()
+        {
+            MapLayout map = Read(
+                "+-+-+",
+                "|@ 3|",
+                "+-+-+");
+
+            Assert.Equal(Tile.Floor, map.At(new Cell(1, 0)));
+            Assert.True(map.IsPassable(new Cell(1, 0)));
+        }
+
+        [Fact]
+        public void ASlotUsedTwiceIsRefused()
+        {
+            string problem = Refuse(
+                "+-+-+-+",
+                "|@ 1 1|",
+                "+-+-+-+");
+
+            Assert.Contains("spawn 1", problem);
+        }
+
+        [Fact]
+        public void ASlotTheMapDoesNotHaveIsNothing()
+        {
+            MapLayout map = Read(
+                "+-+-+",
+                "|@ 1|",
+                "+-+-+");
+
+            Assert.Null(map.SpawnAt(7));
+        }
+
+        // a map is edited as it is played - a door forced, wreckage dropped - and the spawns have
+        // to survive that, because an encounter may still be placing things after the first blow
+        [Fact]
+        public void SpawnsSurviveTheMapBeingChanged()
+        {
+            MapLayout map = Read(
+                "+-+-+-+",
+                "|@ 1 .|",
+                "+-+-+-+");
+
+            MapLayout after = map.With(new Cell(2, 0), Tile.Rough)
+                                 .With(Border.East(new Cell(0, 0)), Edge.Wall);
+
+            Assert.Equal(new Cell(1, 0), after.SpawnAt(1));
+        }
+
+        // and the legend says so, derived rather than written out
+        [Fact]
+        public void TheLegendMentionsSpawns()
+        {
+            Assert.Contains(MapReader.FirstSpawnGlyph.ToString(), MapReader.Legend);
+            Assert.Contains("spawn", MapReader.Legend);
+        }
+
     }
 }

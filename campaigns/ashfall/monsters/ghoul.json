@@ -1,0 +1,15 @@
+{
+  "id": "ghoul",
+  "tier": "rival",
+  "vigor": 10,
+  "defense": 11,
+  "attributes": { "might": "d8", "grace": "d6" },
+  "skills": { "brawl": "d6" },
+  "gear": { "id": "claw", "die": "d6" },
+  "behaviour": "strongest_first",
+  "loot": [
+    { "item": "cold_iron_axe", "weight": 1 },
+    { "item": "scale_coat", "weight": 2 },
+    { "weight": 3 }
+  ]
+}

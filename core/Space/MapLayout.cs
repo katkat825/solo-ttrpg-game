@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Core.Space
 {
@@ -38,6 +39,30 @@ namespace Core.Space
         // apologising for it
         public Cell Start { get; }
 
+        // AND HERE IS THAT GROWTH (P2). Numbered squares in the map - `1` through `9` - are where
+        // everything else stands, and the map says WHERE while the encounter says WHO
+        // (CONTENT_PIPELINE.md P2/P4). Phase C hardcoded four Rabble positions in a scene export;
+        // this is where they become part of the room they are standing in.
+        //
+        // A SLOT IS A NUMBER AND NOT A NAME, because a name would be a second thing to keep in
+        // step between two files - rename the spawn in the map and the encounter stops finding it,
+        // silently. A number is unmistakable in the picture and unmistakable in the JSON beside it.
+        //
+        // The hero is slot 0 and keeps its own glyph, because where the hero starts is the one
+        // spawn every map must have (a map with no `@` is refused) and it reads better as `@`
+        readonly Dictionary<int, Cell> _spawns;
+
+        public IReadOnlyDictionary<int, Cell> Spawns => _spawns;
+
+        public const int HeroSlot = 0;
+
+        // where slot n is, or null for a slot this map does not have - which an encounter naming
+        // a spawn the map never drew has to be told about rather than crash on
+        public Cell? SpawnAt(int slot) =>
+            slot == HeroSlot ? Start
+            : _spawns.TryGetValue(slot, out Cell cell) ? cell
+            : (Cell?)null;
+
         // row-major, and private: everything outside asks At(), so no caller can index it with a
         // cell the map does not have
         readonly Tile[] _tiles;
@@ -50,11 +75,16 @@ namespace Core.Space
         readonly Edge[] _horizontal;
 
         public MapLayout(int columns, int rows, Tile[] tiles, Cell start,
-                         Edge[] vertical = null, Edge[] horizontal = null)
+                         Edge[] vertical = null, Edge[] horizontal = null,
+                         IReadOnlyDictionary<int, Cell> spawns = null)
         {
             Columns = columns < 0 ? 0 : columns;
             Rows = rows < 0 ? 0 : rows;
             Start = start;
+
+            _spawns = spawns == null
+                ? new Dictionary<int, Cell>()
+                : spawns.Where(s => s.Key != HeroSlot).ToDictionary(s => s.Key, s => s.Value);
 
             _tiles = Sized(tiles, Columns * Rows);
             _vertical = Sized(vertical, (Columns + 1) * Rows);
@@ -151,7 +181,7 @@ namespace Core.Space
             var changed = (Tile[])_tiles.Clone();
             changed[cell.Y * Columns + cell.X] = tile;
 
-            return new MapLayout(Columns, Rows, changed, Start, _vertical, _horizontal);
+            return new MapLayout(Columns, Rows, changed, Start, _vertical, _horizontal, _spawns);
         }
 
         // and the same map with one LINE changed, which is how a door opens
@@ -173,7 +203,7 @@ namespace Core.Space
                 horizontal[border.Cell.Y * Columns + border.Cell.X] = edge;
             }
 
-            return new MapLayout(Columns, Rows, _tiles, Start, vertical, horizontal);
+            return new MapLayout(Columns, Rows, _tiles, Start, vertical, horizontal, _spawns);
         }
 
         // row-major, the same order Grid.Cells uses, so a view can walk both together

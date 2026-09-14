@@ -36,11 +36,20 @@ namespace Core.Characters
         readonly Dictionary<Skill, Die> _skills = new Dictionary<Skill, Die>();
         readonly List<Condition> _conditions = new List<Condition>();
 
+        // WHAT IS IN ITS HANDS, and what is on its back (P1). Two slots and not a bag: a hero
+        // holds one thing and wears one thing, and CORE_RULES.md section 13 keeps a second
+        // inventory dead. Both default to nothing, which is a real state - an unarmed, unarmoured
+        // actor throws a smaller pool and has the Defense its statblock gave it
+        public Gear Wielded { get; private set; } = Gear.Nothing;
+
+        public Gear Worn { get; private set; } = Gear.Nothing;
+
+        // the gear die as it is NOW - notched down by a Trouble, or whatever it was made as
         public Die Weapon { get; private set; } = Die.None;
 
-        public string WeaponId { get; private set; } = "unarmed";
+        public string WeaponId => Wielded.Id;
 
-        public string WeaponKey => KeyConventions.GearName(WeaponId);
+        public string WeaponKey => Wielded.NameKey;
 
         // clamped at 0 in the one place it is written, so "how much vigor" has a single answer
         // it used to be able to go negative and CombatEngine papered over it with Math.Max(0, ...)
@@ -50,7 +59,17 @@ namespace Core.Characters
 
         // the number an attacker's pool must beat
         // by far the strongest balance lever - tune encounters here, not with Vigor
-        public int Defense { get; set; }
+        //
+        // WHAT THE STATBLOCK SAID, plus whatever is worn (P1). Split in two so that taking the
+        // plate off gives the number back exactly, and so the sim can move the statblock's own
+        // figure without an armoured actor's total drifting from it
+        public int BaseDefense { get; set; }
+
+        public int Defense
+        {
+            get => BaseDefense + Worn.Defense;
+            set => BaseDefense = value;
+        }
 
         // CORE_RULES.md section 7. Read by Encounter, which is what makes it mean something -
         // it was set and never read anywhere in the repo until Phase C (SEAMS.md section 3)
@@ -96,6 +115,16 @@ namespace Core.Characters
         // one reaction for a Dread, none for anything else. named here so C3's minimal reaction
         // and C6's boss read the same number
         public int ReactionsPerRound { get; set; }
+
+        // HOW IT PICKS WHO TO SWING AT, as a name out of the engine's own closed vocabulary
+        // (`Core.Combat.Behaviours`). Null means the engine's default, which is what every
+        // built-in statblock says and what `Encounter.BehaviourOf` falls back to.
+        //
+        // A NAME AND NOT A SELECTOR, because this is the field a campaign writes (Phase P) and
+        // content is pure data, never code (ARCHITECTURE.md section 6). The seam stays open for
+        // code - Encounter.Behaviour attaches a real ITargetSelector per foe, and C6's phase change
+        // swaps one - and what a campaign gets is the right to CHOOSE from the ones that ship
+        public string Behaviour { get; set; }
 
         public IReadOnlyList<Condition> Conditions => _conditions;
 
@@ -153,11 +182,23 @@ namespace Core.Characters
             return this;
         }
 
-        public Actor WithWeapon(string weaponId, Die d)
+        public Actor WithWeapon(string weaponId, Die d) => Wielding(new Gear(weaponId, d));
+
+        // IN ITS HANDS. The gear die joins the pool for the checks this gear is for, which for
+        // everything the engine ships is all of them (Gear.Supports)
+        public Actor Wielding(Gear gear)
         {
-            WeaponId = weaponId;
-            Weapon = d;
-            BaseWeapon = d;
+            Wielded = gear ?? Gear.Nothing;
+            Weapon = Wielded.Die;
+            BaseWeapon = Wielded.Die;
+            return this;
+        }
+
+        // ON ITS BACK. Defense is the scalpel (SIMULATION.md section 3), so this is the single
+        // most powerful thing a campaign can hand out and it is one number
+        public Actor Wearing(Gear gear)
+        {
+            Worn = gear ?? Gear.Nothing;
             return this;
         }
 
@@ -196,6 +237,34 @@ namespace Core.Characters
             Weapon = BaseWeapon;
             Notches = 0;
         }
+
+        // WHAT A HIT WITH IT LEAVES BEHIND, beyond the damage - the "tagged attacks" half of
+        // CORE_RULES.md section 9, which nothing could express until gear was data (P1). Empty for
+        // everything the engine ships
+        public IReadOnlyList<Condition> Inflicts => Wielded.Inflicts;
+
+        // ---- and what has been picked up (P1) ----
+
+        // WHAT IS IN THE SATCHEL: item ids, in the order they were found.
+        //
+        // NOT A SECOND INVENTORY. CORE_RULES.md section 13 keeps that dead, and this is not one -
+        // it is the hero's only one, and a list of ids rather than a system: no weight, no slots,
+        // no stacks, no sorting. Somewhere for a dropped item to go until Phase R gives the sheet
+        // a place to show it and a way to swap it into a hand.
+        //
+        // IDS AND NOT `Gear`, because a save has to survive a campaign being uninstalled: a hero
+        // carrying `ashfall.claw_necklace` in a world where ashfall is gone is carrying a name
+        // nothing can resolve, and that degrades (P6) rather than failing to load
+        readonly List<string> _satchel = new List<string>();
+
+        public IReadOnlyList<string> Satchel => _satchel;
+
+        public void Carry(string itemId)
+        {
+            if (!string.IsNullOrWhiteSpace(itemId)) _satchel.Add(itemId);
+        }
+
+        public bool Drop(string itemId) => _satchel.Remove(itemId);
 
         // ---- strain, the cost of channelling (CORE_RULES.md section 10) ----
 
@@ -265,7 +334,12 @@ namespace Core.Characters
             var p = new Pool();
             p.Add(a.Key(), Attribute(a));
             if (s != Skill.None) p.Add(s.Key(), SkillDie(s));
-            if (useWeapon) p.Add(WeaponKey, Weapon);
+
+            // "the tool you're using" is not a tool you are not using (CORE_RULES.md section 1).
+            // Everything the engine ships supports every check, so nothing here moves until a
+            // campaign authors a weapon that names a skill
+            if (useWeapon && Wielded.Helps(s)) p.Add(WeaponKey, Weapon);
+
             return p;
         }
 
@@ -330,6 +404,16 @@ namespace Core.Characters
         }
 
         public void Heal(int amount) => Vigor = Math.Min(MaxVigor, Vigor + amount);
+
+        // PUT BACK WHERE IT WAS, for a save being loaded (CONTENT_PIPELINE.md P6) and for nothing
+        // else. `RestoreNerve` above is the same method for the same reason and was written first.
+        //
+        // NOT `Damage(MaxVigor - to)`, which is the obvious way to do it and is wrong twice: it
+        // would apply Winded and Reeling on the way down, and the save already knows which
+        // Conditions this actor has - so the thresholds would fire a second time and a hero
+        // restored to a third of his Vigor would come back carrying a Condition he had already
+        // shrugged off. A save sets the state; it does not replay the fight that produced it
+        public void RestoreVigor(int to) => Vigor = Math.Clamp(to, 0, MaxVigor);
 
         // DEVELOPER ONLY - not localized, never shown to a player
         public override string ToString() =>

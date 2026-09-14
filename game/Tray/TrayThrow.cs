@@ -8,6 +8,19 @@ using Core.Resolution;
 namespace Game.Tray
 {
     // one throw: what the table produced, and what the rules made of it
+    //
+    // IT DEGRADES RATHER THAN THROWING, and that is P6's doing (SEAMS.md section 9, which named
+    // this class as the specific obstacle to save/load: "a saved throw whose rolls and slots
+    // disagree would crash rather than degrade"). Two things used to be exceptions - a roll that
+    // no die on the felt threw, and a Snag with no 1 under it - and both are now recorded in
+    // `Disagreement` with the marks left off rather than the run ended.
+    //
+    // DEGRADING IS NOT SHRUGGING. The original comments were right that a cue pointing at the
+    // wrong die is a silent lie, so nothing here is silent: a disagreement is a sentence, the
+    // live table prints it (DiceTray), and the marks that would have been wrong are simply not
+    // drawn. What changed is only WHO decides it is fatal - a save being read back is a thing to
+    // report and carry on from, and the table coming apart mid-fight is a bug to shout about, and
+    // an exception in here could not tell them apart.
     public sealed class TrayThrow
     {
         public PoolResult Result { get; }
@@ -36,23 +49,55 @@ namespace Game.Tray
         // and deliberately not this
         public int SnaggedSlot { get; }
 
+        // WHAT DOES NOT ADD UP, or empty when everything does. Never null.
+        //
+        // A pool and a felt that have come apart produce a throw with no marks on it rather than
+        // no throw at all - which is the difference between a save that loads with a warning and a
+        // save that cannot be loaded (CONTENT_PIPELINE.md P6)
+        public string Disagreement { get; }
+
+        public bool Agrees => Disagreement.Length == 0;
+
         public TrayThrow(PoolResult result, IReadOnlyList<TraySlot> slots)
         {
             Result = result;
-            Slots = slots;
-            Roles = Assign(result, slots);
-            SnaggedSlot = FindSnag(result, slots);
+            Slots = slots ?? System.Array.Empty<TraySlot>();
+
+            var apart = new List<string>();
+
+            Roles = Assign(result, Slots, apart);
+            SnaggedSlot = FindSnag(result, Slots, apart);
+
+            Disagreement = string.Join(" ", apart);
+        }
+
+        // A THROW READ OFF THE FELT RATHER THAN ROLLED (P6). The faces are the whole of what a
+        // saved throw is, and what they MEAN is `PoolResult.From` - the same arithmetic the
+        // resolver runs, so a restored throw cannot disagree with the one that was saved.
+        //
+        // This is the shape SEAMS.md section 9 was asking for: nothing is computed in a
+        // constructor from two fields that a file could have set inconsistently, because the file
+        // only sets one of them
+        public static TrayThrow Read(IReadOnlyList<TraySlot> slots)
+        {
+            var faces = new List<(string, Die, int)>();
+
+            foreach (TraySlot slot in slots ?? System.Array.Empty<TraySlot>())
+                faces.Add((slot.LabelKey, slot.Die, slot.Value));
+
+            return new TrayThrow(PoolResult.From(faces), slots);
         }
 
         // puts each roll back on the die it came off
         // matched on trait, size and face together, each slot claimed at most once,
         // so two identical dice are handed out one apiece
-        // the lists are a permutation of each other, so no match throws rather than
-        // quietly leaving a die without a role
+        // the lists are a permutation of each other, so a roll with no die under it is recorded
+        // as a disagreement and left unmarked, rather than quietly given the wrong die
         //
         // NOTHING HERE RE-DECIDES ANYTHING - Counted comes from RolledDie.Counted,
         // Impact from PoolResult.Impact
-        static DieRole[] Assign(PoolResult result, IReadOnlyList<TraySlot> slots)
+        static DieRole[] Assign(PoolResult result, IReadOnlyList<TraySlot> slots,
+                                List<string> apart)
         {
             var roles = new DieRole[slots.Count];
             var claimed = new bool[slots.Count];
@@ -73,10 +118,14 @@ namespace Game.Tray
                     break;
                 }
 
+                // UNMARKED RATHER THAN MISMARKED. The die keeps DieRole.None, which draws no
+                // ring at all - the one outcome that cannot be read as a claim about the rules
                 if (found < 0)
-                    throw new InvalidOperationException(
-                        $"The resolver returned {roll}, which no die on the felt threw. " +
-                        "The pool and the table have come apart.");
+                {
+                    apart.Add($"The resolver returned {roll}, which no die on the felt threw.");
+                    slotOf[i] = -1;
+                    continue;
+                }
 
                 claimed[found] = true;
                 slotOf[i] = found;
@@ -91,6 +140,8 @@ namespace Game.Tray
             {
                 if (result.Rolls[i].Counted || result.Rolls[i].Die != result.Impact) continue;
 
+                if (slotOf[i] < 0) continue;
+
                 roles[slotOf[i]] = DieRole.Impact;
                 break;
             }
@@ -102,10 +153,11 @@ namespace Game.Tray
         // scanning for the 1 rather than being handed it, because PoolResult counts 1s and does
         // not say which die carried one - the tier is the rules' answer and the address is ours
         //
-        // both failures throw rather than shrug: a Snag with no 1 on the felt, or a second 1 the
-        // rules did not count, each mean the pool and the table have come apart, and a cue
-        // pointing at the wrong die is exactly the silent lie TrayThrow.Assign exists to prevent
-        static int FindSnag(PoolResult result, IReadOnlyList<TraySlot> slots)
+        // both failures are recorded and neither is guessed at: a Snag with no 1 on the felt, or
+        // a second 1 the rules did not count, each mean the pool and the table have come apart,
+        // and a cue pointing at the wrong die is exactly the silent lie this exists to prevent. So
+        // an ambiguous snag points at NOTHING - no cue is better than the wrong one
+        static int FindSnag(PoolResult result, IReadOnlyList<TraySlot> slots, List<string> apart)
         {
             if (!result.Snag) return -1;
 
@@ -116,15 +168,16 @@ namespace Game.Tray
                 if (slots[s].Value != 1) continue;
 
                 if (found >= 0)
-                    throw new InvalidOperationException(
-                        "The rules called one 1 and the felt is showing more than one.");
+                {
+                    apart.Add("The rules called one 1 and the felt is showing more than one.");
+                    return -1;
+                }
 
                 found = s;
             }
 
             if (found < 0)
-                throw new InvalidOperationException(
-                    "The rules called a Snag and no die on the felt is showing a 1.");
+                apart.Add("The rules called a Snag and no die on the felt is showing a 1.");
 
             return found;
         }

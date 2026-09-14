@@ -1,0 +1,25 @@
+; THE CISTERN - where the Mother Stalk is, and the last room of the chapter.
+;
+; 8 by 6. Open, because a boss fight wants room to move: CORE_RULES.md section 8 gives a Dread a
+; phase change at half its Vigor, and a room with nowhere to go turns that into a corner to be
+; ground down in rather than a fight that changes shape.
+;
+; The standing water along the west wall is difficult ground, which is what the two Rabble are
+; there to push you into.
+;
+;   .  floor      ~  difficult ground   #  rock      @  the hero starts
+;   1-9 a spawn   |  wall up a line     -  wall along a line   x  door, shut   +  a corner
+
++-+-+-+-+-+-+-+-+
+|. . 2 .|. . . .|
++ + + + + + + + +
+|. . . . . . . .|
++ + + + + + + + +
+|~ ~ ~ . . 1 . .|
++ + + + + + + + +
+|. . @ . . . . .|
++ + + + + + +-+-+
+|. . . # # . . .|
++ + + + + + + + +
+|. . . . . . 3 .|
++-+-+-+-+-+-+-+-+

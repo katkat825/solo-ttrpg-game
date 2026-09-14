@@ -72,6 +72,13 @@ namespace Game.Fight
 
         [Export] public PackedScene DreadPiece { get; set; }
 
+        // THE HERO'S FIGURE, AND ONLY SO THAT A PACK CAN VARY IT (MINIS_AND_ART.md A0). The board
+        // stands its own hero out of `board.tscn`, which is where it belongs and is not changed by
+        // this phase; what this is for is the one case the shared roster needs a `PackedScene` for
+        // `barbarian` - a pack whose mini is "the shipped Barbarian, bone-white". Leave it unset
+        // and such a variant stands on a placeholder box with a sentence saying why
+        [Export] public PackedScene HeroPiece { get; set; }
+
         // WHERE THE ROOM STARTS. Content, hardcoded exactly as the door check is (Board/DoorCheck.cs)
         // and for the same reason: Phase P reads spawn points out of the campaign's own map, and
         // until then a room is a handful of squares said in one place. Set in table.tscn
@@ -91,6 +98,40 @@ namespace Game.Fight
         // most rooms have none - the sentinel below is what "no boss in this room" looks like
         // until Phase P reads an encounter out of a campaign
         [Export] public Vector2I DreadAt { get; set; } = Nowhere;
+
+        // WHO IS IN THE ROOM, BY ID (P0). Named in the scene rather than in the code, so a campaign
+        // that ships its own `ashfall.ghoul` can be fought by typing it here and changing nothing
+        // else. P4 reads all of this out of an `encounters/` file and these exports go with it
+        [Export] public string RabbleId { get; set; } = EngineIds.Rabble;
+
+        [Export] public string RivalId { get; set; } = EngineIds.Rival;
+
+        [Export] public string DreadId { get; set; } = EngineIds.Dread;
+
+        // WHAT THE HERO IS CARRYING WHEN THE FIGHT STARTS, by item id out of a campaign's
+        // `items/` folder (P1). Empty means whatever his statblock gave him.
+        //
+        // "Getting better means bigger rocks" (CORE_RULES.md pillar 3) is a content statement from
+        // here on: a better axe is a bigger die in a file, and swapping one in is this line in the
+        // scene. Phase R gives the hero a sheet to do it from and this export goes with it
+        [Export] public string HeroWeapon { get; set; } = "";
+
+        [Export] public string HeroArmour { get; set; } = "";
+
+        // WHO STANDS ON EACH OF THE MAP'S SPAWN SLOTS (P2). One id per slot, in order - the first
+        // entry is slot `1`, the second is slot `2`, and so on. Left empty, the fight falls back to
+        // the squares named above, which is how the shipped room still works.
+        //
+        // THE MAP SAYS WHERE AND THIS SAYS WHO. That split is what lets one room be four hounds in
+        // one chapter and a ghoul in the next without anybody redrawing it.
+        //
+        // AND P4 MOVED IT INTO THE CAMPAIGN, exactly as predicted: when the board was pointed at
+        // an encounter, `Board.Plan` is this same list read out of `encounters/`, and this export
+        // is what is left for a scene that names a room without one. The prediction was that
+        // moving it would be "a change of where the list is read from and nothing else", and the
+        // diff is `Roster()` below
+        [Export] public Godot.Collections.Array<string> Spawns { get; set; } =
+            new Godot.Collections.Array<string>();
 
         // the beat between one automatic thing and the next, in seconds. foe turns are not the
         // player's to drive, so they are the one part of a fight that can run away from the eye -
@@ -120,9 +161,16 @@ namespace Game.Fight
         // 0 means the clock, which is what an actual session wants
         [Export] public int Seed { get; set; }
 
-        // the roster this fight is built from. one line, the same one Main.cs and Board name, so
-        // a data-backed source (Phase P) is a change here and nowhere below
-        readonly IArchetypeSource _archetypes = new BuiltInArchetypes();
+        // the roster this fight is built from - the engine's own plus every campaign on disk (P0)
+        readonly Game.Campaigns.Library _archetypes = Game.Campaigns.Library.Load(quiet: true);
+
+        MiniMaker _minis;
+
+        // WHAT THE DICE DECIDE THAT IS NOT A POOL. A drop is chance, and every source of chance in
+        // this game goes through `IRng` so a seeded run repeats (CONVENTIONS.md 6) - a drop rolled
+        // off anything else would be the first thing to break that. Seeded from the same number the
+        // resolver is, so re-running a fight re-runs the loot with it
+        IRng _luck;
 
         readonly Pieces _pieces = new Pieces();
 
@@ -289,18 +337,38 @@ namespace Game.Fight
                 return;
             }
 
-            IRng rng = Seed != 0 ? new SeededRng(Seed) : new SeededRng((int)Time.GetTicksMsec());
+            int seed = Seed != 0 ? Seed : (int)Time.GetTicksMsec();
+
+            IRng rng = new SeededRng(seed);
+
+            // a stream of its own, so a Nerve-bought re-throw cannot shift what a ghoul was
+            // carrying - two kinds of chance that have nothing to do with each other
+            _luck = new SeededRng(seed + 1);
 
             // BOTH AT ONCE, which is the C0 verify step: the table animates what it is told and
             // the transcript says what it was told, so a mismatch between them is visible without
             // instrumenting anything (CONVENTIONS.md 6)
             _watching = new CompositeCombatObserver(
-                new TableObserver(_board, _pieces),
+                new TableObserver(_board, _pieces) { Loot = Drops },
                 new RecordingCombatObserver(GD.Print));
 
             _engine = new CombatEngine(new StandardResolver(rng), observer: _watching);
 
+            // THE FIGURE A FOE STANDS AS, RESOLVED ACROSS EVERY PACK (Phase A). Built here rather
+            // than held as a field, because it needs the board's own metrics and paint - a piece
+            // assembled from a supplied model has to be the same size and wear the same shader as
+            // one instanced from a scene, or the board reads as two different games
+            _minis = new MiniMaker(
+                new MiniScenes(HeroPiece, RabblePiece, RivalPiece, DreadPiece),
+                _archetypes.Shelf)
+            {
+                Painted = _board.Paint is ShaderMaterial shader ? shader.Shader : null,
+                BasePaint = _board.Paint,
+                CellSize = _board.Metrics.CellSize,
+            };
+
             Muster();
+            Equip();
 
             _fight = new Encounter(_engine, _hero, _foes);
 
@@ -322,7 +390,69 @@ namespace Game.Fight
             foreach (Piece piece in _pieces.All)
                 GD.Print($"        {piece.Actor} on {_board.CellOf(piece.Mini)}");
 
-            RollTheOrder();
+            if (Resuming != null) PickItBackUp();
+            else RollTheOrder();
+        }
+
+        // ---- a save, taken and put back (CONTENT_PIPELINE.md P6) ----
+
+        // SET BEFORE THE TABLE IS ADDED TO THE TREE, the same moment every other setup export has
+        // to be set: Godot readies a subtree inside `AddChild`, so this is the last instant
+        // anything can be said to a fight before it musters. Not an `[Export]`, because a
+        // `SaveGame` is not a Variant and has no business being one - it is a plain object handed
+        // over by whoever opened the file
+        public Content.Saves.SaveGame Resuming { get; set; }
+
+        // WHAT WAS ON THE FELT WHEN THE SAVE WAS TAKEN, read back. Null for a save with nothing on
+        // it, and for a fight that was not resumed at all.
+        //
+        // READ AND NOT RE-SEATED, and the distinction is the honest one. The faces round-trip
+        // exactly - `TrayThrow.Read` runs the same arithmetic on them that read them the first
+        // time, so the total, the Impact die, the rings and the snag are the ones that were saved.
+        // What does NOT happen is the physical dice being put back down showing those faces: these
+        // are rigid bodies that arrive at a face by being thrown, and setting one to a face is
+        // teleporting it, which is the one thing this tray has never done. A resumed fight
+        // therefore knows what was thrown and has a clear felt
+        public TrayThrow Restored { get; private set; }
+
+        // TAKE ONE. Everything it needs is public already, which is worth noticing: a save is a
+        // reading of the table, not a privileged view into it
+        public Content.Saves.SaveGame Save() => Game.Saves.Savepoint.Of(this, _board, _tray);
+
+        void PickItBackUp()
+        {
+            foreach (Content.Schema.ContentProblem problem in
+                     Game.Saves.Savepoint.Apply(Resuming, this, _board))
+                GD.PushWarning("save: " + problem);
+
+            Restored = FeltOf(Resuming);
+
+            // A SAVE TAKEN BEFORE THE FIGHT BEGAN still has to start one, and the honest way to
+            // start one is the way it is always started - on the real tray, in front of the player
+            if (!Resuming.MidFight) { RollTheOrder(); return; }
+
+            _order.Write(_fight.Order, _board.Metrics);
+
+            GD.Print("");
+            GD.Print($"resumed round {_fight.Round}, {_fight.Acting?.DebugName} to act with " +
+                     $"{_fight.ActionsLeft} action(s) left");
+            GD.Print("order   " + string.Join(", ", _fight.Order.Select(
+                a => $"{a.DebugName} {_fight.InitiativeOf(a)}")));
+
+            if (Restored != null)
+                foreach (string line in Restored.DebugLines(0, _text)) GD.Print("felt   " + line);
+        }
+
+        static TrayThrow FeltOf(Content.Saves.SaveGame save)
+        {
+            if (save.Felt.Count == 0) return null;
+
+            var slots = new List<TraySlot>();
+
+            foreach (Content.Saves.SavedDie die in save.Felt)
+                slots.Add(new TraySlot(die.Trait, die.Die, die.Value));
+
+            return TrayThrow.Read(slots);
         }
 
         // ONE THROW, AT THE TOP, ON THE REAL TRAY (CORE_RULES.md section 8). The hero's initiative
@@ -381,21 +511,117 @@ namespace Game.Fight
         {
             Enlist(_hero, _board.Piece);
 
+            if (FromTheMap()) return;
+
             // NUMBERED FROM 1, so presentation can say "Rabble 3" out of one key with a {0} in it
             // rather than gluing an integer onto a translated name (Actor.NameKey)
             int ordinal = 1;
 
             foreach (Vector2I at in RabbleAt ?? new Godot.Collections.Array<Vector2I>())
-                Recruit(EngineIds.Rabble, RabblePiece, at, $"Rabble{ordinal}", ordinal++);
+                Recruit(RabbleId, at, $"Rabble{ordinal}", ordinal++);
 
-            if (RivalAt != Nowhere) Recruit(EngineIds.Rival, RivalPiece, RivalAt, "Rival", 0);
+            if (RivalAt != Nowhere) Recruit(RivalId, RivalAt, "Rival", 0);
 
-            if (DreadAt != Nowhere) Recruit(EngineIds.Dread, DreadPiece, DreadAt, "Dread", 0);
+            if (DreadAt != Nowhere) Recruit(DreadId, DreadAt, "Dread", 0);
         }
 
-        void Recruit(string id, PackedScene model, Vector2I at, string name, int ordinal)
+        // THE ROOM AS THE MAP DREW IT (P2). One foe per spawn slot, in slot order, and the piece
+        // each stands as is chosen by its tier - the last thing in here a campaign cannot say for
+        // itself, and it goes when a statblock can name its own mini.
+        //
+        // False when there is nothing to place this way, and then the squares in the scene are
+        // used instead. That is a fallback rather than a rival: the shipped cellar has no spawn
+        // glyphs drawn in it, and a room that predates the feature should keep working untouched
+        bool FromTheMap()
         {
-            Mini piece = _board.Place(model, new Cell(at.X, at.Y), name);
+            IReadOnlyList<string> spawns = Roster();
+
+            if (spawns.Count == 0) return false;
+
+            // numbered from 1 so presentation can say "Rabble 3" out of one key with a {0} in it,
+            // exactly as the hardcoded path does. Only the crowd needs it, and the crowd is Rabble
+            int ordinal = 1;
+            int placed = 0;
+
+            for (int slot = 1; slot <= spawns.Count; slot++)
+            {
+                string id = spawns[slot - 1];
+
+                // a hole in the list is how you say "this room uses three of its four slots"
+                if (string.IsNullOrWhiteSpace(id)) continue;
+
+                Cell? at = _board.Map.SpawnAt(slot);
+
+                if (at == null)
+                {
+                    GD.PushError($"fight: the encounter puts '{id}' on spawn {slot} and " +
+                                 $"{_board.Loaded} has no such slot - it has " +
+                                 $"{Listed(_board.Map)}");
+                    continue;
+                }
+
+                if (!_archetypes.Has(id))
+                {
+                    GD.PushError($"fight: there is no '{id}' in the roster " +
+                                 $"({string.Join(", ", _archetypes.Ids)}) - spawn {slot} is empty");
+                    continue;
+                }
+
+                bool crowd = _archetypes.Create(id).Tier == Tier.Rabble;
+
+                Recruit(id, new Vector2I(at.Value.X, at.Value.Y),
+                        $"Spawn{slot}", crowd ? ordinal++ : 0, slot);
+
+                placed++;
+            }
+
+            GD.Print($"fight: {placed} on the spawn slots of {_board.Loaded}");
+
+            return true;
+        }
+
+        // THE ENCOUNTER'S IF THE BOARD LOADED ONE, and the scene's otherwise. One list either
+        // way, so everything below this line is the same code for a campaign and for a hand-set
+        // room - which is the whole reason `EncounterPlan.Roster` hands back a slot-ordered list
+        // rather than something the fight would have to unpack differently
+        IReadOnlyList<string> Roster()
+        {
+            if (_board.Plan != null) return _board.Plan.Roster(_board.Campaign);
+
+            return Spawns ?? (IReadOnlyList<string>)System.Array.Empty<string>();
+        }
+
+        static string Listed(MapLayout map) =>
+            map.Spawns.Count == 0 ? "none at all" : string.Join(", ", map.Spawns.Keys);
+
+        // WHICH MINI A FOE STANDS AS - ONE LOOKUP AND NO BRANCH (MINIS_AND_ART.md A1).
+        //
+        // This used to be a `switch` on Tier, and said at the line why: "the only thing a
+        // campaign's statblock already says that the scene can read. A statblock that names its
+        // own model (Phase A) replaces this with one lookup and no branch." It does, and the tier
+        // is what is left when nothing was named - the figure every campaign written before this
+        // phase keeps, unchanged.
+        //
+        // <paramref name="slot"/> is the map spawn this one was placed on, or 0 for a foe the
+        // scene placed by square. Carried so a save has a stable name for each foe (P6) - see
+        // `Piece.Slot`
+        void Recruit(string id, Vector2I at, string name, int ordinal, int slot = 0)
+        {
+            // a scene naming somebody the roster does not have is worth a sentence rather than an
+            // exception - the campaign that had them may simply not be installed
+            if (!_archetypes.Has(id))
+            {
+                GD.PushError($"fight: there is no '{id}' in the roster " +
+                             $"({string.Join(", ", _archetypes.Ids)}) - '{name}' is not in this fight");
+                return;
+            }
+
+            Actor actor = _archetypes.Create(id);
+
+            Mini piece = _board.Place(
+                _minis.Make(Content.Campaigns.ContentId.CampaignOf(id), _archetypes.MiniFor(id),
+                            actor.Tier, name),
+                new Cell(at.X, at.Y), name);
 
             if (piece == null)
             {
@@ -403,12 +629,10 @@ namespace Game.Fight
                 return;
             }
 
-            Actor actor = _archetypes.Create(id);
-
             if (ordinal > 0) actor.Numbered(ordinal);
 
             _foes.Add(actor);
-            Enlist(actor, piece);
+            Enlist(actor, piece, slot);
 
             // AND WHAT IT TURNS INTO. A boss is the only thing that does, and what it turns into
             // is a statblock - so this is the placeholder roster's answer (PhaseChange.Standard)
@@ -417,11 +641,62 @@ namespace Game.Fight
             if (actor.Tier == Tier.Dread) _boss = PhaseChange.Standard(actor);
         }
 
+        // WHAT THE HERO IS HOLDING, out of the campaign's own `items/` (P1). Named in the scene,
+        // so a better axe is a file and a line of scene data and no code at all
+        void Equip()
+        {
+            Take(HeroWeapon, gear => _hero.Wielding(gear), "wielding");
+            Take(HeroArmour, gear => _hero.Wearing(gear), "wearing");
+        }
+
+        void Take(string id, System.Action<Gear> equip, string how)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return;
+
+            Gear gear = _archetypes.Items.Of(id);
+
+            if (gear == null)
+            {
+                // the campaign that shipped it may simply not be installed, which is a sentence
+                // rather than a crash
+                GD.PushError($"fight: there is no item '{id}' - the hero keeps what his statblock " +
+                             $"gave him ({string.Join(", ", _archetypes.Items.Ids)})");
+                return;
+            }
+
+            equip(gear);
+
+            GD.Print($"        {_hero.DebugName} is {how} {gear}");
+        }
+
+        // WHAT IT WAS CARRYING, drawn once as it falls (P1). The table is the monster's own -
+        // written in the campaign's file beside its statblock - and the draw goes through the
+        // fight's `IRng`, so the same seed finds the same thing on the same body.
+        //
+        // THE HERO PICKS IT UP, because at a table that is what happens: somebody says "anything
+        // on him?" and the answer goes on the sheet. Phase R is where the sheet can show it and
+        // swap it into a hand; until then the satchel is a list of ids and this is how it grows
+        void Drops(Actor fallen)
+        {
+            if (fallen == null || ReferenceEquals(fallen, _hero)) return;
+
+            string item = _archetypes.LootFor(fallen.Id).Draw(_luck);
+
+            if (item == null) return;
+
+            _hero.Carry(item);
+
+            Gear gear = _archetypes.Items.Of(item);
+
+            GD.Print($"        {fallen.DebugName} was carrying {gear?.ToString() ?? item} - " +
+                     $"{_hero.DebugName} has {_hero.Satchel.Count} thing(s) in the satchel");
+        }
+
         // a piece, its tally and the mat beside it. A Rabble gets no tally, and that is the rule
         // showing rather than an omission: no health track, nothing to count (CORE_RULES.md
         // section 8). It DOES get condition marks - a Rabble can be Winded, it just cannot be
         // whittled down
-        void Enlist(Actor actor, Mini mini)
+        void Enlist(Actor actor, Mini mini, int slot = 0)
         {
             VigorPips pips = null;
 
@@ -446,7 +721,7 @@ namespace Game.Fight
                 if (ReferenceEquals(actor, _hero)) _nerve = tokens;
             }
 
-            _pieces.Add(actor, mini, pips, marks);
+            _pieces.Add(actor, mini, pips, marks, slot);
         }
 
         // ---- the hero's turn: a click is an action ----
@@ -475,6 +750,34 @@ namespace Game.Fight
             // not his turn. clicks wait, and nothing is said about it: a table where the pieces do
             // not move when you push them is a table where it is somebody else's go
             if (!_fight.AwaitingHero) return true;
+
+            // OUT OF ACTIONS, BUT THE TURN HAS NOT ENDED (CORE_RULES.md section 7). When the hero
+            // has spent his actions and still holds a Nerve, Encounter.Done PARKS the turn rather
+            // than ending it - so he can decide whether to push for one more or stop, and spending
+            // the Nerve stays his choice to make. In that parked state a click on the board has
+            // nothing to pay for: a swing reaches Encounter.Strike, whose own Ready() gate refuses
+            // it on _actionsLeft and returns null, so the felt reads "beats it" and NOTHING lands -
+            // which is exactly the "the rabble beat defense and did not fall" bug. A move is worse:
+            // March walks the piece and only THEN fails to Spend, so an empty square would be a
+            // free step. Both are the same missing guard, and it is one the rules cannot make
+            // because the rules never see the click.
+            //
+            // The one gesture still worth something here is ending the turn - clicking the hero's
+            // own piece, which is today's end-turn gesture until the initiative marker takes it
+            // over (THE_TABLE.md, "the end-turn gesture"). Everything else is refused with the
+            // choice the player actually has: push with a Nerve, or stop. That line is a
+            // companion/DM cue once that layer exists (COMBAT_LOOP.md C4); for now it is a
+            // GD.Print like the rest of this file's diagnostics
+            if (_fight.ActionsLeft <= 0)
+            {
+                Piece here = _pieces.On(_board.Squares.At(cell));
+
+                if (here != null && ReferenceEquals(here.Actor, _hero)) { Watch(); return true; }
+
+                GD.Print($"        {_hero.DebugName} is out of actions - spend a Nerve to push, " +
+                         "or end the turn");
+                return true;
+            }
 
             Piece target = _pieces.On(_board.Squares.At(cell));
 
@@ -678,6 +981,12 @@ namespace Game.Fight
             _impact = null;
             _using = TheEffect.Attribute;
 
+            // the felt's readout compares the throw to THIS, so it has to be what the rules are
+            // scoring against - the target's Defense, the difficulty a bolt is measured on
+            // (TheEffect). Left at the tray's default it read "vs 9" for every throw and a swing
+            // at a Defense-11 Rival looked like a hit when the rules called it a miss
+            _tray.TargetDifficulty = target.Defense;
+
             GD.Print("");
             GD.Print($"channel {_hero.DebugName} at {target.DebugName} - {TheEffect.Attribute} + " +
                      $"{TheEffect.Skill} + {_hero.WeaponId}, {pool.Count} dice vs defense " +
@@ -787,6 +1096,10 @@ namespace Game.Fight
             _impact = null;
             _reacting = false;
             _interrupted = null;
+
+            // the felt's readout compares to this - it must be the number the rules score against,
+            // or the console says "vs 9" while the swing is actually measured on the target's Defense
+            _tray.TargetDifficulty = target.Defense;
 
             GD.Print("");
             GD.Print($"swing   {_hero.DebugName} at {target.DebugName} - " +
@@ -1101,6 +1414,9 @@ namespace Game.Fight
             _reacting = true;
             _interrupted = foe;
             _impact = null;
+
+            // the readout compares to the thing being struck, same as an ordinary swing
+            _tray.TargetDifficulty = foe.Defense;
 
             GD.Print("");
             GD.Print($"react   {_hero.DebugName} was watching - a readied strike at " +

@@ -48,6 +48,24 @@ namespace Core.Space
         // the map is a start that cannot drift into a wall
         public const char StartGlyph = '@';
 
+        // AND WHERE EVERYBODY ELSE STANDS (P2). `1` through `9` are numbered spawn slots, and the
+        // square underneath one is floor for the same reason `@`'s is: a spawn you can see in the
+        // picture cannot drift into a wall.
+        //
+        // THE MAP SAYS WHERE AND THE ENCOUNTER SAYS WHO (CONTENT_PIPELINE.md P2/P4). A room is
+        // drawn once and fought in several ways - four Rabble one chapter, a Dread the next - and
+        // the alternative, a map that names its monsters, is a map that cannot be reused and a
+        // format that has to grow a monster id into a picture made of single characters.
+        //
+        // DIGITS BECAUSE THERE ARE TEN OF THEM AND THEY SORT. Nine slots is a room of eight and a
+        // boss, which is more than CORE_RULES.md section 8 puts in one fight; a tenth would need a
+        // second character and the format's whole argument is that one character is one square
+        public const char FirstSpawnGlyph = '1';
+
+        public const char LastSpawnGlyph = '9';
+
+        public static bool IsSpawn(char glyph) => glyph >= FirstSpawnGlyph && glyph <= LastSpawnGlyph;
+
         // a junction, drawn so the grid reads as a grid. it carries no meaning, and a space is
         // equally fine there - but nothing ELSE is, because a '-' or a '|' landing on a corner is
         // an off-by-one in a hand-drawn map and that is exactly the mistake worth catching
@@ -84,7 +102,9 @@ namespace Core.Space
                 foreach ((char glyph, Tile _, string name) in Squares)
                     legend.Append(glyph).Append(' ').Append(name).Append(", ");
 
-                legend.Append(StartGlyph).Append(" where the hero starts. lines: ");
+                legend.Append(StartGlyph).Append(" where the hero starts, ")
+                      .Append(FirstSpawnGlyph).Append('-').Append(LastSpawnGlyph)
+                      .Append(" a numbered spawn. lines: ");
 
                 foreach ((char glyph, Edge _, bool _, bool _, string name) in Lines)
                     legend.Append(glyph == ' ' ? "space" : glyph.ToString()).Append(' ')
@@ -140,6 +160,7 @@ namespace Core.Space
             var tiles = new Tile[columns * mapRows];
             var vertical = new Edge[(columns + 1) * mapRows];
             var horizontal = new Edge[columns * (mapRows + 1)];
+            var spawns = new Dictionary<int, Cell>();
             Cell? start = null;
 
             for (int i = 0; i < rows.Count; i++)
@@ -160,7 +181,7 @@ namespace Core.Space
                     if (oddLine && oddColumn)
                     {
                         if (!Square(glyph, line, j, new Cell((j - 1) / 2, (i - 1) / 2),
-                                    tiles, columns, ref start, ref problem))
+                                    tiles, columns, spawns, ref start, ref problem))
                             return false;
                     }
                     else if (oddLine)
@@ -193,12 +214,12 @@ namespace Core.Space
                 return false;
             }
 
-            map = new MapLayout(columns, mapRows, tiles, start.Value, vertical, horizontal);
+            map = new MapLayout(columns, mapRows, tiles, start.Value, vertical, horizontal, spawns);
             return true;
         }
 
         static bool Square(char glyph, int line, int column, Cell cell, Tile[] tiles, int columns,
-                           ref Cell? start, ref string problem)
+                           Dictionary<int, Cell> spawns, ref Cell? start, ref string problem)
         {
             if (glyph == StartGlyph)
             {
@@ -210,6 +231,26 @@ namespace Core.Space
                 }
 
                 start = cell;
+                tiles[cell.Y * columns + cell.X] = Tile.Floor;
+                return true;
+            }
+
+            if (IsSpawn(glyph))
+            {
+                int slot = glyph - '0';
+
+                // TWO THINGS CANNOT STAND ON ONE SLOT. An encounter places one creature per slot,
+                // so a map with two `3`s in it is a map where one of them is never used and the
+                // author has no way to tell which - exactly the silent half-load this format
+                // refuses everywhere else
+                if (spawns.TryGetValue(slot, out Cell already))
+                {
+                    problem = $"line {line} column {column + 1} is a second '{glyph}' - spawn {slot} " +
+                              $"is already {already} and a slot holds one thing";
+                    return false;
+                }
+
+                spawns[slot] = cell;
                 tiles[cell.Y * columns + cell.X] = Tile.Floor;
                 return true;
             }

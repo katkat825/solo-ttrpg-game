@@ -1,0 +1,30 @@
+; THE ASH YARD - a campaign's own room, and the second map the project has (CONTENT_PIPELINE.md P2).
+;
+; DELIBERATELY A DIFFERENT SHAPE from maps/cellar.map: wider than it is deep, one long wall with a
+; door in it rather than a hall split down the middle, and the rubble in a drift along the south
+; edge instead of in patches. If the board can play this one without a scene edit, the room really
+; is data.
+;
+; The wall stops short of the south end, so the yard is ONE room with a long way round in it. That
+; is deliberate too: a shut door blocks exactly like a wall (Edge.Door), and a yard whose only way
+; across is a shut one is two sealed rooms and a fight nobody can reach. The gap is the route and
+; the door is the shortcut somebody forces (B4) - which is the same thing the cellar's east
+; chambers do, and the reason that map has a gap at ITS far end.
+;
+; SAME FORMAT, DOUBLE RESOLUTION (EDGE_WALLS.md) - squares on the odd/odd positions and the lines
+; between them on the rest. What is new is the NUMBERS: 1-9 are spawn slots, and an encounter says
+; who stands on each (P4). The map says where; it never says who, so the same yard can be four
+; hounds one chapter and a ghoul the next.
+;
+;   .  floor      ~  difficult ground   #  rock      @  the hero starts
+;   1-9 a spawn   |  wall up a line     -  wall along a line   x  door, shut   +  a corner
+
++-+-+-+-+-+-+-+-+-+-+-+-+
+|. . . . .|. . 2 . . . .|
++ + + + + + + + + + + + +
+|. @ . . .x. . . . 3 . .|
++ + + + + + + + + + + + +
+|. . . 1 . . . . . . . .|
++ + + + + +-+-+-+ + + + +
+|~ ~ . . .|# # #|. . 4 .|
++-+-+-+-+-+-+-+-+-+-+-+-+

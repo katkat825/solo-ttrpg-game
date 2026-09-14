@@ -1,0 +1,8 @@
+{
+  "id": "spore_thrall",
+  "tier": "rabble",
+  "vigor": 1,
+  "defense": 7,
+  "attributes": { "might": "d6" },
+  "gear": { "id": "fist", "die": "d4" }
+}

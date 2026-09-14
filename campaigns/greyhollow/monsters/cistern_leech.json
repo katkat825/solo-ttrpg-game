@@ -1,0 +1,14 @@
+{
+  "id": "cistern_leech",
+  "tier": "rival",
+  "vigor": 8,
+  "defense": 10,
+  "attributes": { "might": "d6", "grace": "d8" },
+  "skills": { "brawl": "d6" },
+  "gear": { "id": "sucker", "die": "d6" },
+  "behaviour": "strongest_first",
+  "loot": [
+    { "item": "damp_charm", "weight": 1 },
+    { "weight": 2 }
+  ]
+}

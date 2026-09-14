@@ -28,12 +28,20 @@ namespace Game.Fight
         // what is wrong with it, written on the mat beside it (C1)
         public ConditionMarks Marks { get; }
 
-        public Piece(Actor actor, Mini mini, VigorPips vigor, ConditionMarks marks)
+        // WHICH SPAWN SLOT IT WAS PUT ON (P2), and 0 for a piece the scene placed by square or for
+        // the hero. A save needs a stable name for each foe and neither of the obvious ones works:
+        // an id repeats (four hounds), and a square moves. The slot the encounter placed it on is
+        // the one thing about a foe that is unique and never changes, and it is also what a person
+        // hand-editing a save would recognise - "the one that started on spawn 2" (P6)
+        public int Slot { get; }
+
+        public Piece(Actor actor, Mini mini, VigorPips vigor, ConditionMarks marks, int slot = 0)
         {
             Actor = actor;
             Mini = mini;
             Vigor = vigor;
             Marks = marks;
+            Slot = slot;
         }
 
         public bool IsDown => Actor.IsDown;
@@ -57,11 +65,12 @@ namespace Game.Fight
         // in the order they were mustered, which is the order the fight lists them in
         public IReadOnlyList<Piece> All => _order;
 
-        public Piece Add(Actor actor, Mini mini, VigorPips vigor, ConditionMarks marks)
+        public Piece Add(Actor actor, Mini mini, VigorPips vigor, ConditionMarks marks,
+                         int slot = 0)
         {
             if (actor == null || mini == null) return null;
 
-            var piece = new Piece(actor, mini, vigor, marks);
+            var piece = new Piece(actor, mini, vigor, marks, slot);
 
             _byActor[actor] = piece;
             _byMini[mini] = piece;

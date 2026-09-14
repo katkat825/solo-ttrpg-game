@@ -1,0 +1,9 @@
+{
+  "id": "ashen_minis",
+  "kind": "minis",
+  "format": 1,
+  "engine": "0.4",
+  "author": "the house",
+  "tags": [ "minis", "undead" ],
+  "dependencies": []
+}

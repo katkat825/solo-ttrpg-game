@@ -29,6 +29,15 @@
     meaningless. With -Plain it does none of that, and the win rate is the number to hold against
     SIMULATION.md section 5.
 
+.PARAMETER Campaign
+    Which campaign's encounter to play as the first fight. Defaults to whatever FightCheck names,
+    which is the one that ships. Pass a campaign id to play somebody else's - the second-campaign
+    test (CONTENT_PIPELINE.md P7) is what this exists for, and it exists because that test found
+    that a campaign could only be chosen by editing a scene.
+
+.PARAMETER Encounter
+    Which encounter in it. Defaults to FightCheck's own.
+
 .PARAMETER Godot
     Path to the Godot mono console binary. Falls back to $env:GODOT, then a search of
     $env:GODOT_ROOT or C:\Godot. Discovery lives in Find-Godot.ps1, which every check script
@@ -39,11 +48,16 @@
 
 .EXAMPLE
     .\check-fight.ps1 -Fights 10
+
+.EXAMPLE
+    .\check-fight.ps1 -Campaign greyhollow -Encounter the_cistern
 #>
 [CmdletBinding()]
 param(
     [int] $Fights,
     [switch] $Plain,
+    [string] $Campaign,
+    [string] $Encounter,
     [string] $Godot
 )
 
@@ -60,6 +74,8 @@ $project = Join-Path $PSScriptRoot 'game'
 $userArgs = @()
 if ($PSBoundParameters.ContainsKey('Fights')) { $userArgs += "--fights=$Fights" }
 if ($Plain) { $userArgs += '--plain' }
+if ($Campaign) { $userArgs += "--campaign=$Campaign" }
+if ($Encounter) { $userArgs += "--encounter=$Encounter" }
 
 Write-Host "godot   $Godot"
 Write-Host "project $project"

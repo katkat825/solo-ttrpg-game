@@ -1,0 +1,13 @@
+{
+  "id": "the_mother_stalk",
+  "tier": "dread",
+  "vigor": 14,
+  "defense": 11,
+  "attributes": { "might": "d8", "grace": "d6", "wits": "d6" },
+  "skills": { "brawl": "d6" },
+  "gear": { "id": "lash", "die": "d6" },
+  "behaviour": "strongest_first",
+  "loot": [
+    { "item": "heartwood_shard", "weight": 1 }
+  ]
+}

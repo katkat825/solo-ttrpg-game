@@ -1,0 +1,10 @@
+{
+  "id": "cinder_hound",
+  "tier": "rabble",
+  "vigor": 1,
+  "defense": 7,
+  "attributes": { "might": "d6" },
+  "gear": { "id": "bite", "die": "d4" },
+
+  "mini": "ashen_minis.old_bones"
+}

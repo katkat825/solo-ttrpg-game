@@ -14,10 +14,10 @@ namespace Game
     // open main.tscn, press F6, read the output
     public partial class Main : Node
     {
-        // the one place this scene names a concrete roster
-        // swapping in a data-backed source is this line and nothing else - which is the whole
-        // reason nothing below reaches past IArchetypeSource to build a fighter
-        readonly IArchetypeSource _archetypes = new BuiltInArchetypes();
+        // the one place this scene names a concrete roster, and since P0 that is the engine's own
+        // plus every campaign on disk. Nothing below reaches past IArchetypeSource, which is what
+        // made the swap one line
+        readonly IArchetypeSource _archetypes = Game.Campaigns.Library.Load();
 
         public override void _Ready()
         {

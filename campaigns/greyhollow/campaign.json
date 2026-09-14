@@ -1,0 +1,15 @@
+{
+  "id": "greyhollow",
+  "format": 1,
+  "engine": "0.4",
+  "author": "the house",
+  "tags": [ "fungal", "short", "underground" ],
+  "dependencies": [],
+  "chapters": [
+    {
+      "id": "the_hollow",
+      "encounters": [ "the_stair", "the_spore_gallery", "the_cistern" ]
+    }
+  ],
+  "start": "the_hollow"
+}

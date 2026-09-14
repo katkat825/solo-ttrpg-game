@@ -80,14 +80,29 @@ namespace Core.Characters
 
             yield return KeyConventions.DefaultImpactName;
 
+            // Actor's own default weapon id, emitted whether or not an archetype uses it. It is
+            // the ENGINE's - it is the string `Actor` falls back to - so it belongs here and not
+            // in ForRoster, which is asked per roster and would otherwise demand it of every
+            // campaign's locale for a weapon no campaign named (found by the P0 audit)
+            yield return KeyConventions.GearName("unarmed");
+
             foreach (string key in ForRoster(archetypes))
                 yield return key;
         }
 
+        // WHAT ONE ROSTER'S ARCHETYPES NAME: their own names and the gear they are holding, and
+        // nothing that belongs to the engine at large.
+        //
         // every archetype gets a numbered name as well as a plain one
         // only Rabble arrive in crowds today, but any foe can turn up twice
         // and "Rival 2" must come from one key with a {0} in it
-        static IEnumerable<string> ForRoster(IArchetypeSource archetypes)
+        //
+        // PUBLIC SINCE P0, because a roster is no longer one thing. The engine ships its own and
+        // every loaded campaign brings another, and their strings live in different files - the
+        // engine's in game/locale/, a campaign's in its own folder (ARCHITECTURE.md section 4). So
+        // the audit asks this per source rather than once, and `All` below is still the whole of
+        // what the ENGINE names
+        public static IEnumerable<string> ForRoster(IArchetypeSource archetypes)
         {
             var gear = new SortedSet<string>();
 
@@ -98,9 +113,6 @@ namespace Core.Characters
 
                 gear.Add(archetypes.Create(id).WeaponKey);
             }
-
-            // Actor's own default, emitted whether or not an archetype uses it
-            gear.Add(KeyConventions.GearName("unarmed"));
 
             foreach (string key in gear) yield return key;
         }

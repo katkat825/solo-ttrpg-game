@@ -6,6 +6,7 @@ using Core.Combat;
 using Core.Dice;
 using Core.Localization;
 using Core.Space;
+using Content.Encounters;
 using Game.Board;
 using Game.Fight;
 using Game.Localization;
@@ -39,6 +40,10 @@ namespace Game.Diagnostics
     //       a breather puts it back
     //   C6  a Dread takes two actions to everybody else's one and changes at exactly half Vigor,
     //       once, with bigger dice on the other side of it
+    //   P0  a monster that came out of a campaign's JSON stands on the board and is fought like
+    //       any other, with nothing about it in the code
+    //   P1  a weapon authored in data is a bigger die on the felt and armour is a higher Defense,
+    //       and what a fallen monster was carrying is the same on the same seed
     //
     // Those are the things that go wrong quietly, look fine in motion, and are miserable to notice
     // by eye.
@@ -81,6 +86,50 @@ namespace Game.Diagnostics
         //
         // Off the board means no boss, and then this check never sees one
         [Export] public Vector2I BossAt { get; set; } = new Vector2I(5, 2);
+
+        // P0's VERIFY, AUTOMATED: "hand-write a monster JSON, load it, and fight it on the board
+        // with no code change". One fight is given a foe out of a campaign folder instead of the
+        // engine's Rival - by id, through the scene's own export, which is the same thing an
+        // author would type. Skipped when no campaign on disk has it, because a game with no
+        // campaigns installed has to run this check too
+        [Export] public string CampaignFoe { get; set; } = "ashfall.ghoul";
+
+        // P1's VERIFY, AUTOMATED: the campaign fight's hero carries gear authored in a file, so the
+        // check can watch a bigger die reach the felt and a higher Defense reach the fight. Empty
+        // for either leaves the statblock's own
+        [Export] public string CampaignWeapon { get; set; } = "cold_iron_axe";
+
+        [Export] public string CampaignArmour { get; set; } = "scale_coat";
+
+        // P2's VERIFY, AUTOMATED: "author a second, differently-shaped map in data and load it -
+        // the board, the spawns and the tagged cells all come from the file, no scene edited and
+        // no code touched". The campaign fight is played in the campaign's own room, which is a
+        // different shape from the shipped cellar and has its spawn slots drawn into it.
+        //
+        // Both empty plays every fight in the shipped room, which is what a game with no campaigns
+        // installed does
+        [Export] public string CampaignId { get; set; } = "ashfall";
+
+        // P4's VERIFY, AUTOMATED: "load a campaign from a folder and play an encounter defined
+        // entirely by its data - monsters, map, placements, triggers, loot - with no code specific
+        // to that campaign anywhere". ONE STRING is what this check knows about ashfall, and it is
+        // the name of an encounter. Everything else - which room, who is in it, where each of them
+        // stands, what they drop - is read out of the folder and checked against the folder
+        [Export] public string CampaignEncounter { get; set; } = "ash_yard";
+
+        // P6's VERIFY, AUTOMATED: "save mid-fight, quit, reload - the fight resumes with the same
+        // dice on the felt, the same Vigor and conditions, the same board".
+        //
+        // QUITTING IS PLAYED BY A SECOND TABLE. The check writes a save out of the fight it is
+        // playing, then instances `table.tscn` again from nothing, hands the save to it, and holds
+        // the two side by side. That is a stronger test than reloading in place: the second table
+        // has never seen the first, so anything the restore forgot to say is simply not there
+        [Export] public bool SaveAndReload { get; set; } = true;
+
+        // which round to take it in. 2 rather than 1 because a save taken before anybody has done
+        // anything proves very little - by round 2 somebody has been hit, somebody has moved, and
+        // the turn order has come round once
+        [Export] public int SaveInRound { get; set; } = 2;
 
         // PLAY IT STRAIGHT AND MEASURE IT. Everything this check does to reach a milestone is a
         // handicap: it winds the hero on purpose to watch a die shrink, gives up a turn to arm a
@@ -150,6 +199,24 @@ namespace Game.Diagnostics
 
         bool _fighting;
 
+        bool _campaignFight;
+
+        int _campaignFoesFought;
+
+        bool _campaignRoom;
+
+        int _campaignRoomsFought;
+
+        bool _saved;
+
+        int _saves;
+
+        // how many turns ended with nowhere to go. A few is a corridor; a great many is a room
+        // nobody can cross, which is worth failing over
+        int _blocked;
+
+        public const int BlockedTurnsWorthReporting = 12;
+
         int _casts;
 
         Die _heartBefore;
@@ -158,7 +225,13 @@ namespace Game.Diagnostics
 
         int _castsSeen;
 
+        int _castingFights;
+
         int _phases;
+
+        // WHICH bosses have turned, by reference, because "twice" is a question about one Dread
+        // and not about a run (see PhaseChanged)
+        readonly HashSet<Actor> _turned = new HashSet<Actor>(ReferenceEqualityComparer.Instance);
 
         int _bossFights;
 
@@ -244,15 +317,70 @@ namespace Game.Diagnostics
 
             // the last fight is the boss's and the one before it is the caster's, so a default
             // run of three covers a plain fight, a caster and a Dread
+            // ONE THING PER FIGHT, and never two at once - a Mage fighting a campaign's ghoul
+            // would be two milestones sharing one set of dice, and whichever failed would be the
+            // harder to read for it. Last is the boss, the one before it is the caster, and the
+            // first is the campaign's, when there are enough fights to go round
             _fighting = BossAt != FightNode.Nowhere && !Plain && _fought == Fights - 1;
-            _casting = !string.IsNullOrEmpty(CastingHero) && !_fighting &&
-                       _fought >= Fights - 2;
+
+            _casting = !Plain && !string.IsNullOrEmpty(CastingHero) && Fights >= 2
+                       && _fought == Fights - 2;
+
+            // THE CAMPAIGN'S OWN ROOM comes first, because it is the one a campaign always has:
+            // P2's map and P4's encounter arrive together, since an encounter is what names a map
+            _campaignRoom = !Plain && Fights >= 3 && _fought == 0 && Planned() != null;
+
+            // AND THE NAMED-FOE CHECKS RIDE ON TOP OF IT (P0, P1). They ask after one particular
+            // monster and one particular axe, which only the campaign that ships them has - so
+            // they are gated separately, and a second campaign pointed at with `--campaign=` plays
+            // its own encounter without being asked for ashfall's ghoul (P7)
+            _campaignFight = _campaignRoom && !string.IsNullOrEmpty(CampaignFoe)
+                             && Game.Campaigns.Library.Load(quiet: true).Has(CampaignFoe);
+
+            if (_casting) _castingFights++;
 
             foreach (Node node in Descendants(table))
             {
                 if (_casting && node is BoardNode board) board.HeroId = CastingHero;
 
+                // P2 AND P4: THE ROOM AND EVERYBODY IN IT COME OUT OF THE CAMPAIGN. Two strings,
+                // set before the board's _Ready has run - the board reads the encounter, the
+                // encounter names the map, and the fight musters from the same plan. Nothing else
+                // here knows which room it is standing in or who is in it
+                if (node is BoardNode room3)
+                {
+                    if (_campaignRoom)
+                    {
+                        room3.Campaign = CampaignId;
+                        room3.Encounter = CampaignEncounter;
+                    }
+                    else
+                    {
+                        // THE CASTER'S FIGHT AND THE BOSS'S ARE IN THE ROOM THAT SHIPS, and stay
+                        // there even when the run was launched with `--campaign=` (P7). A check
+                        // that plays three different fights is the one caller that has to say so
+                        room3.Fixed = true;
+                    }
+                }
+
                 if (node is not FightNode room) continue;
+
+                if (_campaignFight)
+                {
+                    room.HeroWeapon = CampaignWeapon;
+                    room.HeroArmour = CampaignArmour;
+                }
+
+                // and the scene's own squares are cleared, so a failure to read the encounter is
+                // an empty room and a loud one rather than the shipped cellar's four Rabble
+                // quietly standing in for the campaign's
+                if (_campaignRoom)
+                {
+                    room.Spawns = new Godot.Collections.Array<string>();
+                    room.RivalAt = FightNode.Nowhere;
+                    room.DreadAt = FightNode.Nowhere;
+                    room.RabbleAt = new Godot.Collections.Array<Vector2I>();
+                }
 
                 if (_fighting)
                 {
@@ -305,11 +433,44 @@ namespace Game.Diagnostics
             _acted.Clear();
             _explosions = 0;
             _waited = 0.0;
+            _saved = false;
 
             CheckTheRoom();
 
             if (_fighting && _fight.Boss == null)
                 Problem("the boss fight was set up and the fight mustered no Dread");
+
+            // P0: THE MONSTER THE CAMPAIGN WROTE IS ON THE BOARD, and is an Actor like any other -
+            // its id is scoped by its campaign, its name key falls out of that id, and the fight
+            // has no idea it came from a file
+            if (_campaignFight)
+            {
+                Actor foe = _fight.Foes.FirstOrDefault(f => f.Id == CampaignFoe);
+
+                if (foe == null)
+                {
+                    Problem($"the campaign fight named '{CampaignFoe}' and no such foe was mustered");
+                }
+                else
+                {
+                    _campaignFoesFought++;
+
+                    if (!Content.Campaigns.ContentId.IsScoped(foe.Id))
+                        Problem($"'{foe.Id}' came out of a campaign and is not scoped by it");
+
+                    if (_board.CellOf(_fight.PieceFor(foe)) == null)
+                        Problem($"{foe.DebugName} was mustered onto no square");
+
+                    GD.Print($"campaign    {foe.DebugName} from " +
+                             $"{Content.Campaigns.ContentId.CampaignOf(foe.Id)} is on the board - " +
+                             $"{foe.Tier}, vigor {foe.MaxVigor}, def {foe.Defense}, " +
+                             $"names itself '{foe.NameKey}'");
+
+                    CheckTheGear();
+                }
+            }
+
+            if (_campaignRoom) CheckTheRoomCameFromTheFile();
 
             if (_casting && !TheEffect.Offered(_hero))
                 Problem($"the casting fight was set up with {_hero.DebugName}, who is not trained " +
@@ -321,6 +482,432 @@ namespace Game.Diagnostics
                      $"{_fight.Foes.Count(f => f.Tier == Tier.Rival)} Rival and " +
                      $"{_fight.Foes.Count(f => f.Tier == Tier.Dread)} Dread");
         }
+
+        // P2 AND P4: THE ROOM AND THE ENCOUNTER CAME OUT OF THE FOLDER. Four things have to be
+        // true, and each of them is a separate way for the loader to be a no-op that looks like it
+        // worked:
+        //
+        //   the board read the ENCOUNTER, and the encounter is the one that was asked for
+        //   it opened the map that encounter names, out of the campaign, and not the shipped one
+        //   the board is the SHAPE that file draws, and a different one from the cellar's
+        //   every foe the encounter places is standing on the square the map drew for its slot
+        //
+        // The last is what makes the first three worth anything. A board can load a stranger's map
+        // and still muster its foes onto squares out of a scene, and then the room is data and the
+        // encounter is not - which is most of the way to nothing.
+        //
+        // AND NOTHING HERE NAMES A MONSTER, A SQUARE OR A ROOM. Every expectation is read back out
+        // of the plan and the map, so this is a check that the game agrees with the folder rather
+        // than a check that both agree with a list in a diagnostic - which would pass just as well
+        // if the folder were ignored entirely
+        void CheckTheRoomCameFromTheFile()
+        {
+            EncounterPlan plan = _board.Plan;
+
+            if (plan == null || plan.Id != CampaignEncounter)
+            {
+                Problem($"the campaign fight asked for the encounter '{CampaignEncounter}' and " +
+                        $"the board is playing '{plan?.Id ?? "nothing"}' - it fell back to a map");
+                return;
+            }
+
+            if (_board.Loaded == null ||
+                System.IO.Path.GetFullPath(_board.Loaded) != Planned())
+            {
+                Problem($"'{CampaignEncounter}' is fought on {plan.Map} and the board loaded " +
+                        $"'{_board.Loaded}' - it fell back to the map that ships");
+                return;
+            }
+
+            MapLayout map = _board.Map;
+
+            // the shipped room, read the same way the board reads it, so "differently shaped" is
+            // measured against the real thing rather than against two numbers written down here
+            MapReader.TryRead(Godot.FileAccess.GetFileAsString(_board.MapPath), out MapLayout cellar,
+                              out string _);
+
+            if (cellar != null && map.Columns == cellar.Columns && map.Rows == cellar.Rows)
+                Problem($"{plan.Map} is {map.Columns} x {map.Rows} and so is the shipped room - " +
+                        "P2 wants a DIFFERENTLY shaped map, or this proves nothing");
+
+            if (map.Spawns.Count == 0)
+            {
+                Problem($"{plan.Map} has no spawn slots drawn in it - the encounter has nowhere " +
+                        "to stand and the fight fell back to the scene's squares");
+                return;
+            }
+
+            // hero included: his square is slot 0 by the same grammar, and he is placed by the
+            // board rather than by the fight, so this is a second loader checked in one line
+            Cell? hero = _board.CellOf(_fight.PieceFor(_hero));
+
+            if (hero != map.Start)
+                Problem($"{_hero.DebugName} started on {hero} and {plan.Map} starts him " +
+                        $"on {map.Start}");
+
+            foreach (Placement placement in plan.Placements)
+            {
+                string id = Content.Campaigns.ContentId.Scoped(CampaignId, placement.Monster);
+                Cell? want = map.SpawnAt(placement.Slot);
+
+                if (want == null)
+                {
+                    Problem($"the encounter puts '{placement.Monster}' on spawn {placement.Slot} " +
+                            $"and {plan.Map} has no such slot");
+                    continue;
+                }
+
+                if (!_fight.Foes.Any(f => f.Id == id &&
+                                          _board.CellOf(_fight.PieceFor(f)) == want))
+                    Problem($"spawn {placement.Slot} of {plan.Map} is {want} and no " +
+                            $"'{id}' is standing on it");
+            }
+
+            if (_fight.Foes.Count != plan.Placements.Count)
+                Problem($"'{plan.Id}' places {plan.Placements.Count} and the fight mustered " +
+                        $"{_fight.Foes.Count}");
+
+            _campaignRoomsFought++;
+
+            GD.Print($"        room: {plan} out of {CampaignId}/, {map} - no scene edited and no " +
+                     "code touched");
+
+            // AND THE HALF NOTHING RUNS YET, printed rather than asserted. `EncounterPlan` says
+            // plainly that the runner is Phase R's; what P4 owns is that the slot exists, parses,
+            // and survives the round trip from the file to here
+            foreach (Trigger trigger in plan.Triggers)
+                GD.Print($"        trigger: {trigger} - read and carried; nothing runs it until " +
+                         "the campaign shell (Phase R)");
+
+            foreach (Cue cue in plan.Cues)
+                GD.Print($"        cue: {cue} - a slot for a gesture the DM has not learned yet " +
+                         "(Phase D)");
+        }
+
+        // P6: SAVE IT, OPEN IT AGAIN ON A TABLE THAT HAS NEVER SEEN THIS FIGHT, AND COMPARE.
+        //
+        // Every assertion below is the same question asked of two tables: does the one that read
+        // the file agree with the one that wrote it? Nothing is compared against a constant, so
+        // this cannot pass by both sides being wrong in the same way, and nothing names ashfall -
+        // whatever fight is being played is the fight that is saved.
+        //
+        // The second table is freed immediately. It exists for the length of this method, which is
+        // the whole of what "quit and reload" needs to mean for a check
+        void SaveAndReloadIt()
+        {
+            Content.Saves.SaveGame taken = _fight.Save();
+            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                                                 "fightcheck-" + System.Guid.NewGuid().ToString("N") + ".json");
+
+            Content.Schema.ContentProblem wrote = Content.Saves.SaveWriter.To(path, taken);
+
+            if (wrote != null)
+            {
+                Problem($"the save could not be written - {wrote}");
+                return;
+            }
+
+            try
+            {
+                Content.Schema.Read<Content.Saves.SaveGame> read =
+                    Content.Saves.SaveReader.From(path);
+
+                if (!read.Any)
+                {
+                    Problem($"the save was written and could not be read back - " +
+                            string.Join(" | ", read.Problems.Select(p => p.ToString())));
+                    return;
+                }
+
+                foreach (Content.Schema.ContentProblem problem in read.Problems)
+                    Problem($"the save this build wrote has something in it this build cannot " +
+                            $"read: {problem}");
+
+                Reopened(taken, read.Value, new System.IO.FileInfo(path).Length);
+            }
+            finally
+            {
+                try { System.IO.File.Delete(path); } catch { /* a temp file */ }
+            }
+        }
+
+        void Reopened(Content.Saves.SaveGame taken, Content.Saves.SaveGame read, long bytes)
+        {
+            Node table = Table.Instantiate();
+
+            foreach (Node node in Descendants(table))
+            {
+                if (node is BoardNode board)
+                {
+                    board.Campaign = read.Campaign;
+                    board.Encounter = read.Encounter;
+                }
+
+                if (node is FightNode room)
+                {
+                    room.Spawns = new Godot.Collections.Array<string>();
+                    room.RivalAt = FightNode.Nowhere;
+                    room.DreadAt = FightNode.Nowhere;
+                    room.RabbleAt = new Godot.Collections.Array<Vector2I>();
+                    room.Resuming = read;
+                }
+            }
+
+            AddChild(table);
+
+            try
+            {
+                Compare(table, taken, bytes);
+            }
+            finally
+            {
+                RemoveChild(table);
+                table.QueueFree();
+            }
+        }
+
+        void Compare(Node table, Content.Saves.SaveGame taken, long bytes)
+        {
+            FightNode again = In<FightNode>(table);
+            BoardNode board = In<BoardNode>(table);
+
+            if (again == null || board == null)
+            {
+                Problem("the reloaded table has no fight or no board on it");
+                return;
+            }
+
+            Encounter resumed = again.Encounter;
+
+            if (resumed == null || resumed.Round == 0)
+            {
+                Problem("the reloaded table is not in a fight - the save was taken mid-fight");
+                return;
+            }
+
+            Encounter live = _fight.Encounter;
+
+            Same("the round", live.Round, resumed.Round);
+            Same("whose turn it is", live.Acting?.DebugName, resumed.Acting?.DebugName);
+            Same("the actions left", live.ActionsLeft, resumed.ActionsLeft);
+            // THE STANDING ONLY. A foe that had already fallen is not in the save at all (a save
+            // is what is in the room), so the reloaded encounter musters it, kills it, and leaves
+            // it at the back of the order where `Resume` appended it. Whose turn comes when is a
+            // question about the living
+            Same("the turn order", Names(live.Order.Where(a => !a.IsDown)),
+                 Names(resumed.Order.Where(a => !a.IsDown)));
+
+            SameActor("the hero", _hero, again.Hero, board, again);
+
+            // MATCHED BY THE SPAWN SLOT, the same way the restore matched them, so this compares
+            // the two tables rather than comparing the restore against itself
+            foreach (Piece piece in _fight.Pieces.Where(p => !ReferenceEquals(p.Actor, _hero)))
+            {
+                if (piece.Actor.IsDown) continue;
+
+                Piece twin = again.Pieces.FirstOrDefault(p => p.Slot == piece.Slot);
+
+                if (twin == null)
+                {
+                    Problem($"{piece.Actor.DebugName} was on spawn {piece.Slot} and the reloaded " +
+                            "table has nobody there");
+                    continue;
+                }
+
+                SameActor($"spawn {piece.Slot}", piece.Actor, twin.Actor, board, again);
+            }
+
+            foreach (Piece piece in again.Pieces.Where(p => !ReferenceEquals(p.Actor, again.Hero)))
+                if (!piece.Actor.IsDown &&
+                    !_fight.Pieces.Any(p => p.Slot == piece.Slot && !p.Actor.IsDown))
+                    Problem($"the reloaded table has {piece.Actor.DebugName} standing on spawn " +
+                            $"{piece.Slot} and this one does not - the fallen came back");
+
+            // AND THE FELT. The faces are compared rather than the verdict, and then the verdict
+            // is compared too - because the verdict is DERIVED from the faces by the same
+            // arithmetic on both sides, and two derivations that disagree would mean the reading
+            // itself had moved (PoolResult.From)
+            Same("the dice on the felt", Faces(taken), Faces(_fight.Save()));
+
+            if (taken.Felt.Count > 0)
+            {
+                if (again.Restored == null)
+                    Problem($"{taken.Felt.Count} dice were on the felt and the reloaded table " +
+                            "read none of them back");
+                else
+                {
+                    TrayThrow was = _tray.LastThrow;
+
+                    if (was != null)
+                    {
+                        Same("the total on the felt", was.Result.Total, again.Restored.Result.Total);
+                        Same("the impact die", was.Result.Impact, again.Restored.Result.Impact);
+                        Same("the snagged die", was.SnaggedSlot, again.Restored.SnaggedSlot);
+                    }
+                }
+            }
+
+            _saves++;
+
+            GD.Print($"        save: round {taken.Round}, {taken.Foes.Count} standing, " +
+                     $"{taken.Felt.Count} dice on the felt, {bytes} bytes - written, read back on " +
+                     "a table that had never seen this fight, and the two agree");
+        }
+
+        // one actor against the same actor on the other table. Everything a fight can do to
+        // somebody, which is the list a save has to carry
+        void SameActor(string who, Actor was, Actor now, BoardNode board, FightNode again)
+        {
+            if (now == null) { Problem($"{who} is not on the reloaded table"); return; }
+
+            Same($"{who}: id", was.Id, now.Id);
+            Same($"{who}: vigor", was.Vigor, now.Vigor);
+            Same($"{who}: nerve", was.Nerve, now.Nerve);
+            Same($"{who}: conditions", string.Join("+", was.Conditions),
+                 string.Join("+", now.Conditions));
+            Same($"{who}: notches", was.Notches, now.Notches);
+            Same($"{who}: strain", was.Strain, now.Strain);
+            Same($"{who}: weapon", was.Weapon, now.Weapon);
+            Same($"{who}: defense", was.Defense, now.Defense);
+            Same($"{who}: might", was.Attribute(Attr.Might), now.Attribute(Attr.Might));
+            Same($"{who}: heart", was.Attribute(Attr.Heart), now.Attribute(Attr.Heart));
+            Same($"{who}: satchel", string.Join(",", was.Satchel), string.Join(",", now.Satchel));
+            Same($"{who}: square", _board.CellOf(_fight.PieceFor(was)),
+                 board.CellOf(again.PieceFor(now)));
+        }
+
+        void Same<T>(string what, T was, T now)
+        {
+            if (!EqualityComparer<T>.Default.Equals(was, now))
+                Problem($"{what} was '{was}' when the save was taken and is '{now}' after " +
+                        "reloading it");
+        }
+
+        static string Names(IEnumerable<Actor> order) =>
+            string.Join(", ", order.Select(a => a.DebugName));
+
+        static string Faces(Content.Saves.SaveGame save) =>
+            string.Join(" ", save.Felt.Select(d => $"{d.Trait}:{d.Die}:{d.Value}"));
+
+        static T In<T>(Node root) where T : Node
+        {
+            foreach (Node node in Descendants(root))
+                if (node is T found) return found;
+
+            return null;
+        }
+
+        // WHERE THE ENCOUNTER'S MAP IS, or null when no campaign on disk has that encounter. Used
+        // twice: once to decide whether there is a P4 fight to play at all, and once to check the
+        // board opened THAT file rather than something that happened to parse.
+        //
+        // Through `Library` rather than by building a path, which is the point of the milestone -
+        // the check finds the room the same way the game does, by asking a campaign what its
+        // encounter is fought on
+        string Planned()
+        {
+            if (string.IsNullOrWhiteSpace(CampaignId) || string.IsNullOrWhiteSpace(CampaignEncounter))
+                return null;
+
+            Game.Campaigns.Loaded campaign = Game.Campaigns.Library.Load(quiet: true).Campaign(CampaignId);
+
+            if (campaign == null || campaign.Failed) return null;
+
+            EncounterPlan plan = campaign.Encounters.Of(CampaignEncounter);
+
+            if (plan == null) return null;
+
+            string path = System.IO.Path.Combine(campaign.Folder, BoardNode.MapsFolder,
+                                                 plan.Map + BoardNode.MapExtension);
+
+            return System.IO.File.Exists(path) ? System.IO.Path.GetFullPath(path) : null;
+        }
+
+        // P1: A BIGGER DIE IN A FILE IS A BIGGER DIE IN THE POOL, and armour is a higher number
+        // to beat. Both against the hero's own statblock rather than against a constant, because
+        // what he started with is whatever the roster said
+        void CheckTheGear()
+        {
+            var plain = new Content.Monsters.Rosters(new BuiltInArchetypes());
+
+            if (!plain.Has(_hero.Id)) return;
+
+            Actor bare = plain.Create(_hero.Id);
+
+            if (!string.IsNullOrEmpty(CampaignWeapon))
+            {
+                if (_hero.WeaponId != CampaignWeapon)
+                    Problem($"the hero was given '{CampaignWeapon}' and is holding '{_hero.WeaponId}'");
+                else if (_hero.Weapon == bare.Weapon)
+                    Problem($"the hero swapped {bare.Weapon.Label()} for '{CampaignWeapon}' and it " +
+                            "is the same size - a better weapon is a bigger die (CORE_RULES pillar 3)");
+                else
+                    GD.Print($"        gear: {bare.WeaponId} {bare.Weapon.Label()} -> " +
+                             $"{_hero.WeaponId} {_hero.Weapon.Label()}, and the pool with it");
+            }
+
+            if (!string.IsNullOrEmpty(CampaignArmour))
+            {
+                if (_hero.Defense <= bare.Defense)
+                    Problem($"the hero is wearing '{CampaignArmour}' and his Defense is " +
+                            $"{_hero.Defense} against a bare {bare.Defense}");
+                else
+                    GD.Print($"        armour: defense {bare.Defense} -> {_hero.Defense}");
+            }
+        }
+
+        // P1: A RESEEDED RUN DROPS THE SAME THING.
+        //
+        // Asked of the table's own loaded campaign rather than hoped for in play: a monster with a
+        // one-in-six axe on it will not drop one most evenings, and a check that only reported what
+        // happened to fall would pass for years without ever testing the property. What matters is
+        // that the draw goes through `IRng` - so the same seed gives the same answer and a
+        // different seed does not - which is the rule every source of chance in this game keeps
+        // (CONVENTIONS.md 6).
+        //
+        // What actually fell is reported beside it, because seeing a real drop is the other half
+        void CheckTheLoot()
+        {
+            if (_hero.Satchel.Count > 0) _looted = string.Join(", ", _hero.Satchel);
+
+            if (_lootChecked) return;
+
+            _lootChecked = true;
+
+            var library = Game.Campaigns.Library.Load(quiet: true);
+            Content.Items.LootTable table = library.LootFor(CampaignFoe);
+
+            if (table.IsEmpty)
+            {
+                GD.Print($"        '{CampaignFoe}' carries nothing, so there was no table to check");
+                return;
+            }
+
+            string[] first = Draws(table, 4242);
+            string[] again = Draws(table, 4242);
+            string[] other = Draws(table, 99);
+
+            if (!first.SequenceEqual(again))
+                Problem($"'{CampaignFoe}' drew {string.Join("/", first)} on seed 4242 and " +
+                        $"{string.Join("/", again)} on the same seed - loot is not going through IRng");
+
+            if (first.SequenceEqual(other))
+                Problem($"'{CampaignFoe}' drew the same twelve things on two different seeds, " +
+                        "which is a table with one entry in it rather than a seeded draw");
+
+            GD.Print($"        loot table: {table} - same seed, same draw");
+        }
+
+        static string[] Draws(Content.Items.LootTable table, int seed)
+        {
+            var rng = new Core.Dice.SeededRng(seed);
+
+            return Enumerable.Range(0, 12).Select(_ => table.Draw(rng) ?? "-").ToArray();
+        }
+
+        bool _lootChecked;
+
+        string _looted = "";
 
         // the room as it is set up, before a die is thrown
         void CheckTheRoom()
@@ -420,6 +1007,24 @@ namespace Game.Diagnostics
                 if (arg == "--plain") Plain = true;
             }
 
+            // P7: WHICH CAMPAIGN'S FIGHT, out of the command line. The second-campaign test needs
+            // to play a campaign this file has never heard of, and the check naming one in its own
+            // source is the boundary violation that test exists to find (Game.Campaigns.Requested)
+            if (Game.Campaigns.Requested.Campaign.Length > 0)
+            {
+                CampaignId = Game.Campaigns.Requested.Campaign;
+
+                // the campaign changed, so the things named inside the old one have not survived
+                // it - whatever it ships is what this fight is, and the checks below read the
+                // encounter rather than expecting an axe
+                CampaignFoe = "";
+                CampaignWeapon = "";
+                CampaignArmour = "";
+            }
+
+            if (Game.Campaigns.Requested.Encounter.Length > 0)
+                CampaignEncounter = Game.Campaigns.Requested.Encounter;
+
             if (Plain) CastingHero = "";
         }
 
@@ -478,6 +1083,16 @@ namespace Game.Diagnostics
             if (fight == null) return;
 
             if (fight.IsOver) { Finished(fight); return; }
+
+            // P6: THE SAVE, taken out of a fight that is actually happening. Before the hero's
+            // turn is driven, so the table is at rest and the save describes a moment rather than
+            // a moment and a half
+            if (_campaignRoom && SaveAndReload && !_saved && fight.Round >= SaveInRound &&
+                !_tray.IsAnswering && _fight.Settled)
+            {
+                _saved = true;
+                SaveAndReloadIt();
+            }
 
             // the order is thrown for on the real tray, so it does not exist until the felt has
             // stopped moving - which is some frames after the room was set up
@@ -638,6 +1253,15 @@ namespace Game.Diagnostics
         {
             _phases++;
 
+            // ONCE PER BOSS, NOT ONCE PER RUN - a P7 finding. This counted phase changes across
+            // the whole run and failed at two, which was right for as long as the only Dread in a
+            // run was the one the check placed itself. A campaign that ships a boss makes that
+            // false without anything being wrong: `greyhollow`'s Mother Stalk turns in fight one
+            // and this check's own Dread turns in fight three, and both are correct
+            if (!_turned.Add(actor))
+                Problem($"{actor.DebugName} changed phase more than once, and a phase change " +
+                        "happens once");
+
             if (actor.Tier != Tier.Dread)
                 Problem($"{actor.DebugName} changed phase and is a {actor.Tier}");
 
@@ -761,11 +1385,27 @@ namespace Game.Diagnostics
                 return;
             }
 
-            // neither a throw nor a move: the click cost nothing and nothing happened, which would
-            // spin this loop until the stuck timer caught it
+            // NEITHER A THROW NOR A MOVE, which used to be reported as a bug and is a P7 finding.
+            //
+            // A click that costs nothing is `March` refusing: there is no way to that square this
+            // turn, because the room is a corridor and the only way through it has somebody
+            // standing in it. That is the rules working - "a refused move is a move that did not
+            // happen" - and it never came up while every room was a yard with space in it.
+            // `greyhollow`'s stair is 5 wide and 9 deep and it came up in the first fight.
+            //
+            // So the hero does what a player does when they cannot get there: stops, and watches.
+            // Which is a real gesture with a real meaning (C3), costs the turn, and lets the round
+            // move on - and the stuck timer is still underneath if the turn never ends at all
             if (fight.ActionsLeft == actionsBefore && !fight.IsOver && fight.AwaitingHero)
             {
-                Problem($"a click on {at} cost the hero no action and threw no dice");
+                _blocked++;
+                GD.Print($"        no way to {at} this turn - the hero stops and watches");
+                _fight.Done();
+
+                if (_blocked <= BlockedTurnsWorthReporting) return;
+
+                Problem($"the hero has been unable to reach anything {_blocked} times - the room " +
+                        "may have no way through it at all");
                 Conclude();
             }
         }
@@ -1061,9 +1701,15 @@ namespace Game.Diagnostics
                 {
                     _wantsAFourthDie = false;
 
-                    if (thrown.Slots.Count != 4)
+                    // AGAINST THE HERO'S OWN POOL, not against a number. A Barbarian swings
+                    // Might + Blades + axe and a Nerve makes that four; a Mage has no Blades, so
+                    // his swing is two dice and a Nerve makes it three. Both are "one more die
+                    // than he would have thrown", and that is the rule (CORE_RULES.md section 7)
+                    int plain = _hero.BuildPool(Attr.Might, Skill.Blades).Count;
+
+                    if (thrown.Slots.Count != plain + 1)
                         Problem($"a Nerve bought the Heart die and {thrown.Slots.Count} dice reached " +
-                                "the felt");
+                                $"the felt - {_hero.DebugName} throws {plain} without it");
                     else if (thrown.Slots.All(t => t.LabelKey != Attr.Heart.Key()))
                         Problem("a Nerve bought the Heart die and no die on the felt is the hero's Heart");
                 }
@@ -1148,6 +1794,8 @@ namespace Game.Diagnostics
                 Problem($"{_fight.Boss.Actor.DebugName} finished the fight at " +
                         $"{_fight.Boss.Actor.Vigor}/{_fight.Boss.Actor.MaxVigor} and never changed");
 
+            CheckTheLoot();
+
             if (_fighting && _fight.Boss != null && !_fight.Boss.Turned)
                 GD.Print("        (the boss never reached half Vigor, so the phase change went " +
                          "untested this run)");
@@ -1188,19 +1836,25 @@ namespace Game.Diagnostics
             GD.Print($"react   {_readied} readied, {_reactions} struck out of turn");
             GD.Print($"nerve   {_nerveSpent} spent, {_nerveBanked} banked; widest pool " +
                      $"{_widestPool} dice");
-            if (_phases > 1)
-                Problem($"a boss changed phase {_phases} times and a phase change happens once");
 
+            GD.Print($"loot    {(_looted.Length > 0 ? _looted : "nothing dropped this run")}");
+            GD.Print($"content {(_campaignFoesFought > 0 ? $"fought {_campaignFoesFought} monster(s) read off a campaign folder" : "no campaign monster was fought this run")}");
+            if (_blocked > 0)
+                GD.Print($"blocked {_blocked} turn(s) ended with no way to reach anything - the " +
+                         "hero stopped and watched instead");
+            GD.Print($"save    {(_saves > 0 ? $"took {_saves} mid-fight, wrote {_saves} to disk, and reopened each on a table that had never seen the fight" : "no save was taken this run")}");
+            GD.Print($"room    {(_campaignRoomsFought > 0 ? $"played {_campaignRoomsFought} encounter(s) defined entirely by a campaign's own files - its map, its spawn slots, its monsters and its loot" : "every fight was in the room that ships")}");
             GD.Print("boss    " + (
-                _bossFights == 0 ? "none in this run"
+                _bossFights == 0 && _phases == 0 ? "none in this run"
                 : _phases == 1 ? $"fought {_bossFights}, changed phase once at half Vigor"
                 : _phases == 0 ? $"fought {_bossFights} and never got one to half - the phase change went untested"
                 : $"fought {_bossFights} and saw {_phases} phase changes"));
             GD.Print($"channel {(_breathed ? "cast, strained to the floor and rested" : _castsSeen + " cast")}" +
                      (_castsSeen == 0 ? " - NOTHING WAS CHANNELLED" : ""));
 
-            // a run of one fight is the boss's, so there was no casting fight to channel in
-            if (!Plain && !string.IsNullOrEmpty(CastingHero) && Fights >= 2 && _castsSeen == 0)
+            // only when there WAS a casting fight - a short run is all boss, and a plain run has
+            // no milestones in it at all
+            if (_castingFights > 0 && _castsSeen == 0)
                 Problem("the casting fight never channelled anything - the gesture was never reached");
             GD.Print($"        heart {(_spentOnHeart ? "yes" : "NO")}, " +
                      $"reroll {(_spentOnReroll ? "yes" : "NO")}, " +
@@ -1211,9 +1865,9 @@ namespace Game.Diagnostics
                 Problem("not every Nerve spend was reachable in this run - " +
                         $"heart {_spentOnHeart}, reroll {_spentOnReroll}, push {_spentOnPush}");
 
-            if (_spentOnHeart && _widestPool < 4)
-                Problem($"a Nerve bought the Heart die and the widest pool on the felt was " +
-                        $"{_widestPool} dice");
+            // the count itself is reported and not asserted: how wide a Nerve makes a pool depends
+            // on whose pool it is - a Barbarian's three becomes four and a Mage's two becomes
+            // three. The precise assertion is made on the throw, against that hero's own pool
 
             if (_readied > 0 && _reactions == 0)
                 GD.Print("        (nothing walked into reach while he was watching - not a fault, " +

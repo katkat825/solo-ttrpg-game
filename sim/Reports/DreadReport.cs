@@ -78,7 +78,7 @@ namespace Sim
 
                 if (defense > 0)
                     foreach (Actor foe in foes)
-                        if (foe.Tier == Tier.Dread) foe.Defense = defense;
+                        if (foe.Tier == Tier.Dread) foe.BaseDefense = defense;
 
                 EncounterResult r = Fight(engine, hero, foes, phases);
 

@@ -1,0 +1,19 @@
+{
+  "id": "ash_yard",
+  "map": "ash_yard",
+
+  "placements": [
+    { "slot": 1, "monster": "cinder_hound" },
+    { "slot": 2, "monster": "ghoul" },
+    { "slot": 3, "monster": "cinder_hound" },
+    { "slot": 4, "monster": "cinder_hound" }
+  ],
+
+  "triggers": [
+    { "when": "cleared", "then": "ends" }
+  ],
+
+  "cues": [
+    { "when": "entered", "cue": "the_yard_opens" }
+  ]
+}

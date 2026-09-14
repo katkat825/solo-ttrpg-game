@@ -171,6 +171,17 @@ namespace Core.Combat
             _observer.AttackResolved(outcome);
 
             foreach (Condition c in applied) _observer.ConditionApplied(target, c);
+
+            // AND WHAT THE WEAPON LEAVES BEHIND (P1). "At Vigor thresholds, AND FROM SPECIFIC
+            // ATTACKS, you take a Condition" - CORE_RULES.md section 9, the second half of which
+            // nothing could express until gear was data. Empty for everything the engine ships, so
+            // no seeded number moves; a campaign's cold blade fills it in.
+            //
+            // After the vigor thresholds, because a blow that crosses one and also tags you should
+            // read in the order it happened: the wound, then the ice
+            foreach (Condition c in outcome.Attacker.Inflicts)
+                if (target.ApplyCondition(c)) _observer.ConditionApplied(target, c);
+
             if (target.IsDown) _observer.ActorDowned(target);
         }
     }

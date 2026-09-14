@@ -1,0 +1,17 @@
+{
+  "id": "the_stair",
+  "map": "the_stair",
+
+  "placements": [
+    { "slot": 1, "monster": "blight_rat" },
+    { "slot": 2, "monster": "hollow_warden" }
+  ],
+
+  "triggers": [
+    { "when": "cleared", "then": "next" }
+  ],
+
+  "cues": [
+    { "when": "entered", "cue": "something_moves_below" }
+  ]
+}

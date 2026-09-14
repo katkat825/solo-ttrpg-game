@@ -1,4 +1,6 @@
 <Solution>
+  <Project Path="content.tests/content.tests.csproj" />
+  <Project Path="content/content.csproj" />
   <Project Path="core.tests/core.tests.csproj" />
   <Project Path="core/core.csproj" />
   <Project Path="game.tests/game.tests.csproj" />

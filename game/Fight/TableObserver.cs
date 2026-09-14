@@ -37,6 +37,11 @@ namespace Game.Fight
             _pieces = pieces;
         }
 
+        // WHAT WAS ON THE BODY. A hook rather than something this file does, because a loot table
+        // is content and a table of it is `Content.Items.LootTable` - what belongs here is only
+        // knowing the moment it should be asked, which is the moment somebody falls over
+        public System.Action<Actor> Loot { get; set; }
+
         // C3 draws the turn order on the table, and that is where a round becomes something the
         // player can read. The transcript says it in the meantime
         public void RoundBegan(int round)
@@ -70,6 +75,11 @@ namespace Game.Fight
         public void ConditionApplied(Actor actor, Condition condition)
         {
             _pieces.Of(actor)?.Marks?.Flash(condition);
+
+            // AND THE PIECE ITSELF SHUDDERS (MINIS_AND_ART.md A1). The word on the mat says WHAT
+            // happened; the figure reacting is what makes it happen TO something. A supplied model
+            // with a `wobble` clip plays it; everything else leans and settles (`Mini.Wobble`)
+            _pieces.Of(actor)?.Mini?.Wobble();
         }
 
         public void ActorDowned(Actor actor)
@@ -90,6 +100,10 @@ namespace Game.Fight
             // a body are sums nobody is keeping any more
             if (piece.Vigor != null) piece.Vigor.Visible = false;
             if (piece.Marks != null) piece.Marks.Visible = false;
+
+            // AND WHATEVER IT WAS CARRYING (P1). Drawn once, through the fight's own IRng, so a
+            // re-run on the same seed finds the same thing on the same body
+            Loot?.Invoke(actor);
 
             GD.Print($"        {actor.DebugName} goes down" + (fell == null ? "" : $" on {fell}"));
         }

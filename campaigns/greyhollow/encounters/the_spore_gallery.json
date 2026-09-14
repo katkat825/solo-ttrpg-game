@@ -1,0 +1,19 @@
+{
+  "id": "the_spore_gallery",
+  "map": "the_spore_gallery",
+
+  "placements": [
+    { "slot": 1, "monster": "spore_thrall" },
+    { "slot": 2, "monster": "blight_rat" },
+    { "slot": 3, "monster": "spore_thrall" },
+    { "slot": 4, "monster": "cistern_leech" }
+  ],
+
+  "triggers": [
+    { "when": "cleared", "then": "goto", "encounter": "the_cistern" }
+  ],
+
+  "cues": [
+    { "when": "entered", "cue": "the_air_is_thick" }
+  ]
+}

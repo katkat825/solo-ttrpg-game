@@ -1,9 +1,17 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Godot;
+using Content.Monsters;
 using Core.Characters;
 using Core.Localization;
 using Game.Localization;
+
+// System.IO and Godot both have a FileAccess, and this file now needs Directory and Path from one
+// and the reader from the other. Aliasing the Godot one is the smaller change: it reads res:// as
+// well as an absolute path, which is exactly what is needed to open game.csv inside a .pck AND a
+// campaign's CSV out on a disk with one method
+using GodotFile = Godot.FileAccess;
 
 namespace Game.Diagnostics
 {
@@ -27,7 +35,12 @@ namespace Game.Diagnostics
         // belongs - this line, and Main.cs's. when statblocks become campaign data (Phase P) this
         // is the one line that changes, and the report says out loud what it checked so a stale
         // answer is visible rather than assumed
-        public IArchetypeSource Archetypes { get; set; } = new BuiltInArchetypes();
+        public IArchetypeSource Archetypes { get; set; } = Game.Campaigns.Library.Load();
+
+        // WHERE A CAMPAIGN'S OWN STRINGS LIVE (ARCHITECTURE.md section 4). One CSV per language
+        // set, inside the campaign folder, because a campaign that names its own monsters has to
+        // carry their names with it or it is not self-contained
+        public const string LocaleFolder = "locale";
 
         public override void _Ready()
         {
@@ -46,9 +59,13 @@ namespace Game.Diagnostics
             var expected = Checklist();
 
             CheckRegistered();
-            CheckCoverage(expected, english);
+            CheckCoverage(expected, english, CsvPath);
             CheckGrammar(english);
             CheckPlaceholders(english);
+
+            // and every loaded campaign against its own locale, which is a different file with a
+            // different owner and exactly the same two questions
+            CheckCampaigns();
 
             ShowSample();
 
@@ -64,10 +81,19 @@ namespace Game.Diagnostics
         // covers a different game, just from the other side
         IReadOnlyCollection<string> Checklist()
         {
-            var keys = new SortedSet<string>(EngineKeys.All(Archetypes));
+            // THE ENGINE'S OWN ROSTER, AND NOT THE CAMPAIGNS' (P0). `EngineKeys` says what it is
+            // for on its own first line - "every key the ENGINE itself can put in front of a
+            // player... campaigns ship their own strings" - and handing it a roster with
+            // `ashfall.ghoul` in it would demand that ghoul's name from game/locale/game.csv,
+            // which is the one file CONVENTIONS.md section 7 says must never grow a campaign's
+            // keys. So the loaded rosters are split: the engine's go here, and each campaign's go
+            // to that campaign's own file in CheckCampaigns below
+            IArchetypeSource engine = EngineRoster();
 
-            GD.Print($"roster      {Archetypes.GetType().Name}, " +
-                     $"{Archetypes.Ids.Count} archetypes: {string.Join(", ", Archetypes.Ids)}");
+            var keys = new SortedSet<string>(EngineKeys.All(engine));
+
+            GD.Print($"roster      {engine.GetType().Name}, " +
+                     $"{engine.Ids.Count} archetypes: {string.Join(", ", engine.Ids)}");
 
             SortedDictionary<string, string> skins = GameKeys.TrayNameKeys();
 
@@ -83,6 +109,15 @@ namespace Game.Diagnostics
             }
 
             GD.Print($"tray skins  {string.Join(", ", skins.Keys)}");
+
+            // AND THE FIGURES THE BASE GAME SHIPS (Phase A). Added here for exactly the reason F4
+            // added the tray skins: the game emits them, game.csv carries them, and a checklist
+            // that has never heard of them calls both an orphan
+            var minis = new SortedSet<string>(GameKeys.MiniNameKeys());
+
+            foreach (string key in minis) keys.Add(key);
+
+            GD.Print($"minis       {string.Join(", ", minis)}");
             GD.Print("");
 
             return keys;
@@ -110,23 +145,183 @@ namespace Game.Diagnostics
                 Problem("the translation server has no locales loaded");
         }
 
+        // the rosters that are nobody's campaign - the shared vocabulary that ships in the base
+        // game and keeps its un-prefixed ids (CONVENTIONS.md section 7)
+        IArchetypeSource EngineRoster()
+        {
+            if (Archetypes is not Game.Campaigns.Library library) return Archetypes;
+
+            var engine = new Rosters();
+
+            foreach (IArchetypeSource source in library.Archetypes.Sources)
+                if (source is not JsonArchetypeSource campaign || campaign.Campaign.Length == 0)
+                    engine.Add(source);
+
+            return engine;
+        }
+
+        // EVERY LOADED CAMPAIGN AGAINST ITS OWN `locale/`, both directions, exactly as the engine's
+        // is checked against game.csv. This is the half of the checklist that could not exist
+        // before statblocks were data: `EngineKeys` lives in core/ and cannot see a folder, and
+        // `LocaleAudit` runs inside Godot and can (CONTENT_PIPELINE.md P5).
+        //
+        // A campaign with no monsters of its own needs no locale and is not asked for one
+        void CheckCampaigns()
+        {
+            if (Archetypes is not Game.Campaigns.Library library) return;
+
+            foreach (Game.Campaigns.Loaded campaign in library.Campaigns)
+            {
+                var expected = new SortedSet<string>(campaign.Keys());
+
+                GD.Print("");
+                GD.Print($"campaign    {campaign}");
+
+                if (expected.Count == 0) continue;
+
+                IReadOnlyList<string> files = LocaleOf(campaign.Id);
+
+                if (files.Count == 0)
+                {
+                    Problem($"campaign '{campaign.Id}' names {expected.Count} things and has no " +
+                            $"{LocaleFolder}/ - none of them can be shown in any language");
+                    continue;
+                }
+
+                Dictionary<string, string> english = Merged(files, campaign.Id);
+
+                if (english == null) continue;
+
+                CheckCoverage(expected, english, files[0], Label(campaign.Id, files));
+                CheckGrammar(english);
+                CheckPlaceholders(english);
+
+                // AND THAT THE STRINGS REALLY CAME FROM THAT FOLDER (P5). Everything above reads
+                // the CSV; this asks the translation server, which is the thing the table actually
+                // draws from - and the way to prove a string came from a campaign is to take the
+                // campaign away and watch the string go with it
+                CheckTheUnloadPath(campaign, expected);
+            }
+        }
+
+        // EVERY CSV THE CAMPAIGN SHIPS, not the first one. "One CSV per language set" means one
+        // FILE holds a set of languages as columns - it does not mean a campaign may only have
+        // one. Splitting a big campaign's strings into `monsters.csv` and `quests.csv` is an
+        // ordinary thing to want, `CampaignLocale` already registers all of them, and an audit
+        // that read only the first would report every key in the second as missing
+        IReadOnlyList<string> LocaleOf(string campaign)
+        {
+            foreach (string root in Game.Campaigns.CampaignFolders.Roots())
+            {
+                string folder = Path.Combine(root, campaign, LocaleFolder);
+
+                if (!Directory.Exists(folder)) continue;
+
+                string[] files = Directory.GetFiles(folder, "*.csv");
+
+                if (files.Length == 0) continue;
+
+                System.Array.Sort(files, System.StringComparer.Ordinal);
+
+                return files;
+            }
+
+            return System.Array.Empty<string>();
+        }
+
+        // them all as one table. A key in two of a campaign's own files is a problem worth its own
+        // sentence: one of them wins by file name, silently, and the loser is a translation
+        // somebody wrote and nobody will ever see
+        Dictionary<string, string> Merged(IReadOnlyList<string> files, string campaign)
+        {
+            var english = new Dictionary<string, string>();
+
+            foreach (string file in files)
+            {
+                Dictionary<string, string> rows = ReadColumn(file, "en");
+
+                if (rows == null) continue;
+
+                foreach (KeyValuePair<string, string> row in rows)
+                    if (!english.TryAdd(row.Key, row.Value))
+                        Problem($"{row.Key} is in two of {campaign}'s CSVs, and {Named(file)} is " +
+                                "not the one that wins - whichever sorts first does, silently");
+            }
+
+            return english;
+        }
+
+        static string Label(string campaign, IReadOnlyList<string> files) =>
+            files.Count == 1
+                ? Named(files[0])
+                : $"{campaign}/{LocaleFolder}/ ({files.Count} files)";
+
+        // TAKE THE CAMPAIGN AWAY AND ITS STRINGS GO WITH IT. `CONTENT_PIPELINE.md` P5 asks the
+        // loader to unregister a campaign's CSVs when it unloads, and an unload path that is never
+        // exercised is an unload path that does not work - it would not be noticed until somebody
+        // unsubscribed from a Workshop item and kept reading its monsters' names.
+        //
+        // Put back afterwards, always, because everything after this line in the run still expects
+        // the campaign to be loaded
+        void CheckTheUnloadPath(Game.Campaigns.Loaded campaign, IReadOnlyCollection<string> expected)
+        {
+            string key = expected.FirstOrDefault();
+
+            if (key == null) return;
+
+            var loc = new GodotLocalizer();
+
+            if (!loc.Has(key))
+            {
+                Problem($"{key} is in {campaign.Id}'s locale and the translation server does not " +
+                        "have it - the campaign's CSVs were never registered");
+                return;
+            }
+
+            if (!Game.Campaigns.CampaignLocale.Unregister(campaign.Folder))
+            {
+                Problem($"campaign '{campaign.Id}' brought {campaign.Strings} strings and cannot " +
+                        "be unloaded - nothing is keeping track of what it handed over");
+                return;
+            }
+
+            bool gone = !loc.Has(key);
+
+            Game.Campaigns.CampaignLocale.Register(campaign.Folder);
+
+            if (!gone)
+                Problem($"campaign '{campaign.Id}' was unloaded and {key} still resolves - its " +
+                        "strings outlive it, so two campaigns could not both be unloaded safely");
+            else if (!loc.Has(key))
+                Problem($"campaign '{campaign.Id}' was unloaded and could not be loaded again - " +
+                        $"{key} is gone for the rest of this run");
+            else
+                GD.Print($"unload      took {campaign.Id}'s strings away and put them back; " +
+                         $"{key} went with it and came back");
+        }
+
         // both directions, and both matter
         // a key with no text breaks the screen; text with no key is dead weight a translator is paid for
         // "the game" is the rules and the presentation layer together - see Checklist()
-        void CheckCoverage(IReadOnlyCollection<string> expected, Dictionary<string, string> english)
+        //
+        // <paramref name="label"/> is how the file is named in the report, for the campaign case
+        // where there may be several of them
+        void CheckCoverage(IReadOnlyCollection<string> expected, Dictionary<string, string> english,
+                           string file, string label = null)
         {
             var have = new HashSet<string>(english.Keys);
+            string named = label ?? Named(file);
 
             var missing = expected.Where(k => !have.Contains(k)).ToList();
             var orphans = english.Keys.Where(k => !expected.Contains(k)).ToList();
 
-            GD.Print($"keys        the game emits {expected.Count}, file has {english.Count}");
+            GD.Print($"keys        the game emits {expected.Count}, {named} has {english.Count}");
 
             foreach (string key in missing)
-                Problem($"{key} has no English. The game emits it and the file doesn't cover it.");
+                Problem($"{key} has no English in {named}. It is emitted and the file doesn't cover it.");
 
             foreach (string key in orphans)
-                Problem($"{key} is in the file but nothing emits it. Either it's a typo or the code that used it is gone.");
+                Problem($"{key} is in {named} and nothing emits it. Either it's a typo or the code that used it is gone.");
 
             if (missing.Count == 0 && orphans.Count == 0)
                 GD.Print("            every key the game emits has English, and nothing is spare");
@@ -169,13 +364,20 @@ namespace Game.Diagnostics
         {
             var loc = new GodotLocalizer();
 
-            string[] sample =
+            var sample = new List<string>
             {
                 Attr.Might.Key(),
                 Skill.Channeling.Key(),
                 Condition.Winded.DescriptionKey(),
                 KeyConventions.ActorNameNumbered("rabble"),
             };
+
+            // AND ONE OF A CAMPAIGN'S OWN (P5). "Switch to the pseudolocale and every campaign
+            // string mangles (nothing hardcoded)" - a sample of engine keys proves the
+            // pseudolocale is on, and proves nothing at all about the strings that arrived at
+            // runtime out of a folder, which are exactly the ones a new loader could have got
+            // wrong
+            foreach (string key in FromACampaign()) sample.Add(key);
 
             GD.Print("");
             GD.Print("sample      key                             english                    pseudolocale");
@@ -206,6 +408,23 @@ namespace Game.Diagnostics
                 Problem("GodotLocalizer.Has says a key that doesn't exist is present, with the pseudolocale on");
 
             TranslationServer.PseudolocalizationEnabled = was;
+        }
+
+        // the first campaign's own name and the first thing it names, when there is a campaign
+        // loaded. Two rather than one because they come from different halves of the checklist -
+        // a title out of `campaign.json`'s derived keys and a monster out of its roster
+        IEnumerable<string> FromACampaign()
+        {
+            if (Archetypes is not Game.Campaigns.Library library) yield break;
+
+            foreach (Game.Campaigns.Loaded campaign in library.Campaigns)
+            {
+                if (campaign.Failed) continue;
+
+                foreach (string key in campaign.Keys().Take(2)) yield return key;
+
+                yield break;
+            }
         }
 
         // a pseudolocale that doesn't mark or pad anything is worse than none
@@ -245,6 +464,17 @@ namespace Game.Diagnostics
                 Problem($"expansion_ratio is {ratio} but nothing was padded: \"{plain}\" -> \"{pseudo}\"");
         }
 
+        // the file as a person would name it, which for a campaign is the folder it is in rather
+        // than the whole path to somebody's disk
+        static string Named(string file)
+        {
+            if (file.StartsWith("res://")) return file;
+
+            string folder = Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(file)) ?? "");
+
+            return folder.Length > 0 ? $"{folder}/{LocaleFolder}/{Path.GetFileName(file)}" : file;
+        }
+
         static string Clip(string s, int width) =>
             (s.Length > width ? s.Substring(0, width - 1) + "…" : s).PadRight(width);
 
@@ -253,11 +483,11 @@ namespace Game.Diagnostics
         // a person would go and fix
         Dictionary<string, string> ReadColumn(string path, string locale)
         {
-            using FileAccess file = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+            using GodotFile file = GodotFile.Open(path, GodotFile.ModeFlags.Read);
 
             if (file == null)
             {
-                Problem($"cannot open {path}: {FileAccess.GetOpenError()}");
+                Problem($"cannot open {path}: {GodotFile.GetOpenError()}");
                 return null;
             }
 
