@@ -15,26 +15,8 @@ using FightNode = Game.Fight.Fight;
 
 namespace Game.Saves
 {
-    // TAKING A SAVE OFF THE TABLE, AND PUTTING ONE BACK (CONTENT_PIPELINE.md P6).
-    //
-    // `Content.Saves` knows what a save IS and has no idea what a table is; this is the half that
-    // knows both. It lives in `game/` for the same reason `CampaignLocale` does - it touches nodes
-    // - and it is the only file that does, so the save format itself stays headless and testable.
-    //
-    // THE RESTORE IS NOT A REBUILD. A save does not describe a room; it describes what has
-    // HAPPENED in one. So loading re-plays the ordinary setup - the board opens the campaign's
-    // map, the fight musters the encounter's placements, the hero is equipped - and then this
-    // puts the damage, the conditions, the positions and the turn back on top. That is why a save
-    // is four kilobytes rather than a scene graph, and why a campaign that has been updated under
-    // a save loads with the update rather than with a stale copy of itself.
-    //
-    // WHICH MEANS FOES ARE MATCHED, NOT CREATED. The encounter musters the same four it always
-    // musters, and each is found in the save by the spawn slot it started on (`Piece.Slot`) -
-    // unique where an id repeats and stable where a square moves. One that the save does not
-    // mention had already fallen when the save was taken, and is taken off the board.
     public static class Savepoint
     {
-        // ---- taking one ----
 
         public static SaveGame Of(FightNode fight, BoardNode board, DiceTray tray)
         {
@@ -56,9 +38,7 @@ namespace Game.Saves
                 save.ActionsLeft = running.ActionsLeft;
             }
 
-            // IN TURN ORDER, and seated as they go. The order IS the save's record of who goes
-            // when - `Encounter.Resume` reads it straight back rather than re-deriving it from the
-            // initiative numbers and a tie-break rule that is not in the file
+            // in turn order: the sequence is the save's record of who goes when, read straight back rather than re-derived
             int seat = 0;
 
             foreach (Actor actor in Ordered(fight, running))
@@ -85,13 +65,8 @@ namespace Game.Saves
             return save;
         }
 
-        // THE FALLEN ARE LEFT OUT ENTIRELY rather than saved as down: a save is a record of what
-        // is in the room, and a corpse is a thing the fight already took off the board. The load
-        // puts them back the same way - anybody the encounter musters and the save does not
-        // mention had already fallen.
-        //
-        // The hero is always in it, standing or not, because a save with no hero in it is not a
-        // save of anything
+        // the fallen are left out entirely; a corpse was already off the board, and the load re-fells anyone the save doesn't mention
+        // the hero is always saved, standing or not
         static IEnumerable<Actor> Ordered(FightNode fight, Encounter running)
         {
             if (running == null || running.Round == 0)
@@ -139,6 +114,10 @@ namespace Game.Saves
 
             foreach (string item in actor.Satchel) saved.Satchel.Add(item);
 
+            // growth ids come off the board, not the actor: core has no concept of a growth step, and only the hero grows
+            if (ReferenceEquals(actor, fight?.Hero) && board != null)
+                foreach (string step in board.Grown) saved.Growth.Add(step);
+
             Cell? at = board?.CellOf(fight.PieceFor(actor));
 
             if (at != null) { saved.X = at.Value.X; saved.Y = at.Value.Y; }
@@ -146,14 +125,7 @@ namespace Game.Saves
             return saved;
         }
 
-        // ONLY GEAR THAT CAME OUT OF AN `items/` FOLDER. A monster's claw is written inline in
-        // its own statblock and a hero with nothing in hand is holding `Gear.Nothing`, and neither
-        // is a thing a save has any business carrying: both come back off the statblock when the
-        // encounter musters again, and writing them down would be a save with a second, stale copy
-        // of the campaign in it.
-        //
-        // What IS worth carrying is the axe he picked up off a ghoul - a catalogue item, which
-        // the statblock knows nothing about and the save is the only record of
+        // only catalogue gear (from an items/ folder): a statblock's own weapon comes back when the encounter musters, so saving it would be a stale copy of the campaign
         static string PickedUp(Gear gear)
         {
             if (gear == null || gear.Id == Gear.Nothing.Id) return "";
@@ -182,10 +154,7 @@ namespace Game.Saves
             return Game.Campaigns.Library.Load(quiet: true).Campaign(board.Campaign)?.Manifest;
         }
 
-        // ---- and putting one back ----
-
-        // Every problem is a thing the save asked for that the table could not give it, and none
-        // of them stops the load. The caller shows them; the fight carries on (P6)
+        // each problem is something the save asked for that the table couldn't give; none stops the load
         public static IReadOnlyList<ContentProblem> Apply(SaveGame save, FightNode fight,
                                                           BoardNode board)
         {
@@ -195,10 +164,7 @@ namespace Game.Saves
 
             string file = "the save";
 
-            // THE CAMPAIGN IS CHECKED FIRST AND IS THE ONE THING THAT CAN MAKE THE REST POINTLESS.
-            // A save naming a campaign that is not installed any more - unsubscribed, or never
-            // there - has a hero and no room to put him in, and the honest answer is to say which
-            // campaign is missing and let the caller send the player back to the shelf
+            // the campaign is checked first: a save whose campaign isn't installed has a hero and no room to put him in
             if (save.Campaign.Length > 0)
             {
                 Game.Campaigns.Loaded campaign =
@@ -237,10 +203,7 @@ namespace Game.Saves
             return problems;
         }
 
-        // THE TURN ORDER, PUT BACK RATHER THAN ROLLED AGAIN. `Encounter.Begin` throws for
-        // initiative, which is exactly what a load must not do - re-rolling on load would let a
-        // player reload until the order suited them. So the seats in the file become the order,
-        // and `Encounter.Resume` takes it (see the comment there for what it forgives)
+        // turn order is put back, not rolled again: re-rolling initiative on load would let a player reload until the order suited them
         static void Resume(SaveGame save, FightNode fight, List<(int Seat, Actor Actor)> seated,
                            List<ContentProblem> problems, string file)
         {
@@ -292,10 +255,7 @@ namespace Game.Saves
 
                 if (saved == null)
                 {
-                    // NOT IN THE SAVE MEANS ALREADY DEAD. The encounter musters everybody it
-                    // always musters, so the ones the save does not mention are the ones that had
-                    // already fallen - and the way to put that back is to do to them what the
-                    // fight would have done
+                    // not in the save means already dead: fell before the save was taken, so re-felled here
                     piece.Actor.RestoreVigor(0);
                     board?.Lift(piece.Mini);
                     continue;
@@ -314,9 +274,7 @@ namespace Game.Saves
                         "does not place anybody there - it has been left out"));
         }
 
-        // BY THE SPAWN SLOT FIRST, which is unique and never moves. By id and ordinal second, for
-        // a fight whose foes were placed by a scene rather than by an encounter and therefore have
-        // no slot at all - the shipped cellar, and every save taken in it
+        // match by spawn slot first (unique, never moves); by id and ordinal only for scene-placed foes with no slot
         static SavedActor Match(SaveGame save, Piece piece, HashSet<SavedActor> taken)
         {
             foreach (SavedActor saved in save.Foes)
@@ -337,10 +295,7 @@ namespace Game.Saves
             return null;
         }
 
-        // ONE ACTOR, PUT BACK. The order matters: gear, then the things that step dice down, then
-        // the tracks. Conditions and strain each add a modifier through the F3 trait pipeline, so
-        // re-applying them rebuilds exactly the dice the save was looking at - which is what "the
-        // trait pipeline with provenance round-trips cleanly" means in practice
+        // order matters: gear, then the things that step dice down, then the tracks, so re-applying rebuilds exactly the dice the save saw
         static void Restore(SavedActor saved, Actor actor, FightNode fight, BoardNode board,
                             string file, List<ContentProblem> problems)
         {
@@ -358,8 +313,7 @@ namespace Game.Saves
 
             for (int i = 0; i < saved.Strain; i++) actor.AddStrain();
 
-            // NOT CLAMPED HERE. `NotchGear` refuses at the d4 floor, which is the rule, so a save
-            // asking for six notches on a d6 gets the two it can have and says so
+            // not clamped here: NotchGear refuses at the d4 floor, so an over-notched save gets what it can and reports the rest
             for (int i = 0; i < saved.Notches; i++)
                 if (!actor.NotchGear())
                 {
@@ -388,10 +342,7 @@ namespace Game.Saves
 
             foreach (string item in saved.Satchel)
             {
-                // A NAME NOTHING CAN RESOLVE IS STILL CARRIED. `Actor.Satchel` is ids rather than
-                // `Gear` precisely so an uninstalled campaign's trinket survives in the save
-                // rather than being quietly dropped - reinstall the campaign and it is a thing
-                // again (Actor.Satchel says this too)
+                // an unresolvable id is still carried: Satchel holds ids so an uninstalled campaign's trinket survives and returns on reinstall
                 actor.Carry(item);
 
                 if (!library.Items.Has(item))
@@ -411,8 +362,7 @@ namespace Game.Saves
 
             if (gear == null)
             {
-                // the statblock's own is what is left, which is the same degradation an
-                // uninstalled campaign produces everywhere else
+                // fall back to the statblock's own gear, the same degradation an uninstalled campaign produces everywhere
                 problems.Add(new ContentProblem(
                     file, wielded ? "wielded" : "worn",
                     $"nothing installed ships an item called '{id}' - {actor.DebugName} has what " +

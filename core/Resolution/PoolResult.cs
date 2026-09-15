@@ -4,10 +4,6 @@ using Core.Dice;
 
 namespace Core.Resolution
 {
-    // the outcome of one throw, and the dice that made it
-    // every die keeps its key, size, value and whether it counted
-    // so presentation can animate and label what happened
-    // without recomputing anything or knowing a rule
     public readonly struct RolledDie
     {
         public readonly string LabelKey;
@@ -24,7 +20,7 @@ namespace Core.Resolution
             Counted = counted;
         }
 
-        // DEVELOPER ONLY - not localized, must never reach the screen
+        // debug only, never localized - keep it off the screen
         public override string ToString() =>
             $"{LabelKey} {Die.Label()}->{Value}{(Counted ? "" : " (unused)")}";
     }
@@ -35,7 +31,7 @@ namespace Core.Resolution
 
         public int Total { get; }
 
-        // largest die NOT counted toward the total - d4 if nothing is left over
+        // largest die not counted toward the total - d4 if nothing is left over
         public Die Impact { get; }
 
         public int Ones { get; }
@@ -48,27 +44,14 @@ namespace Core.Resolution
             Ones = ones;
         }
 
-        // exactly one 1 - cosmetic, the companion's cue to speak
         public bool Snag => Ones == 1;
 
-        // two or more - a real mechanical consequence, about 6% of rolls
         public bool Trouble => Ones >= 2;
 
         public bool Beats(int difficulty) => Total >= difficulty;
 
-        // ---- reading a throw that has already happened ----
 
-        // THE RULES OF READING A HANDFUL OF DICE, separated from the rolling of them: sum the best
-        // two, the largest leftover die is Impact, and ties break toward the player by counting the
-        // SMALLER die so the larger one is free to be Impact (CORE_RULES.md section 2).
-        //
-        // `StandardResolver.Resolve` rolls and then calls this, so there is exactly ONE
-        // implementation of the arithmetic - which is the whole reason it is here rather than
-        // copied. The second caller is save/load (CONTENT_PIPELINE.md P6, SEAMS.md section 9): a
-        // saved throw is the FACES that were on the felt and nothing else, and it is read back
-        // with this. A save that stored the faces AND the verdict would be two fields that can
-        // disagree, and `SEAMS.md` names that disagreement as the specific obstacle to round
-        // tripping. Store one, derive the other, and there is nothing left to disagree.
+        // sum the best two; largest leftover is Impact; ties count the smaller so the larger stays free for Impact
         public static PoolResult From(IReadOnlyList<(string LabelKey, Die Die, int Value)> thrown)
         {
             if (thrown == null || thrown.Count == 0)
@@ -96,7 +79,7 @@ namespace Core.Resolution
             return new PoolResult(rolls, total, impact, ones);
         }
 
-        // DEVELOPER ONLY - not localized, must never reach the screen
+        // debug only, never localized - keep it off the screen
         public override string ToString() =>
             string.Join(", ", Rolls.Select(r => r.ToString())) +
             $" | total {Total} | impact {Impact.Label()}" +

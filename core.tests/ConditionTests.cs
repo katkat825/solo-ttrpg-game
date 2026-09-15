@@ -5,10 +5,6 @@ using Xunit;
 
 namespace Core.Tests
 {
-    // covers conditions stepping their attribute die down one size
-    // clearing restores it, the same condition twice does not stack
-    // vigor thresholds apply them and say which ones landed
-    // Rabble have no vigor track and drop to any hit
     public class ConditionTests
     {
         [Fact]
@@ -48,8 +44,8 @@ namespace Core.Tests
         public void DifferentConditions_AffectDifferentAttributes()
         {
             var hero = Fixtures.Hero();
-            hero.ApplyCondition(Condition.Winded);   // Might
-            hero.ApplyCondition(Condition.Reeling);  // Grace
+            hero.ApplyCondition(Condition.Winded);
+            hero.ApplyCondition(Condition.Reeling);
 
             Assert.Equal(Die.D6, hero.Attribute(Attr.Might));
             Assert.Equal(Die.D4, hero.Attribute(Attr.Grace));
@@ -58,7 +54,7 @@ namespace Core.Tests
         [Fact]
         public void DamageAcrossThreshold_AppliesWinded_AndReportsIt()
         {
-            var hero = Fixtures.Hero(); // 20 vigor, Winded at <= 13.33
+            var hero = Fixtures.Hero();
 
             var applied = hero.Damage(7);
 
@@ -85,7 +81,6 @@ namespace Core.Tests
             Assert.True(mook.IsDown);
         }
 
-        // ---- the pipeline underneath, seen through an Actor (F3) ----
 
         [Fact]
         public void AConditionAndAnItem_ComposeOnTheSameAttribute_WhicheverArrivesFirst()
@@ -133,7 +128,6 @@ namespace Core.Tests
             Assert.Single(hero.Modifiers);
         }
 
-        // the saturation rule, CORE_RULES.md section 9
         [Fact]
         public void AnItemPastTheFloor_IsRefused_AndSaysHowFar()
         {
@@ -182,8 +176,7 @@ namespace Core.Tests
             Assert.False(hero.IsDown);
         }
 
-        // a foe with no Grace statblock takes Reeling and is simply unaffected
-        // the alternative drops every mook that catches a Condition it has no die for
+        // a foe with no die for the condition is simply unaffected, not dropped
         [Fact]
         public void AConditionOnAnAttributeYouHaveNoDieFor_DoesNothing()
         {
@@ -197,7 +190,6 @@ namespace Core.Tests
             Assert.False(rival.IsOverwhelmed);
         }
 
-        // ---- vigor has one answer (F3) ----
 
         [Fact]
         public void Vigor_ClampsAtZero_RatherThanRunningNegative()
@@ -210,11 +202,8 @@ namespace Core.Tests
             Assert.True(hero.IsDown);
         }
 
-        // ---- the point of the whole mechanic: the NEXT pool is smaller (COMBAT_LOOP.md C1) ----
 
-        // "getting hurt shrinks your dice and you SEE it" is only true if the die that reaches the
-        // table is the shrunken one. This is that sentence as a test: the pool is built from the
-        // pipeline's current die, not from the base, so a Winded hero throws a smaller solid
+        // the pool is built from the pipeline's current die, not the base, so a winded hero throws smaller
         [Fact]
         public void AWindedHero_ThrowsASmallerMightDie()
         {
@@ -228,8 +217,7 @@ namespace Core.Tests
             Assert.Equal(Attr.Might.Key(), hero.BuildPool(Attr.Might, Skill.Blades).Dice[0].LabelKey);
         }
 
-        // and the pool does not lose a die - the hero is worse off, not untrained. a condition
-        // that dropped a die out of the pool would change the Impact rule underneath it
+        // the pool keeps its die count; a shrunk die is worse off, not untrained
         [Fact]
         public void AConditionShrinksTheDie_AndNeverRemovesIt()
         {
@@ -241,12 +229,10 @@ namespace Core.Tests
             Assert.Equal(before, hero.BuildPool(Attr.Might, Skill.Blades).Count);
         }
 
-        // crossing both thresholds in one blow reports both, in the order they were crossed -
-        // the view writes one mark per Condition and gets them from this list
         [Fact]
         public void OneBigHit_CanReportTwoConditionsAtOnce()
         {
-            var hero = Fixtures.Hero();   // 20 vigor: Winded at 13, Reeling at 6
+            var hero = Fixtures.Hero();
 
             var applied = hero.Damage(15);
 

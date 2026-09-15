@@ -9,22 +9,6 @@ using Xunit;
 
 namespace Content.Tests
 {
-    // A STRANGER'S MODEL FILE, READ WITHOUT TRUSTING IT (MINIS_AND_ART.md A2).
-    //
-    // This is the milestone the whole phase was ordered around - "the sharp edge last" - and it is
-    // the one place in the project where a test is standing in for an attacker. Every case below
-    // is either a file a well-meaning author will produce (a 4K atlas, a sculpt nobody decimated,
-    // a `.gltf` whose textures sit beside it) or one nobody should: a chunk that claims to be
-    // longer than the file, a uri that climbs out of the pack.
-    //
-    // THE FILES ARE BUILT IN THE TEST rather than shipped as fixtures, deliberately. A binary
-    // fixture is a blob nobody can read in a diff, and every interesting case here is a handful of
-    // bytes in a header - a truncated chunk is one integer. Building them means the test says what
-    // it is testing.
-    //
-    // NOTHING HERE MAY THROW. `ModelReader` is the isolation boundary for art: a hostile file has
-    // to come back as a `ContentProblem`, because the alternative is one bad subscribed folder
-    // taking a fight down with it.
     public sealed class ModelTests : IDisposable
     {
         readonly string _pack;
@@ -37,17 +21,14 @@ namespace Content.Tests
 
         public void Dispose()
         {
-            try { Directory.Delete(_pack, recursive: true); } catch { /* a temp folder */ }
+            try { Directory.Delete(_pack, recursive: true); } catch { }
         }
 
-        // ---- building a .glb ----
 
         const uint Magic = 0x46546C67;
         const uint JsonChunk = 0x4E4F534A;
         const uint BinChunk = 0x004E4942;
 
-        // a glTF whose tables say it holds one triangle-soup mesh, which is the smallest honest
-        // model there is
         static string OneMesh(int vertices = 300, int triangles = 100, int nodes = 3,
                               string extra = "") => $@"{{
             ""asset"": {{ ""version"": ""2.0"" }},
@@ -115,7 +96,6 @@ namespace Content.Tests
             Assert.Contains(read.Problems, p => p.What.Contains(saying));
         }
 
-        // ---- what a good model reads back as ----
 
         [Fact]
         public void AModelIsCountedOutOfItsOwnTablesRatherThanItsGeometry()
@@ -129,7 +109,6 @@ namespace Content.Tests
             Assert.Equal(1, read.Value.Meshes);
         }
 
-        // the clip names are what turns "no such clip" into a sentence an author can act on (A1)
         [Fact]
         public void TheAnimationNamesComeBackSoAMisspeltClipCanBeOfferedTheRealOnes()
         {
@@ -142,7 +121,6 @@ namespace Content.Tests
             Assert.False(read.Value.Has("Walk"));
         }
 
-        // "a model with no rig at all is a static piece that still slides and gets struck"
         [Fact]
         public void AModelWithNoAnimationIsFine()
         {
@@ -160,7 +138,6 @@ namespace Content.Tests
             Assert.True(Inspect(file).Ok);
         }
 
-        // ---- the container, where every length is a stranger's claim ----
 
         [Fact]
         public void SomethingThatIsNotAGlbIsRefusedWhateverItIsCalled()
@@ -175,14 +152,12 @@ namespace Content.Tests
             Refused(Inspect(Put("skeleton.glb", new byte[] { 1, 2, 3 })), "too short");
         }
 
-        // THE COMMONEST BROKEN FILE THERE IS, and the message says so: an interrupted copy
         [Fact]
         public void AFileThatSaysItIsLongerThanItIsIsCalledTruncated()
         {
             Refused(Inspect(Glb(OneMesh(), declared: 1_000_000)), "truncated");
         }
 
-        // the oldest trick there is - a chunk header claiming more bytes than are present
         [Fact]
         public void AChunkClaimingMoreBytesThanArePresentIsRefusedRatherThanSliced()
         {
@@ -219,7 +194,6 @@ namespace Content.Tests
             Refused(Inspect(Put("v3.glb", bytes)), "version 3");
         }
 
-        // ---- the caps ----
 
         [Fact]
         public void AModelOverTheVertexCapIsRefusedByNameAndNotClampedSilently()
@@ -260,9 +234,7 @@ namespace Content.Tests
             Refused(Inspect("models/absent.glb"), "no such file");
         }
 
-        // ---- out of the pack ----
 
-        // "a mini loads from inside its own pack folder and nowhere else"
         [Theory]
         [InlineData("../../../etc/passwd")]
         [InlineData("/etc/shadow")]
@@ -282,8 +254,6 @@ namespace Content.Tests
                 ""buffers"": [ { ""uri"": ""../../secrets.bin"" } ]"))), "outside this pack");
         }
 
-        // EMBEDDED IS FINE AND IS THE ONE THING THAT IS NOT A PATH - it is bytes inside a file the
-        // size cap already bounds
         [Fact]
         public void AnEmbeddedDataUriIsNotAPathAndIsAllowed()
         {
@@ -293,8 +263,6 @@ namespace Content.Tests
                 ""images"": [ {{ ""uri"": ""data:image/png;base64,{png}"" }} ]"))).Ok);
         }
 
-        // A FILE THAT SAYS IT CANNOT BE READ WITHOUT SOMETHING IS BELIEVED, because drawing it
-        // anyway shows the model wrong rather than not at all
         [Fact]
         public void AnExtensionThisBuildHasNeverHeardOfIsRefusedByName()
         {
@@ -310,7 +278,6 @@ namespace Content.Tests
                 ""extensionsRequired"": [ ""KHR_materials_unlit"" ]"))).Ok);
         }
 
-        // optional extensions are ignored, which is what the specification says a reader should do
         [Fact]
         public void AnOptionalExtensionIsIgnoredRatherThanRefused()
         {
@@ -318,7 +285,6 @@ namespace Content.Tests
                 ""extensionsUsed"": [ ""EXT_something_nobody_has"" ]"))).Ok);
         }
 
-        // ---- textures, measured rather than decoded ----
 
         [Fact]
         public void ATextureOverTheResolutionCapIsRefusedWithItsSize()
@@ -356,7 +322,6 @@ namespace Content.Tests
             Refused(read, "not a PNG or a JPEG");
         }
 
-        // a texture beside the model, which is what an un-packed .gltf export looks like
         [Fact]
         public void ATextureInAFileBesideTheModelIsMeasuredToo()
         {
@@ -366,7 +331,6 @@ namespace Content.Tests
                 ""images"": [ { ""uri"": ""textures/skin.png"" } ]"))), "4096x2048");
         }
 
-        // ---- and the header sniffing that makes all of that cheap ----
 
         [Fact]
         public void APngsSizeIsReadOutOfItsIhdr()
@@ -376,7 +340,7 @@ namespace Content.Tests
             Assert.Equal(512, height);
         }
 
-        // a JPEG writes height before width, which is the wrong way round from everything else
+        // jpeg writes height before width, opposite to the others
         [Fact]
         public void AJpegsSizeIsReadOutOfItsFrameHeaderTheRightWayRound()
         {
@@ -393,7 +357,6 @@ namespace Content.Tests
             Assert.False(ImageSize.TryRead(null, out _, out _));
         }
 
-        // ---- the smallest picture headers that are still true ----
 
         static byte[] Png(int width, int height)
         {
@@ -421,10 +384,6 @@ namespace Content.Tests
             return bytes.ToArray();
         }
 
-        // A BUFFER VIEW IS A SLICE AND THE SLICE HAS TO BE THERE. `ModelReader` measures nothing
-        // out of a view that runs past the end of the binary chunk, which is the same refusal-to-
-        // slice-a-stranger's-claim the container check makes - so a header fixture is padded out
-        // to the length its view declares
         static byte[] Padded(byte[] bytes, int to = 64)
         {
             Array.Resize(ref bytes, Math.Max(bytes.Length, to));

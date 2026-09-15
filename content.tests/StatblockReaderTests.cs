@@ -8,13 +8,6 @@ using Xunit;
 
 namespace Content.Tests
 {
-    // a monster, read off a disk (CONTENT_PIPELINE.md P0)
-    //
-    // HALF OF THIS FILE IS ABOUT ERROR MESSAGES, and that is the right proportion. Once players
-    // ship campaigns a broken file is the NORMAL case rather than a developer bug, and the whole
-    // difference between a game somebody can mod and one they give up on is whether the loader
-    // says "attributes.might: 'd7' is not a die" or throws a deserialization exception. The
-    // sentence is the deliverable, so the sentence is what is pinned.
     public class StatblockReaderTests
     {
         const string File = "ghoul.json";
@@ -33,7 +26,6 @@ namespace Content.Tests
             ""behaviour"": ""strongest_first""
         }";
 
-        // ---- reading one ----
 
         [Fact]
         public void AWholeStatblockComesBack()
@@ -55,8 +47,6 @@ namespace Content.Tests
             Assert.Equal(Behaviours.StrongestFirst, block.Behaviour);
         }
 
-        // THE ID IN THE FILE IS LOCAL AND THE ID IN THE GAME IS SCOPED. An author writes "ghoul"
-        // and gets "ashfall.ghoul", because two campaigns will both have one (SEAMS.md section 11)
         [Fact]
         public void TheCampaignScopesTheId()
         {
@@ -64,15 +54,12 @@ namespace Content.Tests
             Assert.Equal("other.ghoul", Parse(Good, "other").Value.Id);
         }
 
-        // and the engine's own roster keeps its un-prefixed form, because it belongs to no campaign
         [Fact]
         public void AndNothingScopesItWhenThereIsNoCampaign()
         {
             Assert.Equal("ghoul", Parse(Good, campaign: null).Value.Id);
         }
 
-        // the key is derived from the scoped id and never declared, so it cannot point somewhere
-        // else - and it is the key CONVENTIONS.md section 7 gives as the example
         [Fact]
         public void AndTheKeyItNamesItselfWithFallsOutOfThat()
         {
@@ -98,7 +85,6 @@ namespace Content.Tests
             Assert.Equal(8, second.Vigor);
         }
 
-        // ---- what a statblock may leave out ----
 
         [Fact]
         public void GearIsOptional_AndEmptyHandedIsARealStatblock()
@@ -110,8 +96,7 @@ namespace Content.Tests
             Assert.Null(read.Value.GearId);
             Assert.Equal(Die.None, read.Value.GearDie);
 
-            // and the pool it throws is one die, because Pool.Add drops a die that is not there -
-            // an untrained, empty-handed attempt is a smaller pool and not a pool with a hole in it
+            // pool.add drops absent dice, so this throw is one die, not a pool with a hole
             Assert.Equal(1, read.Value.Create().BuildPool(Attr.Wits).Count);
         }
 
@@ -125,7 +110,6 @@ namespace Content.Tests
             Assert.Null(read.Value.Behaviour);
         }
 
-        // ---- and every way it can be wrong ----
 
         [Fact]
         public void SomethingThatIsNotJsonIsRefusedWithALine()
@@ -174,8 +158,7 @@ namespace Content.Tests
             Assert.Contains("might", read.Problems.Single().What);
         }
 
-        // a number would let a campaign name a Tier by its ordinal, and then reordering the enum
-        // silently re-tiers every monster in every published campaign
+        // tier is by name not ordinal, or reordering the enum would silently re-tier every monster
         [Fact]
         public void ATierByItsNumberIsRefused()
         {
@@ -215,7 +198,6 @@ namespace Content.Tests
             Assert.Equal("id", read.Problems.Single().Where);
         }
 
-        // A TYPO THAT IS IGNORED IS A MONSTER THAT IS QUIETLY NOT WHAT ITS AUTHOR WROTE
         [Fact]
         public void AFieldNobodyKnowsIsRefused()
         {
@@ -238,8 +220,6 @@ namespace Content.Tests
             Assert.Contains(read.Problems, p => p.Where == "defense");
         }
 
-        // EVERY PROBLEM AT ONCE, which is the difference between a list to work through and a
-        // load-fix-load loop (ARCHITECTURE.md section 7: hand-write the files until it hurts)
         [Fact]
         public void EveryProblemInOneFileComesBackTogether()
         {
@@ -258,7 +238,6 @@ namespace Content.Tests
                         string.Join(" | ", read.Problems.Select(p => p.ToString())));
         }
 
-        // and every one of them names the file, so a report over a whole folder is readable
         [Fact]
         public void AndEveryOneNamesTheFile()
         {

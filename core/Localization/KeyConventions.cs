@@ -4,44 +4,10 @@ using System.Linq;
 
 namespace Core.Localization
 {
-    // the key grammar, in one place, and there is exactly one of it
-    // core/ emits keys and never a string a player will read
-    // keys are code - English lives in a locale file like every other language
-    // IsWellFormed enforces the shape below and the tests run every engine key through it
-    //
-    //     namespace . subject . aspect [ . qualifier ]* [ . index ]
-    //
-    //   namespace   one of Namespaces - what kind of thing this is
-    //   subject     which one - an id, never a display name
-    //   aspect      what about it - name, description, title, bark, narration
-    //   qualifier   zero or more further narrowings, optional
-    //   index       three digits, zero-padded, always last, optional
-    //
-    // every segment lowercase snake_case, namespaces singular, minimum three segments
-    //
-    //   actor.rabble.name_numbered             takes {0}
-    //   condition.winded.description
-    //   dialogue.wolf.bark.snag.017
-    //   quest.ashfall.chapter_02.title
-    //
-    // dialogue sits under a namespace like everything else
-    // dialogue.wolf.* is still one contiguous block for a translator
-    // and every first segment still means the same kind of thing
-    // speakers are keyed by creature, not by class - wolf, not barbarian
-    //
-    // 1. one key per whole sentence - never assemble one from translated fragments
-    // 2. numbers go in as {0}, never concatenated
-    // 3. keys are stable ids - renaming breaks every locale file, so deprecate instead
-    // 4. never parse or branch on a key's text at runtime
-    // 5. indices are three digits from the first line written - renumbering breaks locales
-    // 6. translate the personality, not the wording
-    // 7. anything a player can read gets a key
-    //    DebugName and every ToString() are developer-only and must never reach the screen
+    // shape: namespace.subject.aspect[.qualifier]*[.index]; one key = one whole sentence
     public static class KeyConventions
     {
-        // suffixed "Ns" rather than named bare
-        // Actor, Condition, Difficulty and Skill are domain types elsewhere in this library
-        // shadowing them here would trap whoever next adds a using to this file
+        // suffixed Ns so they don't shadow the Actor/Condition/Skill domain types
 
         public const string ActorNs = "actor";
         public const string AttrNs = "attr";
@@ -49,17 +15,12 @@ namespace Core.Localization
         public const string ConditionNs = "condition";
         public const string GearNs = "gear";
 
-        // WHAT A THING LOOKS LIKE ON THE TABLE, as opposed to what it IS - MINIS_AND_ART.md A1
-        // and MODDING.md section 2, which names `mini.grimdark.skeleton` beside
-        // `actor.ashfall.ghoul` as one of the kinds of id a pack emits.
-        //
-        // A TWELFTH NAMESPACE RATHER THAN A CORNER OF `gear` OR `ui`. A mini is a first-class
-        // thing a player picks off a list and subscribes to a pack of, so it names itself the way
-        // a monster does. Filing it under `ui` would say it is chrome and would put a pack
-        // author's strings in the engine's own bucket; filing it under `gear` would say a figure
-        // is equipment. The set is closed and stays closed - this is its first addition since it
-        // was written, and `class` is the one other MODDING.md already foresees
         public const string MiniNs = "mini";
+
+        public const string ClassNs = "class";
+
+        public const string AbilityNs = "ability";
+
         public const string DifficultyNs = "difficulty";
         public const string DialogueNs = "dialogue";
         public const string CombatNs = "combat";
@@ -67,14 +28,12 @@ namespace Core.Localization
         public const string CampaignNs = "campaign";
         public const string UiNs = "ui";
 
-        // the complete set - a key outside these is malformed, not merely unusual
         public static readonly IReadOnlyCollection<string> Namespaces = new[]
         {
             ActorNs, AttrNs, SkillNs, ConditionNs, GearNs, DifficultyNs,
-            DialogueNs, CombatNs, QuestNs, CampaignNs, UiNs, MiniNs,
+            DialogueNs, CombatNs, QuestNs, CampaignNs, UiNs, MiniNs, ClassNs, AbilityNs,
         };
 
-        // ---- builders. Prefer these over hand-written strings. ----
 
         public static string Key(string ns, string subject, string aspect, params string[] qualifiers) =>
             string.Join(".", new[] { ns, subject, aspect }.Concat(qualifiers ?? Array.Empty<string>()));
@@ -84,52 +43,39 @@ namespace Core.Localization
 
         public static string ActorName(string id) => Key(ActorNs, id, "name");
 
-        // takes an ordinal as {0}
         public static string ActorNameNumbered(string id) => Key(ActorNs, id, "name_numbered");
 
         public static string GearName(string id) => Key(GearNs, id, "name");
 
-        // `mini.grimdark.skeleton.name`, out of the scoped mini id `grimdark.skeleton`. DERIVED
-        // FROM THE ID rather than declared in the manifest, the same rule a monster's name and a
-        // campaign's title already follow: a name field in a data file is a second description of
-        // the id, free to disagree with it, and lets one pack point at another's string
         public static string MiniName(string id) => Key(MiniNs, id, "name");
 
-        // THE DIE NOBODY BROUGHT. A two-die pool counts both, so there is nothing left over and the
-        // Impact die is the d4 the rules hand you by default (CORE_RULES.md section 2) - "untrained
-        // and ungeared, you can succeed but you can't hit hard". At a table that d4 comes out of the
-        // box and gets thrown, so it lands on the felt with a name beside it like every other die,
-        // and the name is this. It belongs to no trait, which is why it is not an attr or a gear key
+        public static string ClassName(string id) => Key(ClassNs, id, "name");
+
+        public static string ClassDescription(string id) => Key(ClassNs, id, "description");
+
+        public static string AbilityName(string id) => Key(AbilityNs, id, "name");
+
+        public static string AbilityDescription(string id) => Key(AbilityNs, id, "description");
+
         public static string DefaultImpactName => Key(CombatNs, "impact", "name");
 
         public static string Line(string speaker, string aspect, string situation, int index) =>
             Indexed(DialogueNs, speaker, aspect, situation, index);
 
-        // a companion reacting - dialogue.wolf.bark.snag.017
         public static string Bark(string speaker, string situation, int index) =>
             Line(speaker, "bark", situation, index);
 
-        // ---- enforcement ----
 
         static bool IsSegment(string s) =>
             s.Length > 0 && s.All(c => (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_');
 
         static bool IsIndex(string s) => s.Length == 3 && s.All(char.IsDigit);
 
-        // what Explain says about a key with nothing wrong with it
         public const string WellFormed = "well formed";
 
-        // run by the tests against every key the engine can produce
-        // so a malformed key fails there rather than shipping
-        //
-        // this is Explain and not a second copy of it, deliberately. the two held the same five
-        // checks in the same order with no shared code until 2026-08-20, which meant a sixth rule
-        // added to one and not the other would reject a key while Explain called it well formed -
-        // a test failure whose own message says nothing is wrong. one implementation cannot drift
+        // delegates to Explain so the two can't drift into copies that disagree
         public static bool IsWellFormed(string key) => Explain(key) == WellFormed;
 
-        // why a key is malformed, for a test failure that explains itself
-        // the single source of truth for the grammar - IsWellFormed reads its verdict
         public static string Explain(string key)
         {
             if (string.IsNullOrWhiteSpace(key)) return "key is empty";

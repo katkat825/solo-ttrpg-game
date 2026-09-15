@@ -1,0 +1,9 @@
+{
+  "id": "hearth_ward",
+  "primitive": "channel",
+  "versus": "defense",
+  "target": "sight",
+  "cost": "strain",
+  "onHit": [ "damage", "condition" ],
+  "condition": "rattled"
+}

@@ -20,16 +20,7 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
-  <!--
-    The Godot project itself, referenced whole. Nothing here may touch a Godot type -
-    GodotSharp loads, but the engine behind it is not running, so anything that reaches
-    for a Node or a Resource fails at runtime rather than at compile time.
-
-    That is the boundary this project tests up to and no further: the Godot-free helpers
-    in game/ - TrayResolution, TrayThrow, SnagCue, NudgeThenRethrow. A helper that cannot
-    be tested from here because it needs the engine is a helper that belongs in core/.
-    See FOUNDATIONS.md F1.
-  -->
+  <!-- references the whole Godot project but tests only its Godot-free helpers; anything needing the engine belongs in core -->
   <ItemGroup>
     <ProjectReference Include="..\game\Solo Tabletop RPG.csproj" />
   </ItemGroup>

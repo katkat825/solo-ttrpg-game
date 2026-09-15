@@ -1,0 +1,12 @@
+keys,en
+"class.hearthguard.warden.name","Warden"
+"class.hearthguard.warden.description","A hearth-sworn spear, drilled to hold a doorway and not to leave it."
+"actor.hearthguard.warden.name","Warden"
+"actor.hearthguard.warden.name_numbered","Warden {0}"
+"gear.warden_glaive.name","Glaive"
+"campaign.hearthguard.name","Hearthguard"
+"campaign.hearthguard.description","The wardens of the hearth - a class to play, and nothing to play it in."
+"ability.hearthguard.steady_guard.name","Steady Guard"
+"ability.hearthguard.steady_guard.description","Set your feet and breathe. Done well it shakes off what was pressing on you; done badly it presses harder."
+"ability.hearthguard.hearth_ward.name","Hearth Ward"
+"ability.hearthguard.hearth_ward.description","A word thrown across the room. It lands hard and leaves them rattled."

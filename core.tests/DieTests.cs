@@ -3,9 +3,6 @@ using Xunit;
 
 namespace Core.Tests
 {
-    // covers the die enum itself
-    // stepping up and down, clamped at d4 and d12
-    // and RecordingRng, which every reproducible debugging session leans on
     public class DieTests
     {
         [Fact]

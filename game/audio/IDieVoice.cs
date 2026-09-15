@@ -3,24 +3,16 @@ using Core.Dice;
 
 namespace Game.Audio
 {
-    // what a die is made of, as far as the ear is concerned
-    // everything about how a material sounds lives behind here - which samples, how loud,
-    // what pitch, whether it makes a noise at all
-    // DieAudio knows how to play a DieSound and how to notice a collision, and nothing else
-    // adding brass is a new file and one assignment, not an edit to anything that plays a sound
     public interface IDieVoice
     {
         // return DieSound.Silence to say nothing
         DieSound Struck(in DieHit hit);
 
-        // one tap of the shake before a throw - dice knocking together in a closed hand
-        // tap counts from zero, so a voice can build the burst toward the release
+        // one tap of the pre-throw shake; tap counts from zero so a voice can build toward the release
         DieSound Shaken(Die size, int tap, int taps);
     }
 
-    // one noise, ready to play: what, how loud, how fast
-    // the stream is usually an AudioStreamRandomizer, which is where sample-to-sample
-    // variation comes from for free - volume and pitch here sit on top of that randomness
+    // one noise ready to play; the stream is usually an AudioStreamRandomizer, so sample variation is free and volume/pitch sit on top
 
     public readonly struct DieSound
     {
@@ -45,11 +37,8 @@ namespace Game.Audio
         public bool IsSilent => Stream == null;
     }
 
-    // one collision, as physics saw it
-    // facts only - no opinion about what it should sound like, that belongs to the material
-    // Impulse and Speed are the same event divided differently, and both are here
-    // impulse scales with mass, which is why it drives loudness well
-    // speed is that impulse over the die's own mass, which is what a threshold wants
+    // one collision as physics saw it, facts only
+    // Impulse and Speed are the same event divided differently: impulse scales with mass (drives loudness), speed is impulse over mass (what a threshold wants)
 
     public readonly struct DieHit
     {
@@ -61,15 +50,12 @@ namespace Game.Audio
         // impulse over the die's mass, metres per second
         public readonly float Speed;
 
-        // contact normal against up, absolute - 1 is the felt floor, 0 is a wooden wall
-        // sign is thrown away deliberately: which side the normal points is a physics-engine
-        // convention, and this is asking about the surface
+        // contact normal against up, absolute - 1 is the felt floor, 0 a wall; the sign is dropped because it's a physics-engine convention, not about the surface
         public readonly float Flatness;
 
         public readonly bool AgainstDie;
 
-        // speed after the bounce, measured at the fastest-moving corner rather than the centre
-        // a die can be barely drifting while spinning hard, and that is a tumble, not a settle
+        // speed after the bounce, at the fastest-moving corner: a die can drift slowly while spinning hard, which is a tumble not a settle
         public readonly float Remaining;
 
         // first contact of this throw - everything after it is heard relative to it

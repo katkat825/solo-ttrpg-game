@@ -8,36 +8,7 @@ using Core.Dice;
 
 namespace Content.Items
 {
-    // GEAR, AS A CAMPAIGN WROTE IT DOWN (CONTENT_PIPELINE.md P1).
-    //
-    //     {
-    //       "id": "cold_iron_axe",
-    //       "die": "d8",
-    //       "supports": "blades",
-    //       "inflicts": [ "reeling" ]
-    //     }
-    //
-    //     {
-    //       "id": "scale_coat",
-    //       "defense": 1
-    //     }
-    //
-    // "Getting better means bigger rocks" (CORE_RULES.md pillar 3) stops being a sentence in a
-    // design document here: a better axe is a bigger die in a file, and that is the entire diff.
-    //
-    // ONE SCHEMA FOR EVERY KIND OF GEAR, and no `"kind": "weapon"` field. A thing with a die is a
-    // weapon, a thing with a Defense number is armour, and a thing with both is a shield somebody
-    // hits people with - which is a perfectly good item and would have needed a special case in
-    // any schema that made the author declare a category. What a piece of gear IS falls out of what
-    // it DOES (`Gear`), and nothing has to agree about a taxonomy.
-    //
-    // IDS ARE NOT SCOPED BY THE CAMPAIGN, and this is the one place that decision is visible. A
-    // gear key is `gear.axe.name` - two segments - and the engine already ships `axe`, `club`,
-    // `blade`, `focus` and `maul`. Scoping a campaign's items would make `gear.ashfall.claw.name`,
-    // which is well-formed and would then mean the ENGINE's gear is the odd one out. The honest
-    // answer is that gear ids are a shared namespace with the engine's in it, a campaign that
-    // names its item `axe` gets the engine's name for it, and the locale audit says so. Revisit
-    // when two published campaigns actually collide; until then this is one less thing to explain.
+    // gear ids are a shared namespace, not scoped; a campaign's axe gets the engine's
     public static class ItemReader
     {
         public static Read<Gear> Parse(string json, string file)
@@ -76,9 +47,6 @@ namespace Content.Items
 
                 Unknown(root, file, problems);
 
-                // AN ITEM THAT DOES NOTHING IS A MISTAKE, not a paperweight. No die, no Defense and
-                // nothing inflicted means an author wrote a file that changes nothing about
-                // anything, and silence is the worst possible answer to that
                 if (problems.Count == 0 && die == Die.None && defense == 0 && inflicts.Count == 0)
                     problems.Add(new ContentProblem(
                         file, "",
@@ -171,16 +139,14 @@ namespace Content.Items
                 return 0;
             }
 
-            // DEFENSE IS THE SCALPEL (SIMULATION.md section 3): +2 on the hero more than doubles the
-            // win rate. A campaign handing out +5 plate has not made a good item, it has turned the
-            // game off, and a schema that let it do so silently would be a schema that helped
+            // Defense is the strongest balance lever there is; the range is deliberately tiny
             if (number < -MostArmourCanDo || number > MostArmourCanDo)
             {
                 problems.Add(new ContentProblem(
                     file, "defense",
                     $"{number} is more than gear may move Defense. The range is " +
                     $"{-MostArmourCanDo} to {MostArmourCanDo}, because Defense is the strongest " +
-                    "balance lever there is - SIMULATION.md section 3 measured +2 on the hero as " +
+                    "balance lever there is - +2 on the hero measures as " +
                     "double the win rate"));
                 return 0;
             }
@@ -188,7 +154,7 @@ namespace Content.Items
             return number;
         }
 
-        // two either way, which is the whole measured span between "a real fight" and "not a fight"
+        // two either way, the measured span between a real fight and not a fight
         public const int MostArmourCanDo = 2;
 
         static IReadOnlyList<Condition> Inflicts(JsonElement root, string file, List<ContentProblem> problems)

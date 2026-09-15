@@ -6,60 +6,28 @@ using Core.Localization;
 
 namespace Game.Fight
 {
-    // WHAT IS WRONG WITH THIS PIECE, WRITTEN BESIDE IT (COMBAT_LOOP.md C1).
-    //
-    // "Conditions read as marks a DM would make, not status icons." So they are words on the mat,
-    // in the DM's red pencil, lying flat beside the model and read from the same angle as
-    // everything else on the table. Not a bar, not an icon row, not a tooltip. A DM writes
-    // "Winded" next to the ogre and everyone at the table knows what that means.
-    //
-    // THE WORDS COME THROUGH `ILocalizer`, WHICH IS THE WHOLE POINT OF THE MILESTONE. `core/`
-    // hands over `Condition.Winded`; `TraitKeys` turns that into `condition.winded.name`; this
-    // asks the localizer. No English appears in this file, and pressing L in the tray mangles
-    // every word on the mat - which is the only reliable way to find a string somebody hardcoded
-    // (CONVENTIONS.md 7). The Label3D's own auto-translation is turned OFF for the same reason it
-    // is in `DieMark`: two places where a key becomes text is one place too many, and with the
-    // pseudolocale on it would bracket an already bracketed string.
-    //
-    // WHAT IT DOES NOT DRAW, AND WHY. The milestone asks for the affected die to step down
-    // visibly. It does, in the most literal way this game has: the next handful the hero throws
-    // is built from the smaller die, so a d8 that became a d6 is physically a smaller solid
-    // bouncing on the felt. That is `Actor.BuildPool` reading the trait pipeline, and it needs no
-    // drawing at all. A die-shaped token beside the mark would be a second, smaller statement of
-    // the same thing, and Phase R's character sheet is where the whole statblock gets a face.
-    //
-    // A CHILD OF THE PIECE, like the vigor tally, so it goes where the piece goes.
     public partial class ConditionMarks : Node3D
     {
-        // a DM's red pencil - the same family as the board's refusal tint, because both are
-        // somebody marking the map rather than something standing on it
         public Color Ink { get; set; } = new Color(0.70f, 0.20f, 0.15f);
 
-        // and the flare a mark arrives with. bright for a moment, then it settles into ink -
-        // long enough to catch the eye at the far side of the board, short enough that a piece
-        // carrying three conditions is not a light show
         public Color Fresh { get; set; } = new Color(1.00f, 0.62f, 0.35f);
 
         public float FlashSeconds { get; set; } = 0.9f;
 
-        // cap height on the mat, in metres. 7 mm against a 60 mm square - a word written on a map
-        // rather than a caption under a photograph
+        // cap height in metres: 7 mm against a 60 mm square
         public const float LineHeight = 0.007f;
 
         public const float LineGap = 0.0026f;
 
-        // clear of the base on the far side from the vigor tally, so a piece can carry both
-        // without either reading as part of the other
+        // far side from the vigor tally, so a piece can carry both
         public static readonly Vector3 Beside = new Vector3(-0.024f, 0f, 0.004f);
 
         public const float Lift = 0.0012f;
 
-        // the glyph atlas the label is rasterised at. same figure DieMark uses, and for the same
-        // reason: PixelSize is derived from it so the cap height above is what actually lands
+        // PixelSize is derived from this, so the cap height above is what lands
         const int GlyphResolution = 64;
 
-        // injected, so this file cannot start reaching for TranslationServer - the same discipline
-        // DieMark and DiceTray hold to
+        // injected, so this file never reaches for TranslationServer
         public ILocalizer Text { get; set; }
 
         readonly List<Condition> _showing = new List<Condition>();
@@ -68,11 +36,7 @@ namespace Game.Fight
 
         readonly Dictionary<Condition, float> _flashing = new Dictionary<Condition, float>();
 
-        // FLASHED BEFORE IT EXISTS. The observer fires ConditionApplied from inside
-        // CombatEngine.Apply, which is one instruction after the Actor took the Condition and
-        // therefore before anything has refreshed the mat. So a flare is remembered here and
-        // starts burning the moment its mark is written - otherwise the one event that says
-        // "this is NEW" is the one event that always lands on nothing
+        // a flash can arrive before its mark exists, so it is remembered until Show writes it
         readonly HashSet<Condition> _pending = new HashSet<Condition>();
 
         public IReadOnlyList<Condition> Showing => _showing;
@@ -80,10 +44,6 @@ namespace Game.Fight
         public Label3D LabelFor(Condition condition) =>
             _labels.TryGetValue(condition, out Label3D label) ? label : null;
 
-        // WHAT THE ACTOR SAYS, and never a copy of it. Called every frame by `Fight`, so a
-        // Condition that arrived from anywhere - a vigor threshold, a door forced the hard way, a
-        // Trouble - turns up on the mat without its source having to know this exists. The
-        // observer's job is only the flare
         public void Show(IReadOnlyList<Condition> conditions)
         {
             if (conditions == null) return;
@@ -107,15 +67,13 @@ namespace Game.Fight
 
                 if (!_labels.ContainsKey(c)) _labels[c] = Write(c);
 
-                // stacked away from the near edge, newest furthest out, so the list grows in one
-                // direction and a mark never moves once it has been read
+                // newest furthest out, so a mark never moves once it has been read
                 _labels[c].Position = Beside + new Vector3(0f, Lift, -i * (LineHeight + LineGap));
 
                 if (_pending.Remove(c)) _flashing[c] = FlashSeconds;
             }
         }
 
-        // one mark, in whatever language the table is being played in
         Label3D Write(Condition condition)
         {
             string key = condition.Key();
@@ -124,9 +82,7 @@ namespace Game.Fight
             {
                 Name = condition.ToString(),
 
-                // deliberately the KEY until the localizer is asked: if the lookup were ever
-                // skipped, the mat reads condition.winded.name, which nobody can mistake for a
-                // translation
+                // deliberately the key until the localizer is asked, so a skipped lookup shows condition.winded.name
                 Text = key,
 
                 FontSize = GlyphResolution,
@@ -138,12 +94,10 @@ namespace Game.Fight
                 AlphaCut = Label3D.AlphaCutMode.Discard,
                 HorizontalAlignment = HorizontalAlignment.Right,
 
-                // Godot would translate a Label3D itself, which is a second place a key becomes
-                // words - see DieMark for the same line and the same reason
+                // Godot would translate the Label3D itself, a second place a key becomes words
                 AutoTranslateMode = AutoTranslateModeEnum.Disabled,
 
-                // lying on the mat, glyph tops away from the camera, so it reads upright from the
-                // near side of the table
+                // lying on the mat, glyph tops away from camera, upright from the near side
                 Transform = new Transform3D(new Basis(Vector3.Right, Vector3.Forward, Vector3.Up), Vector3.Zero),
             };
 
@@ -154,9 +108,6 @@ namespace Game.Fight
             return label;
         }
 
-        // the moment it lands. the observer calls this from ConditionApplied, which is the one
-        // thing a per-frame refresh cannot know: that this Condition is NEW rather than merely
-        // still true
         public void Flash(Condition condition)
         {
             if (_labels.ContainsKey(condition)) _flashing[condition] = FlashSeconds;
@@ -189,8 +140,6 @@ namespace Game.Fight
             }
         }
 
-        // switching language, or turning the pseudolocale on, rewrites the mat without anything
-        // being re-thrown or re-fought - the same behaviour the tray's marks have
         public override void _Notification(int what)
         {
             if (what == NotificationTranslationChanged) Retranslate();
@@ -204,7 +153,7 @@ namespace Game.Fight
                 mark.Value.Text = Text.Get(mark.Key.Key());
         }
 
-        // DEVELOPER ONLY - not localized, never reaches the screen
+        // developer only, not localized, never reaches the screen
         public override string ToString() =>
             _showing.Count == 0 ? "no marks" : string.Join(", ", _showing);
     }

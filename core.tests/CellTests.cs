@@ -4,9 +4,6 @@ using Xunit;
 
 namespace Core.Tests
 {
-    // a Cell is a coordinate, not a thing, so what has to be true of it is that two of the same
-    // square are interchangeable everywhere - as a dictionary key especially, which is how the
-    // grid answers "who is standing here" and how B3's pathfinding will keep its frontier
     public class CellTests
     {
         [Fact]
@@ -30,8 +27,7 @@ namespace Core.Tests
             Assert.Equal(new Cell(3, 4).GetHashCode(), new Cell(3, 4).GetHashCode());
         }
 
-        // the property that actually matters - a hash that collided for a whole board would
-        // still pass the test above and turn every lookup into a scan
+        // a hash that collided for a whole board would still pass the equality test but scan every lookup
         [Fact]
         public void ABoardsWorthOfCells_HashDistinctly()
         {
@@ -47,8 +43,6 @@ namespace Core.Tests
         [Fact]
         public void NegativeCoordinates_AreOrdinaryCells()
         {
-            // off the board is the grid's judgement, not the cell's - a Cell is just a pair of
-            // numbers, and B3's line of sight will step through cells outside the map
             Assert.Equal(new Cell(-1, -1), new Cell(-1, -1));
             Assert.NotEqual(new Cell(-1, -1), new Cell(1, 1));
         }

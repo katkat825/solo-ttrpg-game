@@ -10,16 +10,6 @@ using Xunit;
 
 namespace Content.Tests
 {
-    // SAVE AND LOAD (CONTENT_PIPELINE.md P6).
-    //
-    // The two things worth pinning are the two the milestone asks for by name. One: a save
-    // round-trips - what goes in comes out, including the faces lying on the felt. Two: it
-    // DEGRADES. "Corrupt one field and confirm it degrades with a legible message rather than
-    // crashing" is a test and not a hope, and so is "open the save in a text editor, change the
-    // hero's Vigor by hand, reload, and see the change".
-    //
-    // Everything here is text in and text out, because that is what a save is. Nothing needs a
-    // table, which is the point of `Content.Saves` being in this assembly at all.
     public sealed class SaveTests : IDisposable
     {
         readonly string _folder;
@@ -32,7 +22,7 @@ namespace Content.Tests
 
         public void Dispose()
         {
-            try { Directory.Delete(_folder, recursive: true); } catch { /* a temp folder */ }
+            try { Directory.Delete(_folder, recursive: true); } catch { }
         }
 
         const string File = "slot1.json";
@@ -98,7 +88,6 @@ namespace Content.Tests
             return read.Value;
         }
 
-        // ---- what goes in comes out ----
 
         [Fact]
         public void AMomentInAFightSurvivesTheRoundTrip()
@@ -144,10 +133,6 @@ namespace Content.Tests
             Assert.Equal(new[] { Condition.Reeling }, ghoul.Conditions);
         }
 
-        // THE FELT, AND WHAT IT MEANS. The save carries faces and nothing else; the verdict is
-        // read back with the same arithmetic the table runs, which is the whole of SEAMS.md
-        // section 9's "state shaped for save/load degrades; it doesn't throw" - there is no second
-        // field to disagree with the first
         [Fact]
         public void TheDiceOnTheFeltComeBackShowingWhatTheyShowed()
         {
@@ -175,7 +160,6 @@ namespace Content.Tests
         static PoolResult Reading(SaveGame save) =>
             PoolResult.From(save.Felt.Select(d => (d.Trait, d.Die, d.Value)).ToList());
 
-        // ---- hand-editable, which is a promise about the FILE ----
 
         [Fact]
         public void TheFileIsIndentedAndSpellsItsWordsTheWayACampaignFileDoes()
@@ -188,8 +172,6 @@ namespace Content.Tests
             Assert.Contains("\"at\"", json);
         }
 
-        // "Open the save in a text editor, change the hero's Vigor by hand, reload, and see the
-        // change" - P6's verify, with the text editor played by a string replace
         [Fact]
         public void ChangingTheHerosVigorByHandChangesTheHerosVigor()
         {
@@ -224,9 +206,7 @@ namespace Content.Tests
             Assert.NotEmpty(read.Problems);
         }
 
-        // ---- and it degrades ----
 
-        // THE ONE FATAL CASE, and the reason it is fatal: there is nothing to degrade TO
         [Fact]
         public void AFileThatIsNotJsonIsTheOnlyThingThatStopsALoad()
         {
@@ -244,8 +224,6 @@ namespace Content.Tests
 
             Read<SaveGame> read = Parse(json);
 
-            // NOT OK AND STILL THERE, which is the third state a save needs: something was not
-            // understood, and the player's afternoon opens anyway
             Assert.False(read.Ok);
             Assert.True(read.Any);
             Assert.Contains(read.Problems, p => p.Where == "hero.vigor" && p.What.Contains("read as"));
@@ -279,8 +257,6 @@ namespace Content.Tests
             Assert.Contains(read.Problems, p => p.Where == "format");
         }
 
-        // A DIE SHOWING A FACE IT DOES NOT HAVE is the likeliest hand-edit mistake there is, and
-        // the marks drawn from it would be a claim the rules never made
         [Fact]
         public void ADieShowingAFaceItDoesNotHaveIsClampedAndNamed()
         {
@@ -333,8 +309,6 @@ namespace Content.Tests
         [Fact]
         public void ASquareThatIsNotASquareLeavesThatOneOffTheBoard()
         {
-            // written by hand rather than by editing the writer's output, because a
-            // half-written square is a shape the writer cannot produce - which is the point
             Read<SaveGame> read = Parse(@"{
                 ""campaign"": ""ashfall"",
                 ""round"": 2,
@@ -349,7 +323,6 @@ namespace Content.Tests
             Assert.Contains(read.Problems, p => p.Where.EndsWith(".at"));
         }
 
-        // ---- and a save with no fight in it is still a save ----
 
         [Fact]
         public void ASaveTakenBetweenFightsCarriesWhereYouAreAndNothingElse()

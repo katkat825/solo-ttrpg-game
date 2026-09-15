@@ -5,10 +5,6 @@ using Core.Dice;
 
 namespace Core.Combat
 {
-    // the stock ICombatObserver implementations
-    // one that swallows everything, one that transcribes, one that fans out
-    // between them a fight can be watched, recorded and animated at once
-    // the null one is the default, so nobody has to pass an observer
     public sealed class NullCombatObserver : ICombatObserver
     {
         public static readonly NullCombatObserver Instance = new NullCombatObserver();
@@ -25,15 +21,12 @@ namespace Core.Combat
         public void EncounterEnded(EncounterResult result) { }
     }
 
-    // captures a readable transcript, blow by blow
-    // re-run a suspect fight on the same seed with one of these attached
-    // the lines are DebugName-based and not localized, so they stay off screen
+    // DebugName-based and not localized - a debug transcript, keep it off screen
     public sealed class RecordingCombatObserver : ICombatObserver
     {
         readonly List<string> _lines = new List<string>();
         readonly Action<string> _sink;
 
-        // sink is optional live output, e.g. GD.Print or Console.WriteLine
         public RecordingCombatObserver(Action<string> sink = null) => _sink = sink;
 
         public IReadOnlyList<string> Lines => _lines;
@@ -69,13 +62,6 @@ namespace Core.Combat
         }
     }
 
-    // sends the same events to several observers - debug while you animate
-    //
-    // AND SOMEBODY CAN JOIN LATE. The array was fixed at construction, which is right for a
-    // composition root and no use at all to anything that arrives after the fight has started -
-    // a headless check, a replay recorder, a console attached mid-session. "Debuggability is a
-    // feature" (CONVENTIONS.md 6) and wrapping a layer to watch it should stay a one-liner
-    // whenever you think of it, not only before the first blow
     public sealed class CompositeCombatObserver : ICombatObserver
     {
         readonly List<ICombatObserver> _observers;
@@ -85,8 +71,7 @@ namespace Core.Combat
 
         public IReadOnlyList<ICombatObserver> Observers => _observers;
 
-        // the same observer twice would hear everything twice, which is a doubled transcript and
-        // a doubled animation
+        // dedup - the same observer twice would double the transcript and the animation
         public bool Add(ICombatObserver observer)
         {
             if (observer == null || _observers.Contains(observer)) return false;
@@ -97,8 +82,7 @@ namespace Core.Combat
 
         public bool Remove(ICombatObserver observer) => _observers.Remove(observer);
 
-        // over a snapshot, so an observer that attaches or detaches itself inside an event -
-        // a check that has seen enough - cannot break the loop it is standing in
+        // snapshot, so an observer that adds or removes itself mid-event can't break the loop
         ICombatObserver[] Watching => _observers.ToArray();
 
         public void RoundBegan(int round)

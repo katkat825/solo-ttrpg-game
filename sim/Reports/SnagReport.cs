@@ -3,14 +3,7 @@ using Core.Resolution;
 
 namespace Sim
 {
-    // how often the companion gets a cue - Snag, ~33% early
-    // against how often something actually goes wrong - Trouble, ~6%
-    //
-    // 33 and not the 39 quoted around this project for a long time: PoolResult.Snag is EXACTLY
-    // one 1, and the 39.2% in CORE_RULES 6 is the at-least-one column, which is both tiers
-    // this table has always printed 33.5% - PoolOdds now says why, and a test holds it there
-    // bigger dice make both rarer, so the chattiest stretch is the early game
-    // which is when a player with no party most needs a voice
+    // 33%, not 39.2%: snag is exactly one 1, while the "at-least-one" column is both tiers
     static class SnagReport
     {
         public static void Run(int trials)

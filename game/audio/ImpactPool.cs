@@ -3,19 +3,15 @@ using Godot;
 
 namespace Game.Audio
 {
-    // one folder of impact samples, loaded once and shared by everything that names it
-    // THE FOLDER IS THE LIST - nothing anywhere names a sample file, because the pool grows
-    // a hard-coded list is a second description of the folder, and when the two drift the
-    // failure is SILENCE, which looks exactly like a die that never hit anything
-    // cached by path: a pool is immutable once built, and asking twice shouldn't read the disk twice
+    // the folder is the list: a hard-coded list would drift and fail as silence, which looks like a die that never hit anything
+    // cached by path: a pool is immutable, so asking twice doesn't re-read the disk
     public sealed class ImpactPool
     {
         public const string Default = "res://audio/samples/impacts/wood/";   // what a surface gets if it names none
 
         static readonly Dictionary<string, ImpactPool> Loaded = new();
 
-        // lazy rather than static-initialised - GD.Load during static construction runs before
-        // the resource system is necessarily up
+        // lazy, not static-initialised: GD.Load in a static constructor can run before the resource system is up
         public static ImpactPool For(string folder)
         {
             folder = Normalize(folder);
@@ -34,17 +30,8 @@ namespace Game.Audio
             return folder.EndsWith("/") ? folder : folder + "/";
         }
 
-        // has this folder anything to play, asked WITHOUT building a pool and WITHOUT complaining
-        //
-        // For() treats an empty folder as the error it usually is, and it usually is: samples
-        // that have gone missing are silence, and silence looks exactly like a die that never hit
-        // anything. But a folder that is empty because nobody has recorded it YET is an ordinary
-        // state of the project - audio/samples/minis/ is one today - and a caller with somewhere
-        // honest to fall back to should be able to ask without an error being pushed on its
-        // behalf. MiniVoice is the caller; TraySurface felt.tres borrows the same way
-        //
-        // THE FOLDER IS STILL THE LIST. This asks the folder rather than a flag someone has to
-        // remember to turn off, so dropping the first real recording in is the whole of switching
+        // does this folder have anything to play, asked without building a pool or pushing an error
+        // For() treats an empty folder as an error, but one not recorded yet is ordinary, so a caller with an honest fallback asks here instead
         public static bool Has(string folder)
         {
             folder = Normalize(folder);
@@ -60,14 +47,12 @@ namespace Game.Audio
 
         ImpactPool(string folder)
         {
-            // the randomizer is where variation comes from with no code
-            // RandomNoRepeats rather than Random - samples chosen with replacement audibly double up
+            // the randomizer gives sample variation for free; RandomNoRepeats, since replacement would audibly double a sample
             var randomizer = new AudioStreamRandomizer
             {
                 PlaybackMode = AudioStreamRandomizer.PlaybackModeEnum.RandomNoRepeats,
 
-                // a multiplier, so 1.08 is roughly a semitone either way - enough that no two
-                // throws are the same, not enough to sound like a different die
+                // 1.08 is about a semitone either way: enough that no two throws match, not enough to sound like a different die
                 RandomPitch = 1.08f,
                 RandomVolumeOffsetDb = 2f,
             };
@@ -78,8 +63,7 @@ namespace Game.Audio
 
                 if (stream == null)
                 {
-                    // developer diagnostic, not player-facing
-                    // silence looks exactly like "it works but nothing hit anything", so it has to say so
+                    // developer diagnostic; a load failure is silence, which looks like it works, so it has to say so
                     GD.PushError($"impact pool: {folder}{file} did not load - one impact short");
                     continue;
                 }
@@ -93,11 +77,8 @@ namespace Game.Audio
             if (Count == 0) GD.PushError($"impact pool: no samples in {folder} - hits there will be silent");
         }
 
-        // every wav in the folder, sorted, with none named twice
-        // three spellings have to be folded together: in the source tree a sample is x.wav beside
-        // its x.wav.import, in an exported build only x.wav.remap is listed
-        // handling one of the three works right up until the export, the worst moment to find out
-        // subfolders are skipped, which keeps the slicer's _review/ quarantine out of the game
+        // fold three spellings: x.wav with x.wav.import in source, only x.wav.remap in an export, or it breaks at export time
+        // subfolders skipped, keeping the slicer's _review/ quarantine out of the game
         static SortedSet<string> Files(string folder)
         {
             var names = new SortedSet<string>();

@@ -6,29 +6,11 @@ using Content.Schema;
 
 namespace Content.Minis
 {
-    // JSON IN, A MINI OUT, AND EVERY REASON IT IS NOT ONE (MINIS_AND_ART.md A0, A1).
-    //
-    // The same hand-rolled shape as `StatblockReader` and `ItemReader`, and for the same reason
-    // they both state: deserializing into a class gives an author `null` fields and a stack trace,
-    // and what they need is the file, the field and a sentence. Every problem is collected, never
-    // thrown, and the read comes back with all of them at once.
-    //
-    // THE ID IN THE FILE IS THE LOCAL ONE, exactly as a statblock's is: a pack writes
-    // `"id": "oldbones"` and the loader scopes it to `grimdark.oldbones`, because an author should
-    // not have to type their own pack's name into every file and a forked pack should not need
-    // every file edited.
-    //
-    // A PATH IS A FIELD THIS READER TAKES SERIOUSLY, and it is the only schema in the project
-    // where that is true. Every other file names ideas - an id, a die, a tier - and this one names
-    // FILES, which is a way out of the pack folder if nobody is looking. `Inside` below is that
-    // look: forward slashes, relative, no drive, no `..`, no leading separator. Refused here, at
-    // the field, rather than at the point where something would have opened it.
     public static class MiniReader
     {
         public const string Extension = ".json";
 
-        // <paramref name="pack"/> is the pack folder's unique id, or null/empty for the engine's
-        // own minis - which keep their un-prefixed ids (CONVENTIONS.md section 7)
+        // null/empty pack means the engine's own minis, kept un-prefixed
         public static Read<MiniManifest> Parse(string json, string file, string pack)
         {
             var problems = new List<ContentProblem>();
@@ -91,17 +73,14 @@ namespace Content.Minis
             {
                 if (Array.IndexOf(Fields, property.Name) >= 0) continue;
 
-                // THE ONE THAT DESERVES ITS OWN SENTENCE, the way `campaign.json` gives one to
-                // `title`. A name in a mini manifest is what every author will reach for first,
-                // and "a mini has no 'name'" is a true answer that teaches nothing
+                // name/title get their own sentence; it's what every author reaches for first
                 if (property.Name == "name" || property.Name == "title")
                 {
                     problems.Add(new ContentProblem(
                         file, property.Name,
                         $"a mini's {property.Name} is not written here - it is a localized " +
                         "string, so it lives in this pack's locale/ CSV under " +
-                        "'mini.<pack>.<id>.name' and is derived from the id rather than listed. " +
-                        "See CONVENTIONS.md on keys"));
+                        "'mini.<pack>.<id>.name' and is derived from the id rather than listed."));
                     continue;
                 }
 
@@ -134,10 +113,7 @@ namespace Content.Minis
             return string.IsNullOrEmpty(pack) ? local : ContentId.Scoped(pack, local);
         }
 
-        // THE ONE ID IN THIS FILE THAT MAY ALREADY BE SCOPED, because a variant can be OF another
-        // pack's mini as well as of a shared one. A bare word means "one of the shared roster's",
-        // which is the overwhelmingly common case and the one A0 is written around; a dotted one
-        // reaches across to a pack this one had better depend on (A4)
+        // the one id here that may already be scoped: bare is a shared mini, dotted reaches another pack
         static string Variant(JsonElement root, string file, List<ContentProblem> problems)
         {
             if (!root.TryGetProperty("variant", out JsonElement value)) return "";
@@ -164,9 +140,7 @@ namespace Content.Minis
             return "";
         }
 
-        // EXACTLY ONE SOURCE, and the sentence says which phase each of them is. An author who
-        // wrote both has described two different figures under one id; an author who wrote neither
-        // has described nothing at all, and silence is the worst answer to either
+        // exactly one source: both is two figures under one id, neither is nothing to stand
         static void Either(string variant, string model, string file, List<ContentProblem> problems)
         {
             bool hasVariant = !string.IsNullOrEmpty(variant);
@@ -190,9 +164,7 @@ namespace Content.Minis
                     "the board"));
         }
 
-        // A PATH THAT CANNOT LEAVE THE PACK. Content is data and a pack is a folder; a manifest
-        // that could write `../../../etc` or `C:\` would be a content file reaching into the
-        // machine, which is the difference between a mod and an exploit (MODDING.md section 5)
+        // a path that cannot leave the pack; ../../etc or C:\ is the difference between a mod and an exploit
         static string Path(JsonElement root, string field, string file,
                            List<ContentProblem> problems)
         {
@@ -227,8 +199,7 @@ namespace Content.Minis
             return path;
         }
 
-        // the whole of it, and it is worth keeping in one readable predicate rather than a regex:
-        // this is the check that a stranger's file cannot name a file that is not theirs
+        // the check a stranger's file can't name a file that isn't theirs; a predicate, not a regex, on purpose
         public static bool Inside(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) return false;
@@ -245,10 +216,7 @@ namespace Content.Minis
             return true;
         }
 
-        // NULL MEANS THE FILE DID NOT SAY, which a variant reads as "whatever I am a variant of".
-        // `Fit.Cell` is the enum's zero and would swallow that distinction, so it is not the
-        // fallback here - `MiniRegistry` supplies the default at the END of a chain, once, where
-        // there is nothing left to inherit from
+        // null (not Fit.Cell, the enum zero) so a variant can inherit; the default is applied at the end of the chain
         static Fit? Fitting(JsonElement root, string file, List<ContentProblem> problems)
         {
             if (!root.TryGetProperty("fit", out JsonElement value)) return null;
@@ -267,20 +235,12 @@ namespace Content.Minis
             return null;
         }
 
-        // IN METRES, because everything on this table is - a 60 mm square is 0.06 and a miniature
-        // is 0.075. Named `height` in the file rather than `size`, because that is what it is.
-        //
-        // A HEIGHT ON ITS OWN IMPLIES `"fit": "height"`, which is the whole of A0's first gesture:
-        // "the shipped skeleton, but a head taller" is one line, and making an author write the
-        // `fit` that the height already implies would be making them say it twice
         static float? Height(JsonElement root, Fit? fit, string file, List<ContentProblem> problems)
         {
             float? height = Number(root, "height", file, problems);
 
             if (fit == Fit.Cell && height.HasValue)
             {
-                // a height that is silently ignored is a mini that is the wrong size for a reason
-                // its author cannot see, so the contradiction is named rather than resolved
                 problems.Add(new ContentProblem(
                     file, "height",
                     "this mini is fitted to the cell, so its height is whatever the model's " +
@@ -313,9 +273,6 @@ namespace Content.Minis
                 return null;
             }
 
-            // A MINI THE SIZE OF THE ROOM is the failure a millimetre/metre mix-up makes, and it
-            // is the easiest mistake in this file: 75 rather than 0.075 is a figure taller than
-            // the house. Held to something a table could hold
             if (number < -MiniCaps.LargestPiece || number > MiniCaps.LargestPiece)
                 problems.Add(new ContentProblem(
                     file, field,
@@ -348,9 +305,7 @@ namespace Content.Minis
                                                         List<ContentProblem> problems) =>
             Motions(root, "clips", file, problems, (motion, text, where) =>
             {
-                // a clip name is the model's own, written by whoever exported it, so it is NOT
-                // held to the id grammar - "Walk_A", "Armature|Death" and worse are all real
-                // names out of real exporters, and refusing them would refuse the model
+                // a clip name is the model's own (Walk_A, Armature|Death); not held to the id grammar
                 if (text.Trim().Length > 0) return text.Trim();
 
                 problems.Add(new ContentProblem(
@@ -376,9 +331,6 @@ namespace Content.Minis
                 return null;
             });
 
-        // one shape for both, because they are the same shape: the motion vocabulary on the left
-        // and something the pack supplies on the right. The words are DERIVED from `Motion`, so a
-        // sixth motion is authorable the day it exists
         static IReadOnlyDictionary<Motion, string> Motions(
             JsonElement root, string field, string file, List<ContentProblem> problems,
             Func<Motion, string, string, string> value)

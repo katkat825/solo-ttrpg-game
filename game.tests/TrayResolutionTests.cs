@@ -8,26 +8,15 @@ using Xunit;
 
 namespace Game.Tests
 {
-    // the felt handing three faces to the rules, and the rules handing back what each die is
-    //
-    // TrayResolution reimplements no rule - it feeds the faces to StandardResolver through a
-    // ScriptedRng and reads the answer. so what is under test here is not the dice system, it
-    // is the ORDER: the pool is built in throw order, the resolver answers in value order, and
-    // every bug this class can have is the two coming apart
     public class TrayResolutionTests
     {
-        // the hero's three traits in throw order - attribute, skill, gear - which is the shape
-        // Actor.BuildPool hands over and the shape the board throws at a door
         static Pool Pool(Die a, Die b, Die c) => Core.Resolution.Pool.Of(
             ("attr.might.name", a), ("skill.blades.name", b), ("gear.axe.name", c));
 
         static TrayThrow Throw(Die a, Die b, Die c, params int[] values) =>
             new TrayResolution(Pool(a, b, c)).Resolve(values);
 
-        // ---- the pool it will accept ----
 
-        // since B4 the pool comes from whoever asked for the throw, so its SIZE is theirs to
-        // choose - what the tray cannot do is resolve a handful of nothing
         [Fact]
         public void APoolWithNoDiceInIt_IsRefused() =>
             Assert.Throws<ArgumentException>(() => new TrayResolution(new Pool()));
@@ -36,8 +25,7 @@ namespace Game.Tests
         public void NoPoolAtAll_IsRefused() =>
             Assert.Throws<ArgumentNullException>(() => new TrayResolution(null));
 
-        // a die that is not there does not make a hole in the pool - Pool.Add drops it, which is
-        // how an untrained attempt arrives as two dice instead of three
+        // pool.add drops an absent die, so an untrained attempt arrives as two dice, not a pool with a hole
         [Fact]
         public void ADieThatIsNotThere_ShrinksThePool()
         {
@@ -55,10 +43,7 @@ namespace Game.Tests
         public void AFaceThatIsNotOnTheDie_IsRefused() =>
             Assert.Throws<ArgumentOutOfRangeException>(() => Throw(Die.D6, Die.D8, Die.D12, 7, 3, 3));
 
-        // ---- the impact die, read off the felt ----
 
-        // B4 spends this: a check that fails costs the hero what the Impact die is SHOWING, not
-        // what a second hidden roll of it would have said
         [Fact]
         public void ImpactValue_IsTheFaceOnTheDieTheRulesLeftOver()
         {
@@ -67,7 +52,6 @@ namespace Game.Tests
             Assert.False(thrown.ImpactValue == 0);
             Assert.Equal(3, thrown.ImpactValue);
 
-            // and it is the die that is actually lying there, not a number from anywhere else
             int impact = -1;
 
             for (int i = 0; i < thrown.Roles.Count; i++)
@@ -76,7 +60,6 @@ namespace Game.Tests
             Assert.Equal(impact, thrown.ImpactValue);
         }
 
-        // a pool where every die counted has no leftover, so there is nothing showing
         [Fact]
         public void ImpactValue_IsNothingWhenNothingWasLeftOver()
         {
@@ -88,7 +71,6 @@ namespace Game.Tests
             Assert.Equal(0, thrown.ImpactValue);
         }
 
-        // ---- throw order is kept ----
 
         [Fact]
         public void SlotsComeBackInThrowOrder_NotInValueOrder()
@@ -99,19 +81,14 @@ namespace Game.Tests
             Assert.Equal(new[] { Die.D6, Die.D8, Die.D12 }, thrown.Slots.Select(s => s.Die));
         }
 
-        // the load-bearing one. PoolResult.Rolls is sorted by value, so a view that indexed
-        // the dice with it would ring the right NUMBER of dice and the wrong ones - and only
-        // when the throw came out in a different order than it was made, which is most of the
-        // time and never obviously
+        // poolresult.rolls is sorted by value, so indexing dice by it rings the right count of wrong dice
         [Fact]
         public void RolesAreInThrowOrder_EvenWhenTheResultOrderDiffers()
         {
-            // 7 and 5 count, the 2 is left over - so the FIRST die thrown is the Impact die
             TrayThrow thrown = Throw(Die.D6, Die.D8, Die.D12, 2, 7, 5);
 
             Assert.Equal(new[] { DieRole.Impact, DieRole.Counted, DieRole.Counted }, thrown.Roles);
 
-            // and the resolver really did answer in the other order
             Assert.Equal(new[] { 7, 5, 2 }, thrown.Result.Rolls.Select(r => r.Value));
         }
 
@@ -123,16 +100,12 @@ namespace Game.Tests
             Assert.Equal(2, thrown.Roles.Count(r => r == DieRole.Counted));
             Assert.Equal(1, thrown.Roles.Count(r => r == DieRole.Impact));
 
-            // the leftover die's SIZE is what the rules call Impact, and it is the die that
-            // did not count that carries the role
             Assert.Equal(Die.D6, thrown.Result.Impact);
             Assert.Equal(DieRole.Impact, thrown.Roles[2]);
             Assert.False(thrown.ImpactIsFallback);
         }
 
-        // three dice of one size showing one face is the case where the roll-to-slot matcher
-        // has nothing to tell them apart by - each slot must be claimed once, not one slot
-        // three times, and no die may be left without a role
+        // three identical dice: the slot matcher must claim each slot once, not one slot three times
         [Fact]
         public void IdenticalDiceOnIdenticalFaces_AreHandedOutOneApiece()
         {
@@ -141,8 +114,6 @@ namespace Game.Tests
             Assert.Equal(new[] { DieRole.Counted, DieRole.Counted, DieRole.Impact }, thrown.Roles);
         }
 
-        // ties break toward the player: equal rolls count the SMALLER die, which leaves the
-        // larger one free to be Impact. it is a rules decision, and this is the felt reading it
         [Fact]
         public void OnATie_TheLargerDieIsLeftForImpact()
         {
@@ -152,7 +123,6 @@ namespace Game.Tests
             Assert.Equal(DieRole.Impact, thrown.Roles[0]);
         }
 
-        // ---- where the 1 landed ----
 
         [Theory]
         [InlineData(1, 7, 5, 0)]
@@ -170,8 +140,6 @@ namespace Game.Tests
         public void NoOnes_IsNoSnag() =>
             Assert.Equal(-1, Throw(Die.D6, Die.D8, Die.D12, 2, 7, 5).SnaggedSlot);
 
-        // two 1s is Trouble, a different tier with its own cue - deliberately not a snag,
-        // and deliberately not "the first 1 we found"
         [Fact]
         public void TwoOnes_IsTroubleAndNotASnag()
         {
@@ -182,11 +150,8 @@ namespace Game.Tests
             Assert.Equal(-1, thrown.SnaggedSlot);
         }
 
-        // ---- the short pool the tray never throws ----
 
-        // Result.Impact is d4 when nothing was left over, which is the resolver's fallback and
-        // not a die anybody rolled. the tray cannot produce it with three dice; this exists so
-        // that if a shorter pool ever reaches the felt, "impact d4" is never read as a result
+        // impact d4 is the resolver's fallback for a short pool, not a rolled die; guard it from reaching the felt
         [Fact]
         public void WhenEveryDieCounted_ImpactIsTheResolversFallback()
         {
@@ -210,10 +175,7 @@ namespace Game.Tests
             Assert.All(thrown.Roles, r => Assert.Equal(DieRole.Counted, r));
         }
 
-        // THE FELT AND THE POOL COMING APART is the one thing this class must never shrug at -
-        // and since P6 it does not throw either (SEAMS.md section 9). It says so, in a sentence,
-        // and leaves the dice unmarked: a die with no ring round it makes no claim about the
-        // rules, which is the only honest thing to draw when nobody knows which die is which
+        // felt and pool disagreeing must not throw; it leaves the dice unmarked rather than claim a wrong one
         [Fact]
         public void ARollNoDieThrew_IsNamedAndLeavesTheDiceUnmarked()
         {
@@ -245,8 +207,6 @@ namespace Game.Tests
             Assert.Equal(-1, thrown.SnaggedSlot);
         }
 
-        // A THROW READ OFF THE FELT (P6). The faces are the whole of what a saved throw is, and
-        // reading them cannot disagree with itself - which is the shape SEAMS section 9 asked for
         [Fact]
         public void AThrowReadOffTheFeltAgreesWithItselfAndScoresTheSame()
         {
@@ -266,8 +226,6 @@ namespace Game.Tests
             Assert.Equal("gear.axe.name", read.ImpactLabelKey);
         }
 
-        // and it is the same reading the table gives, which is the whole point of there being one
-        // implementation of the arithmetic (PoolResult.From)
         [Fact]
         public void AThrowReadOffTheFeltMatchesTheOneTheTableMade()
         {

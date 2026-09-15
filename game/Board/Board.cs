@@ -8,70 +8,25 @@ using Game.Tray;
 
 namespace Game.Board
 {
-    // the battle map on the table: a map read from a file, and the pieces standing on it.
-    //
-    // THE VIEW OF A MODEL IT DOES NOT OWN. `MapLayout` says what every square is made of,
-    // `Core.Space.Grid` says who is standing on them, `Route` says whether there is a way there,
-    // and `BoardMetrics` says where any of it is on this table. This draws them and turns a click
-    // into a move. Exactly the arrangement the tray has with `PoolResult`, and the reason
-    // THE_BOARD.md puts the spatial model in core/: geometry is testable headless, and the board
-    // being simulatable is what lets a future balance run give enemies positions.
-    //
-    // THE MAP IS DATA (B2). Nothing about this room is in this file or in board.tscn - the extent,
-    // the walls, the door, the rubble and where the hero starts all come out of maps/cellar.map,
-    // and moving a wall is one character in that file. What is left here is the same in every room
-    // there will ever be: how a square is drawn, and what a click means.
-    //
-    // NO UI (B3). A refused move is shown ON THE BOARD - the square lights and the piece leans at
-    // it and settles back - because THE_TABLE.md 6 says the room is the entire UI and there is no
-    // message box on a table.
     public partial class Board : Node3D
     {
-        // WHICH ROOM. the one thing about the map that a scene gets to say, because a second board
-        // in a second scene is a second map and not a second copy of this code. Phase P replaces
-        // this with a campaign package naming its own maps (ARCHITECTURE.md 4)
         [Export(PropertyHint.File, "*.map")] public string MapPath { get; set; } = "res://maps/cellar.map";
 
-        // WHICH CAMPAIGN'S ROOM (P2). Both set, and the board plays `<campaign>/maps/<map>.map` out
-        // of whichever campaign root has it; either left empty, and it falls back to `MapPath`
-        // above - the map that ships with the game, so a fresh install with no campaigns installed
-        // still has a room to stand in.
-        //
-        // Godot's FileAccess reads an absolute path as happily as a `res://` one, which is what
-        // lets one line below open either - a campaign lives OUTSIDE the .pck (see
-        // Campaigns/CampaignFolders.cs) and the shipped map lives inside it
+        // an absolute path and a res:// path open the same way, so one line opens either
         [Export] public string Campaign { get; set; } = "";
 
-        // `MapName` and not `Map`, because `Map` is already this board's loaded `MapLayout` - one
-        // is which file to open and the other is what came out of it
+        // MapName, not Map: Map is already the loaded MapLayout
         [Export] public string MapName { get; set; } = "";
 
-        // OR NAME AN ENCOUNTER AND LET IT SAY WHICH ROOM (P4). This is the one the game actually
-        // uses: an encounter names its map, its foes and what happens when they are down, and a
-        // board and a fight that each named the room separately would be one fact written twice
-        // and free to disagree.
-        //
-        // IT IS ON THE BOARD AND NOT ON THE FIGHT, which looks backwards for about a second. The
-        // board loads its room inside its own `_Ready`, and Godot readies children before parents
-        // and in tree order - so by the time the fight exists the room is already down. Whoever
-        // picks the room has to be whoever loads it. The fight then reads the SAME plan off this
-        // board (`Plan`) rather than being told a second time
+        // on the board, not the fight: Godot readies children before parents, so the room is down before the fight exists
         [Export] public string Encounter { get; set; } = "";
 
-        // both from `Package`, which is where a campaign's layout is described (P4) - the board
-        // opening a different folder from the one the loader validates would be a validator that
-        // proves nothing about what gets played
         public const string MapsFolder = Content.Campaigns.Package.MapsFolder;
 
         public const string MapExtension = Content.Campaigns.Package.MapExtension;
 
-        // how big a square is on THIS table, which is a property of the table and not of the map -
-        // the same room is the same room whether it is played on a small mat or a large one
         [Export] public float CellSize { get; set; } = 0.06f;
 
-        // the mat and the painted grid, then one material per kind of terrain. all authored in
-        // board.tscn, because what the board is made of is art direction and belongs where it can
-        // be looked at
         [Export] public Material Mat { get; set; }
 
         [Export] public Material Lines { get; set; }
@@ -82,43 +37,27 @@ namespace Game.Board
 
         [Export] public Material Rough { get; set; }
 
-        // THE TERRAIN ITSELF (B5). Culled out of the KayKit dungeon pack by tools/pull-models.ps1,
-        // wearing the game's palette and the painted-miniature shader. Left empty, the board falls
-        // back to the boxes above - which is how B2, B3 and B4 were verified and is worth keeping
-        // able to come back
+        // left empty, the board falls back to the placeholder boxes above
         [Export] public PackedScene WallModel { get; set; }
 
         [Export] public PackedScene DoorwayModel { get; set; }
 
         [Export] public PackedScene RubbleModel { get; set; }
 
-        // one material for every model on the board: the whole pack shares one atlas
         [Export] public Material Paint { get; set; }
 
-        // what a square looks like when the answer is no. dusty red, and mostly transparent: it is
-        // ink on a map rather than a light under it
         [Export] public Color RefusedTint { get; set; } = new Color(0.62f, 0.18f, 0.14f, 0.5f);
 
         [Export] public NodePath PiecePath { get; set; } = "Mini";
 
-        // WHICH HERO. One id, and the roster behind it is still IArchetypeSource - so pointing
-        // this at a campaign's own hero (Phase P) or at a character the player made (Phase R) is
-        // this line and nothing else. It is an export because C5 needs to be able to look at
-        // channelling, and the Barbarian is untrained in it: set this to "mage" and the same
-        // board plays a caster
         [Export] public string HeroId { get; set; } = EngineIds.Barbarian;
 
-        // WHERE THE DICE ARE. the board does not own a tray and must not - it asks the one on the
-        // table to throw a pool and listens for the answer, which is the same seam the tray
-        // already has with the rules. Set in table.tscn, because only the table knows both are
-        // standing on it; left empty, doors stay shut and the board says why
+        // the board does not own a tray; empty means doors stay shut
         [Export] public NodePath TrayPath { get; set; }
-
-        // ---- the mat, in metres ----
 
         const float MatThickness = 0.006f;
 
-        // painted lines, not grooves - a shade proud of the mat so they never z-fight with it
+        // a shade proud of the mat so the lines never z-fight
         const float LineWidth = 0.0022f;
 
         const float LineHeight = 0.0010f;
@@ -129,10 +68,7 @@ namespace Game.Board
 
         MapLayout _map;
 
-        // THE ROSTER, which is the engine's own plus every campaign on disk (P0). This line was
-        // `new BuiltInArchetypes()` and said "naming the roster in one place is what keeps that
-        // swap to this line" - and it was: this is the swap
-        readonly IArchetypeSource _archetypes = Game.Campaigns.Library.Load();
+        readonly Game.Campaigns.Library _archetypes = Game.Campaigns.Library.Load();
 
         Actor _hero;
 
@@ -142,27 +78,19 @@ namespace Game.Board
 
         BoardTiles _tiles;
 
-        // the door the hero is walking up to, or has just thrown at - a LINE between two squares
-        // since EDGE_WALLS.md, not a square of its own. null when nothing is pending, which is
-        // also what any other click sets it back to
+        // the door being approached or thrown at, a line not a square; null when nothing is pending
         Border? _door;
 
-        // true from the moment the dice leave the hand until the felt has been read. the hero is
-        // busy; clicks wait
+        // true while the door dice are in the air; clicks wait
         bool _checking;
 
-        // and readable from outside, because whoever else is running the table has to wait too -
-        // a fight starting a swing while a door check is in the air would put two questions on
-        // one throw
+        // public so a fight does not start a swing while a door check is in the air
         public bool IsChecking => _checking;
 
-        // the piece that was standing in the doorway, kept so it can be taken off the board again
         DoorPiece _opened;
 
-        // which line that door was on, once it has been opened
         Border? _opening;
 
-        // and the square its wreckage landed in, if it gave way rather than swinging
         Cell? _wreckage;
 
         Grid<Mini> _grid;
@@ -177,30 +105,19 @@ namespace Game.Board
 
         public Grid<Mini> Squares => _grid;
 
-        // the hero's own piece, and the hero it stands for. ONE of each on the table: the fight
-        // (COMBAT_LOOP.md C0) drives the same Actor the door check damages, so a hero who forced
-        // a door the hard way walks into the room already Winded
+        // one hero Actor shared with the fight, so a door forced the hard way carries into the room
         public Mini Piece => _piece;
 
         public Actor Hero => _hero;
 
-        // WHOEVER IS RUNNING THE TABLE GETS FIRST REFUSAL ON A CLICK, and returning true means
-        // they took it. Null is nobody, which is the board on its own - one piece walking round a
-        // room, Phase B exactly as it was.
-        //
-        // A delegate and not an event, because this is not a notification: it is the answer to
-        // "is somebody else deciding what a click means right now", and two answers to that would
-        // be two things moving the same piece. A fight sets it in _Ready and clears it in
-        // _ExitTree, and while it is set the board does not move anything of its own accord -
-        // whose turn it is is a rule (CORE_RULES.md section 8) and the board owns no rules
+        // a delegate not an event: two answers to who decides a click would move the same piece twice
         public Func<Cell, bool> Claims { get; set; }
 
         public override void _Ready()
         {
             _map = Load();
 
-            // all three built from the map, in that order, so the drawing, the model and the room
-            // can never describe three different boards
+            // metrics, grid and terrain all built from the map, so the three never disagree
             _metrics = new BoardMetrics(_map.Columns, _map.Rows, Usable(CellSize));
             _grid = new Grid<Mini>(_map.Columns, _map.Rows);
 
@@ -247,11 +164,15 @@ namespace Game.Board
                      $"{(Paint == null && WallModel != null ? " - WITH NO PAINT ON THEM" : "")}");
         }
 
-        // a hero the roster does not have is a scene naming somebody who does not exist, which
-        // is worth saying rather than crashing on - the board falls back to the one it knows
         Actor Recruit()
         {
-            if (_archetypes.Has(HeroId)) return _archetypes.Create(HeroId);
+            if (!Fixed && Game.Campaigns.Requested.Hero.Length > 0)
+                HeroId = Game.Campaigns.Requested.Hero;
+
+            if (!Fixed && Game.Campaigns.Requested.Grown.Count > 0 && Grown.Count == 0)
+                Grown = Game.Campaigns.Requested.Grown;
+
+            if (_archetypes.Has(HeroId)) return Grow(_archetypes.Create(HeroId));
 
             GD.PushError($"board: there is no hero called '{HeroId}' in the roster " +
                          $"({string.Join(", ", _archetypes.Ids)}) - using {EngineIds.Barbarian}");
@@ -265,13 +186,7 @@ namespace Game.Board
             if (_tray != null) _tray.Resolved -= OnThrown;
         }
 
-        // THE MAP FILE IS THE MAP, and a broken one has to say so rather than half-load. A room
-        // with a wall missing and nothing to tell you is the failure this whole path exists to
-        // make impossible, so every refusal is printed with the line in the file that caused it.
-        //
-        // Godot's FileAccess rather than System.IO, because in an exported game the map is inside
-        // a .pck and nothing else can reach it. core/ never opens a file: it parses the text this
-        // hands it, which is what keeps the reader testable headless.
+        // Godot's FileAccess, not System.IO: an exported map lives inside the .pck
         MapLayout Load()
         {
             string path = Chosen();
@@ -297,35 +212,52 @@ namespace Game.Board
             return EmptyRoom();
         }
 
-        // what was actually opened, for a report and for a check that wants to know which room it
-        // is standing in
         public string Loaded { get; private set; }
 
-        // THIS BOARD WAS TOLD EXACTLY WHAT TO LOAD, so `--campaign=` is not about it.
-        //
-        // One caller, and it is the reason the property exists: `check-fight.ps1` plays several
-        // fights in one run, and only the first of them is the campaign's - the other two are the
-        // caster and the boss, deliberately in the room that ships. Without this, an argument
-        // naming a campaign would quietly replace all three, and the boss fight would muster
-        // somebody else's encounter instead of the Dread it put there (a P7 finding, found by
-        // exactly that happening).
-        //
-        // Not an `[Export]`: a scene has no business declaring itself immune to what the game was
-        // launched with. It is set by a composition root that is building more than one board
+        // Fixed opts a board out of --campaign, so a multi-fight run does not replace every board's room
         public bool Fixed { get; set; }
 
-        // AND WHAT IS SUPPOSED TO BE STANDING IN IT, when the room came from an encounter. Read
-        // here because the room is chosen here; the fight musters from it (Fight.Muster)
+        // held here, not on the Actor: core knows no classes; the save writes step ids and the dice are re-derived
+        public IReadOnlyList<string> Grown { get; set; } = System.Array.Empty<string>();
+
+        // applied through the trait pipeline, so steps and Conditions compose in any order; an unknown step is skipped, not fatal
+        Actor Grow(Actor hero)
+        {
+            if (Grown.Count == 0) return hero;
+
+            Content.Classes.ClassCard card = _archetypes.ClassOf(hero?.Id);
+
+            if (card == null)
+            {
+                GD.PushWarning($"board: '{hero?.Id}' is not a class, so it has no growth steps " +
+                               "to be given");
+                return hero;
+            }
+
+            foreach (string id in Grown)
+            {
+                Content.Classes.Growth step = card.Step(id);
+
+                if (step == null)
+                {
+                    GD.PushWarning($"board: '{card.Id}' offers no growth step called '{id}'");
+                    continue;
+                }
+
+                step.ApplyTo(hero);
+
+                GD.Print($"grown   {hero.Id} - {step}");
+            }
+
+            return hero;
+        }
+
+        // the encounter's roster, read here because the room is chosen here; the fight musters from it
         public Content.Encounters.EncounterPlan Plan { get; private set; }
 
-        // THE CAMPAIGN'S ROOM IF THERE IS ONE, and the shipped one otherwise. B2 read exactly one
-        // hardcoded path and CONTENT_PIPELINE.md P2 is where that stops being true - "the loader
-        // builds a playable board from a maps/ file, replacing B2's single hardcoded path"
         string Chosen()
         {
-            // TOLD RATHER THAN BUILT WITH (P7). `--campaign=` and `--encounter=` beat the scene,
-            // so a second campaign can be played without editing `table.tscn` - which is the
-            // finding the second-campaign test turned up, written down on `Requested`
+            // --campaign and --encounter beat the scene, so a second campaign plays without editing table.tscn
             if (!Fixed)
             {
                 if (Game.Campaigns.Requested.Campaign.Length > 0)
@@ -354,13 +286,7 @@ namespace Game.Board
             return MapPath;
         }
 
-        // WHICH ROOM, out of the encounter when there is one and out of the export when there is
-        // not. Null means "nothing was asked for", which is the shipped cellar and not an error.
-        //
-        // A whole `Library.Load` for one file name looks heavy and is the right call: it is the
-        // load that VALIDATES the campaign, so a board pointed at a folder with a broken manifest
-        // finds out here, with the reason, rather than opening a map out of a campaign the rest of
-        // the game has refused to load
+        // the full Library.Load is the one that validates the campaign, so a broken manifest is caught here
         string Named()
         {
             if (string.IsNullOrWhiteSpace(Encounter))
@@ -389,9 +315,7 @@ namespace Game.Board
             return Plan.Map;
         }
 
-        // four walls and nothing else, at the size the game ships with. NOT a map anyone plays on -
-        // it is what the board is while the error above is being read, and it exists so a mistyped
-        // map leaves a board you can see is wrong rather than a black table and a piece nowhere
+        // not a playable map: what the board shows while you read the error above
         static MapLayout EmptyRoom()
         {
             int columns = BoardMetrics.Shipped.Columns;
@@ -403,9 +327,7 @@ namespace Game.Board
 
             for (int i = 0; i < tiles.Length; i++) tiles[i] = Tile.Floor;
 
-            // walled ON ITS OUTSIDE LINES rather than with a ring of solid squares, which is what
-            // EDGE_WALLS.md made possible and is the honest way to draw a room: every square inside
-            // is floor a piece can stand on, right up to the wall
+            // walled on the outside lines, not solid squares, so every inside square is floor
             for (int y = 0; y < rows; y++)
             {
                 vertical[y * (columns + 1)] = Edge.Wall;
@@ -432,8 +354,6 @@ namespace Game.Board
             return BoardMetrics.Shipped.CellSize;
         }
 
-        // everything visible, under one node. the mat and its grid are the wet-erase map; the
-        // terrain standing on it is BoardTiles' business
         void Build()
         {
             var under = new Node3D { Name = "Surface" };
@@ -442,8 +362,6 @@ namespace Game.Board
             if (Mat == null || Lines == null)
                 GD.PushError("board: the mat or the grid lines have no material - the board will be untextured");
 
-            // the top of the mat is the board's own zero, so a piece standing on a square has its
-            // feet at y 0 and BoardMetrics.Centre needs no offset to account for the thickness
             under.AddChild(new MeshInstance3D
             {
                 Name = "Mat",
@@ -452,13 +370,10 @@ namespace Game.Board
                 Position = new Vector3(0f, -MatThickness * 0.5f, 0f),
             });
 
-            // one mesh for every line down the board and one for every line across it, shared
-            // between the instances that use it
             var downwards = new BoxMesh { Size = new Vector3(LineWidth, LineHeight, _metrics.Depth + LineWidth) };
             var across = new BoxMesh { Size = new Vector3(_metrics.Width + LineWidth, LineHeight, LineWidth) };
 
-            // one more line than squares in each direction - the outside edges are painted too,
-            // which is what makes the map a map rather than a pattern
+            // one more line than squares: the outside edges are painted too
             for (int x = 0; x <= _metrics.Columns; x++)
                 under.AddChild(Line($"Down{x:00}", downwards,
                     new Vector3(x * _metrics.CellSize - _metrics.HalfWidth, LineRise, 0f)));
@@ -470,8 +385,6 @@ namespace Game.Board
             _terrain = new Node3D { Name = "Terrain" };
             AddChild(_terrain);
 
-            // kept, because terrain stopped being built once and forgotten in B4: a door forced
-            // and a doorway full of wreckage are the same square redrawn from the map
             _tiles = new BoardTiles(_metrics)
             {
                 Wall = Wall,
@@ -503,17 +416,10 @@ namespace Game.Board
             Position = at,
         };
 
-        // a developer affordance rather than a game rule, and not an input action for the same
-        // reason the tray's D, T and L are not: it is here to let both outcomes of one check be
-        // seen in one sitting, and it does not survive past this phase
+        // a developer affordance to see both check outcomes in one sitting, not a game rule
         const Key KeyToRelock = Key.R;
 
-        // a click on a square walks the piece there, if there is a way. no reachability limit, no
-        // turns, no whose-move-is-it - that is COMBAT_LOOP.md. Here every square the piece can
-        // reach is one move away, however far round the room that is
-        //
-        // A SHUT DOOR IS THE EXCEPTION AND IT IS THE MILESTONE: clicking one sends the hero to it
-        // and then to the dice.
+        // a click walks the piece anywhere reachable in one move; a shut door is the exception
         public override void _UnhandledInput(InputEvent @event)
         {
             if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: KeyToRelock })
@@ -525,8 +431,7 @@ namespace Game.Board
 
             if (!@event.IsActionPressed("place_piece") || _piece == null) return;
 
-            // the dice are in the air. the hero is busy, and a move begun now would be a piece
-            // walking away from its own check
+            // busy: a move now would be a piece walking away from its own check
             if (_checking) return;
 
             Cell? clicked = CellUnder(@event, out Vector3 local);
@@ -537,21 +442,15 @@ namespace Game.Board
 
             Cell cell = clicked.Value;
 
-            // a fight is on, and it decides what a square means - which foe is on it, whether the
-            // hero has an action left, whether it is even his turn. the board answers WHICH SQUARE
-            // and stops there, which is the whole of the seam
+            // a fight decides what a square means; the board answers which square and stops
             if (Claims != null && Claims(cell)) return;
 
             Cell? standing = _grid.CellOf(_piece);
 
             if (standing == null) return;
 
-            // whatever was being walked toward, this click replaces it
             _door = null;
 
-            // A DOOR IS A LINE NOW, so clicking one means clicking NEAR one - the pointer lands in
-            // a square either side of it and the door is the nearest line to where it landed.
-            // That is also what it looks like: the door is drawn on that line, and you clicked it
             Border? door = DoorNear(local) ?? ShutDoorBeside(cell, standing.Value);
 
             if (door != null)
@@ -560,8 +459,6 @@ namespace Game.Board
                 return;
             }
 
-            // clicking the square it is already on is not a move. leaning and setting down again
-            // would read as the board answering a question nobody asked
             if (standing == cell) return;
 
             IReadOnlyList<Cell> route =
@@ -573,9 +470,7 @@ namespace Game.Board
                 return;
             }
 
-            // THE MODEL MOVES FIRST AND THE VIEW CATCHES UP. by the time the piece starts walking,
-            // the grid already has it on the destination, so an interrupted move cannot leave the
-            // two disagreeing about where it is
+            // the grid moves first, the view catches up, so an interrupted move never leaves them disagreeing
             if (!_grid.Move(_piece, cell))
             {
                 Refuse(cell, standing.Value);
@@ -584,21 +479,12 @@ namespace Game.Board
 
             _piece.Follow(Waypoints(route));
 
-            // developer diagnostics. sight is not drawn anywhere yet - B3 builds it for the fight
-            // that comes next - so this is where it can be watched working
             GD.Print($"move    {standing} to {cell}, {route.Count - 1} squares, " +
                      $"{Route.Cost(_map, route)} to walk" +
                      (Sight.Clear(_map, standing.Value, cell) ? "" : " - out of sight, round a corner"));
         }
 
-        // ---- pieces on the board, for whoever is running the table (COMBAT_LOOP.md C0) ----
-
-        // another piece, standing on a square. the board owns what is standing where, so a fight
-        // that wanted to add its own minis to the scene and keep its own idea of who is on which
-        // square would be a second occupancy map free to disagree with this one
-        //
-        // null when the square is off the board, solid, or already taken - the same three
-        // refusals a move gets, and for the same reasons
+        // the board owns occupancy; null when the square is off the board, solid, or taken
         public Mini Place(PackedScene piece, Cell cell, string name)
         {
             if (piece == null) return null;
@@ -618,14 +504,7 @@ namespace Game.Board
             return Stood(mini, cell);
         }
 
-        // AND THE SAME THING FOR A PIECE THAT WAS BUILT RATHER THAN INSTANCED (MINIS_AND_ART.md
-        // A1). A mini out of a pack has no `PackedScene` behind it - `MiniMaker` assembles it from
-        // a supplied model, or stands a placeholder box in for one that failed - so the board
-        // needs a way to be handed a finished piece.
-        //
-        // IT IS THE SAME THREE LINES AND NOT A SECOND PATH. Whatever built the piece, the board
-        // owns where it stands: one occupancy map, one refusal, one placement. A fight that kept
-        // its own idea of who is on which square would be a second map free to disagree
+        // same placement for a pre-built mini from MiniMaker, not a second path
         public Mini Place(Mini piece, Cell cell, string name)
         {
             if (piece == null) return null;
@@ -647,8 +526,7 @@ namespace Game.Board
             return mini;
         }
 
-        // the same three refusals, asked once, so the two `Place` overloads cannot drift apart
-        // about what a square being available means
+        // the three refusals asked once, so the two Place overloads cannot drift apart
         bool Free(Cell cell, string name)
         {
             if (_grid.Contains(cell) && _map.IsPassable(cell) && !_grid.IsOccupied(cell)) return true;
@@ -662,17 +540,7 @@ namespace Game.Board
             return false;
         }
 
-        // PUT A PIECE ON A SQUARE WITHOUT WALKING IT THERE (CONTENT_PIPELINE.md P6).
-        //
-        // The only caller is a save being loaded, and it is the only caller there should be: a
-        // piece that moves without a route is a piece that has teleported, and at a table pieces
-        // do not teleport. A load is the exception because nothing is being played - the room is
-        // being SET UP, exactly as `Place` sets it up, and what this does is the same thing to a
-        // mini that already exists.
-        //
-        // False when the square is off the board, solid or taken - the same three refusals
-        // `Place` gives, and silent rather than shouted, because a save naming an impossible
-        // square is a sentence for the loader to collect rather than an error in the board
+        // no walk, no route: only a save loads this way, because a played piece never teleports
         public bool Stand(Mini piece, Cell cell)
         {
             if (piece == null) return false;
@@ -692,7 +560,6 @@ namespace Game.Board
             return true;
         }
 
-        // off the board and out of the scene - what happens to a piece that has been removed
         public void Lift(Mini piece)
         {
             if (piece == null) return;
@@ -703,8 +570,7 @@ namespace Game.Board
 
         public Cell? CellOf(Mini piece) => _grid.CellOf(piece);
 
-        // walk a piece to a square, by the same rules a click walks the hero: a route or nothing.
-        // false means there was no way there, and the board has already said so on the board
+        // same rules as a click walks the hero; false means no way there, already shown on the board
         public bool Walk(Mini piece, Cell to)
         {
             Cell? standing = _grid.CellOf(piece);
@@ -724,19 +590,44 @@ namespace Game.Board
             return true;
         }
 
-        // no way there: say so on the board and leave the piece where it is. the two halves are
-        // one gesture - somebody tapping the square, and the piece leaning at it and settling back
+        // foul a square to Rough, double to cross; false when it was not plain floor, which is not a failure
+        public bool Foul(Cell cell)
+        {
+            if (_map == null || _map.At(cell) != Tile.Floor) return false;
+
+            _map = _map.With(cell, Tile.Rough);
+            _tiles.Update(_terrain, _map, cell);
+
+            return true;
+        }
+
+        // shove one square using the same Walk carry; a wall, edge or occupant just stops it
+        public bool Shove(Mini piece, Cell from)
+        {
+            Cell? standing = _grid.CellOf(piece);
+
+            if (_map == null || standing == null) return false;
+
+            Cell to = new Cell(standing.Value.X + (standing.Value.X - from.X),
+                               standing.Value.Y + (standing.Value.Y - from.Y));
+
+            if (!_map.At(to).IsPassable()) return false;
+
+            // a wall between them stops a shove, as it stops a step
+            if (!_map.CanCross(standing.Value, to)) return false;
+
+            if (_grid.At(to) != null) return false;
+
+            return Walk(piece, to);
+        }
+
         public void Refuse(Cell cell, Cell standing) => Refuse(_piece, cell, standing);
 
-        // whichever piece was asking. it was always the hero's until a fight put other pieces on
-        // the board that also have somewhere they cannot go
         public void Refuse(Mini piece, Cell cell, Cell standing)
         {
             _refused?.Show(_metrics.Centre(cell));
             piece?.Refuse(_metrics.Centre(cell));
 
-            // WHY there is no way there, which is three different answers now: the square is rock,
-            // somebody is on it, or it is perfectly good floor with no open line to it
             string because = !_map.IsPassable(cell) ? _map.At(cell).ToString()
                 : _grid.IsOccupied(cell) ? "taken"
                 : "walled off from where the piece is standing";
@@ -744,14 +635,7 @@ namespace Game.Board
             GD.Print($"board   no way to {cell} from {standing} - {because}");
         }
 
-        // ---- the door, the dice, and what the felt decides (B4) ----
-
-        // the nearest shut door to where the pointer landed, or null if it landed nowhere near one.
-        //
-        // A DOOR IS A LINE, and you cannot click a line - you click a square, near its edge. So the
-        // door is found by distance from the point itself: within half a square of the line it is
-        // drawn on, which is the near half of the square on either side. That is also what the eye
-        // does, because the door is standing on exactly that line
+        // a door is a line: found by distance, within half a square of the line it is drawn on
         Border? DoorNear(Vector3 local)
         {
             Border? nearest = null;
@@ -773,9 +657,7 @@ namespace Game.Board
             return nearest;
         }
 
-        // and the forgiving version: a click on a square there is no way to, with a shut door
-        // between it and the hero. clicking the room BEYOND a door is what anybody does first, and
-        // refusing it because the pointer was a centimetre past the line would be pedantry
+        // the forgiving version: a click beyond a shut door counts as clicking the door
         Border? ShutDoorBeside(Cell clicked, Cell standing)
         {
             if (clicked == standing || Route.Between(_map, standing, clicked, Taken) != null) return null;
@@ -792,7 +674,6 @@ namespace Game.Board
             return null;
         }
 
-        // the four lines round a square
         static IEnumerable<Border> Round(Cell cell)
         {
             yield return Border.North(cell);
@@ -801,13 +682,7 @@ namespace Game.Board
             yield return Border.West(cell);
         }
 
-        // the whole of B4, in the order it happens at a table: walk up to the door, then the dice
-        // come out. The check is not thrown from across the room, because a check thrown from
-        // across the room is a button.
-        //
-        // BOTH SQUARES BESIDE A DOOR ARE FLOOR NOW, so "up to the door" means either of them - and
-        // that is more honest than the old approach to a door CELL, which the hero could never
-        // actually stand on because the door was in it
+        // walk up to the door, then throw; both squares beside it are floor, so either counts
         void Approach(Border door, Cell standing)
         {
             if (_tray == null)
@@ -828,7 +703,6 @@ namespace Game.Board
 
             if (route == null)
             {
-                // no way to stand beside it at all - a door on the far side of a sealed room
                 Refuse(door.Cell, standing);
                 return;
             }
@@ -842,7 +716,6 @@ namespace Game.Board
             GD.Print($"move    {standing} to {arriving}, up to the door on {door}");
         }
 
-        // the cheaper of the two sides of the door
         IReadOnlyList<Cell> NearestApproach(Border door, Cell standing)
         {
             IReadOnlyList<Cell> best = null;
@@ -861,7 +734,6 @@ namespace Game.Board
 
         bool Taken(Cell cell) => _grid.IsOccupied(cell);
 
-        // the piece finished a move. if it was walking to a door, this is the moment
         void OnArrived()
         {
             if (_door != null) Attempt();
@@ -883,19 +755,14 @@ namespace Game.Board
             GD.Print($"check   the door on {_door} - {DoorCheck.Attribute} + {DoorCheck.Skill} + " +
                      $"{_hero.WeaponId}, {pool.Count} dice vs {DoorCheck.Against}");
 
-            // the felt's readout compares to this, so set it to the door's own difficulty - a fight
-            // swing may have last set it to a foe's Defense, and the door is measured on its own
-            // number (DoorCheck.Against), not on whatever was struck last
+            // set the readout to the door's own difficulty; a fight swing may have left it on a foe's Defense
             _tray.TargetDifficulty = DoorCheck.Against;
 
-            // EVERY BIT OF M0-M9 DOES THE REST. there is no second throwing path, no board dice,
-            // and no number decided here - the tray throws the hero's own pool and the answer is
-            // read off the felt with the rings and the names M6 already draws
+            // no second throwing path and no board dice: the tray throws the hero's own pool
             _tray.Throw(pool);
         }
 
-        // the felt has stopped moving. the tray also throws for itself - space, and the shape tour -
-        // so only an answer to a question this board asked is one it may act on
+        // the tray also throws for itself; act only on an answer this board asked for
         void OnThrown(TrayThrow thrown)
         {
             if (!_checking || _door == null) return;
@@ -910,12 +777,10 @@ namespace Game.Board
 
         void Apply(Border door, DoorOutcome outcome)
         {
-            // the wreckage lands through the doorway, on the side the hero is not standing on
             Cell? standing = _grid.CellOf(_piece);
             Cell beyond = standing == door.Cell ? door.Across : door.Cell;
 
-            // the door stops being terrain the moment it opens: renamed off the line so the line
-            // can be redrawn as a gap without the redraw taking the door away mid-swing
+            // renamed off the line so it can be redrawn as a gap without removing the door mid-swing
             _opened = _terrain?.GetNodeOrNull<DoorPiece>(BoardTiles.NameFor(door));
 
             if (_opened != null)
@@ -924,17 +789,14 @@ namespace Game.Board
                 _opened.Open(outcome.Forced);
             }
 
-            // THE LINE OPENS EITHER WAY. failure is content, not a wall (CORE_RULES.md 0, pillar 4)
+            // the line opens either way: failure is content, not a wall
             _map = _map.With(door, Edge.None);
             _tiles.Update(_terrain, _map, door);
 
             _opening = door;
             _wreckage = null;
 
-            // and what a failure leaves behind: the door in pieces on the floor of the room beyond,
-            // which costs double to cross for the rest of the game. with squares on BOTH sides of a
-            // line there is somewhere for it to land - when the door was a square of its own, there
-            // was nowhere, and the wreckage had to be the doorway itself
+            // wreckage lands beyond the line; when the door was a square there was nowhere for it to go
             if (outcome.Leaves == Tile.Rough && _map.At(beyond) == Tile.Floor)
             {
                 _map = _map.With(beyond, Tile.Rough);
@@ -942,9 +804,7 @@ namespace Game.Board
                 _wreckage = beyond;
             }
 
-            // what it cost. the hero's own Vigor track, and the Conditions the rules already own -
-            // a Winded hero throws a smaller Might die, which is the consequence turning up on the
-            // felt next time rather than in a number nobody sees
+            // cost hits the hero's Vigor and Conditions, so a Winded hero throws smaller next time
             if (outcome.Cost > 0)
             {
                 IReadOnlyList<Condition> taken = _hero.Damage(outcome.Cost);
@@ -959,8 +819,7 @@ namespace Game.Board
                 : $"        {door} is open and {beyond} is full of wreckage - through, the hard way");
         }
 
-        // put the door back, shut, and the hero back on his feet. a developer affordance: both
-        // outcomes of one check in one sitting, without restarting the scene
+        // developer affordance: put the door back and the hero whole
         void Relock()
         {
             if (_opening == null)
@@ -992,9 +851,7 @@ namespace Game.Board
 
             _opening = null;
 
-            // A FIGHT IS HOLDING THIS HERO. Replacing him mid-fight would leave the encounter
-            // swinging for an Actor nobody can see and the piece on the board standing for one
-            // nobody is hitting. The door goes back either way - that is what this key is for
+            // don't replace the hero mid-fight, or the encounter swings for an Actor nobody can see
             if (Claims == null) _hero = Recruit();
 
             GD.Print("");
@@ -1011,18 +868,7 @@ namespace Game.Board
             return through;
         }
 
-        // which square the mouse is over, or null for a click that missed the board
-        //
-        // MET WITH THE BOARD'S OWN SURFACE PLANE rather than with a collision body: the board is
-        // flat and infinite in its own plane, so this is exact, needs no physics, and a piece
-        // standing on a square never intercepts a click meant for it. What it does mean is that
-        // the answer is always the square of MAT under the pointer - so clicking the top of a wall
-        // block picks the square just beyond it, which is the honest reading of a flat map with
-        // terrain standing on it and is worth revisiting in B5 when the terrain is real.
-        //
-        // Off the mat comes back as a square the grid does not have, and is refused there rather
-        // than clamped to the nearest one - a clamp would make the far edge a magnet the width of
-        // the table
+        // met with the board's own plane, not a collider: exact, no physics; off the mat is refused, not clamped
         Cell? CellUnder(InputEvent @event, out Vector3 local)
         {
             local = Vector3.Zero;
@@ -1039,9 +885,7 @@ namespace Game.Board
 
             if (met == null) return null;
 
-            // THE POINT COMES BACK TOO, not only the square it fell in. Since EDGE_WALLS.md a door
-            // is a line rather than a square, and finding which line was clicked needs to know
-            // where in the square the pointer actually landed
+            // the point comes back too, not just the square, so a clicked door line can be found
             local = ToLocal(met.Value);
 
             Cell cell = _metrics.At(local);

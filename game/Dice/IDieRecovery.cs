@@ -1,15 +1,9 @@
 namespace Game.Dice
 {
-    // what to do about a throw that produced no readable number
-    // a die lands cocked on an edge, or a die leaves the tray
-    // both happen with real dice and neither is a physics bug
-    // the answer is a feel question, so it lives here and not in DieBody
     public interface IDieRecovery
     {
-        // the die stopped, but not flat enough to trust the face
         DieRecoveryStep Cocked(in CockedDie die);
 
-        // the die is outside the tray and will never come to rest on its own
         DieRecoveryStep Escaped(in EscapedDie die);
     }
 
@@ -18,7 +12,6 @@ namespace Game.Dice
         // take the number as it stands - the only ending that always terminates
         Accept,
 
-        // tap it - cheap, and doesn't disturb dice that have already settled
         Nudge,
 
         Rethrow,
@@ -28,9 +21,7 @@ namespace Game.Dice
     {
         public readonly DieRecoveryAction Action;
 
-        // for Rethrow: how hard, 1 being a normal throw
-        // at zero the die just drops from its spawn point, which is inside the tray
-        // so a policy that walks the energy down to nothing always reaches a settle
+        // rethrow strength, 1 is a normal throw; at 0 the die drops inside the tray, so walking energy down always settles
         public readonly float Energy;
 
         DieRecoveryStep(DieRecoveryAction action, float energy)
@@ -45,10 +36,9 @@ namespace Game.Dice
         public static DieRecoveryStep Rethrow(float energy = 1f) => new(DieRecoveryAction.Rethrow, energy);
     }
 
-    // a die at rest on something other than a face
     public readonly struct CockedDie
     {
-        // the number nearest to showing - what Accept would take
+        // the number nearest to showing, which Accept would take
         public readonly int Value;
 
         // how squarely that face points at the felt, as a dot product - 1.0 is flat
@@ -70,13 +60,11 @@ namespace Game.Dice
         }
     }
 
-    // a die that has left the tray
     public readonly struct EscapedDie
     {
         // including this one - first escape of a throw is 1
         public readonly int EscapesSoFar;
 
-        // diagnostic - a fast escape is a wall problem
         public readonly double FlightSeconds;
 
         public EscapedDie(int escapesSoFar, double flightSeconds)

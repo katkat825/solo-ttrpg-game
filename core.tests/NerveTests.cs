@@ -7,11 +7,6 @@ using Xunit;
 
 namespace Core.Tests
 {
-    // heroic effort, and what two or more 1s costs (CORE_RULES.md sections 6 and 7)
-    //
-    // The four spends are four different ways of saying "this one matters" and they cover every
-    // stage of a throw: before it, during it, after it, and instead of it. Three of them are here;
-    // the fourth - a re-throw - is a die on a table and is the tray's (game/Tray/DiceTray.cs).
     public class NerveTests
     {
         static CombatEngine Engine(IRng rng = null, CombatOptions opts = null) =>
@@ -20,7 +15,6 @@ namespace Core.Tests
         static Encounter Fight(int rabble = 1) =>
             new Encounter(Engine(), Fixtures.Hero(), Fixtures.StandardEncounter(rabble));
 
-        // ---- the resource ----
 
         [Fact]
         public void AHeroStartsTheDayWithThree_AndCapsAtFive()
@@ -52,8 +46,6 @@ namespace Core.Tests
             Assert.False(hero.SpendNerve());
         }
 
-        // at the cap, banking one lands nothing - and says so, so a caller can offer the shrug
-        // instead of robbing the player
         [Fact]
         public void BankingStopsAtTheCap_AndSaysHowMuchLanded()
         {
@@ -69,7 +61,6 @@ namespace Core.Tests
             Assert.Equal(Nerve.Cap, hero.Nerve);
         }
 
-        // ---- the fourth die ----
 
         [Fact]
         public void TheHeartDieIsAFourthDie_AndKeepsItsOwnName()
@@ -85,15 +76,12 @@ namespace Core.Tests
             Assert.Equal(hero.Attribute(Attr.Heart), bigger.Dice[3].Die);
         }
 
-        // and a bigger leftover, which is the half of it that is easy to miss: a fourth die makes
-        // the blow harder as well as more likely (CORE_RULES.md section 2)
+        // a fourth die makes the blow harder as well as more likely (bigger leftover)
         [Fact]
         public void AndTheLeftoverIsBigger()
         {
             var hero = Fixtures.Hero();
 
-            // Might d8 -> 3, Blades d6 -> 3, axe d6 -> 3, Heart d6 -> 8 is impossible, so script
-            // a throw where the Heart die is the one left over
             PoolResult without = new StandardResolver(new ScriptedRng(6, 6, 1))
                 .Resolve(hero.BuildPool(Attr.Might, Skill.Blades));
 
@@ -105,8 +93,6 @@ namespace Core.Tests
             Assert.Equal(2, with.Rolls.Count(r => !r.Counted));
         }
 
-        // refused when it buys nothing - a caster already throwing Heart + Channeling + focus
-        // (CORE_RULES.md section 10) would be spending a Nerve on a die already in the pool
         [Fact]
         public void ItIsRefusedWhenThePoolAlreadyUsesHeart()
         {
@@ -120,12 +106,11 @@ namespace Core.Tests
         [Fact]
         public void AndWhenThereIsNoHeartDieToAdd()
         {
-            var mook = Fixtures.Mook();   // Might and a club, nothing else
+            var mook = Fixtures.Mook();
 
             Assert.False(Nerve.CanAddHeart(mook, mook.BuildPool(Attr.Might)));
         }
 
-        // ---- one more action ----
 
         [Fact]
         public void PushingBuysAThirdAction_ForANerve()
@@ -169,13 +154,11 @@ namespace Core.Tests
             Assert.Equal(nerve, fight.Hero.Nerve);
         }
 
-        // ---- what a Trouble costs ----
 
-        // the first clause: gear takes it, and the die is visibly smaller next throw
         [Fact]
         public void ATroubleNotchesTheGear()
         {
-            var hero = Fixtures.Hero();   // an axe, d6
+            var hero = Fixtures.Hero();
 
             Assert.Equal(Trouble.Cost.Notched, Trouble.Lands(hero, Attr.Might));
             Assert.Equal(Die.D4, hero.Weapon);
@@ -193,14 +176,12 @@ namespace Core.Tests
             Assert.Equal(Die.D4, hero.BuildPool(Attr.Might, Skill.Blades).Dice[2].Die);
         }
 
-        // the second clause: nothing left to notch, so it lands on the hero as the Condition
-        // pressing on the attribute he was using
         [Fact]
         public void WithTheGearAtTheFloor_ItLandsOnTheHeroInstead()
         {
             var hero = Fixtures.Hero();
 
-            Trouble.Lands(hero, Attr.Might);   // d6 -> d4
+            Trouble.Lands(hero, Attr.Might);
 
             Assert.Equal(Trouble.Cost.Condition, Trouble.Lands(hero, Attr.Might));
             Assert.Contains(Condition.Winded, hero.Conditions);
@@ -217,7 +198,6 @@ namespace Core.Tests
             Assert.Contains(Condition.Reeling, hero.Conditions);
         }
 
-        // and when there is genuinely nowhere left to put it, it says so rather than pretending
         [Fact]
         public void WithNowhereLeftToPutIt_NothingHappens_AndItSaysSo()
         {
@@ -228,7 +208,6 @@ namespace Core.Tests
             Assert.Equal(Trouble.Cost.Nothing, Trouble.Lands(hero, Attr.Might));
         }
 
-        // the inverse mapping is derived from the forward one and cannot drift from it
         [Fact]
         public void EveryConditionIsThePressingOneForItsAttribute()
         {
@@ -236,7 +215,6 @@ namespace Core.Tests
                 Assert.Equal(c, c.Affects().Pressing());
         }
 
-        // ---- shrug, or take it and bank the Nerve ----
 
         [Fact]
         public void ShruggingCostsANerve_AndNothingElseHappens()
@@ -264,7 +242,6 @@ namespace Core.Tests
             Assert.False(fight.SpendNerve(fight.Hero));
         }
 
-        // THE LOOP: taking the complication banks the effort to avoid the next one
         [Fact]
         public void AcceptingBanksANerve_AndTheConsequenceLands()
         {
@@ -279,8 +256,7 @@ namespace Core.Tests
             Assert.Equal(Die.D4, fight.Hero.Weapon);
         }
 
-        // at the cap the consequence still lands and no Nerve is banked, which is exactly why
-        // GainNerve reports how much landed - the player should be offered the shrug instead
+        // at the cap the consequence still lands and nothing banks, which is why gainnerve reports what landed
         [Fact]
         public void AtTheCap_TheConsequenceStillLands_AndNothingIsBanked()
         {

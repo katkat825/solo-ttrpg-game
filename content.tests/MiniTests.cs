@@ -6,17 +6,6 @@ using Xunit;
 
 namespace Content.Tests
 {
-    // A MINI, AS A PACK WROTE IT DOWN (MINIS_AND_ART.md A0, A1).
-    //
-    // Written against JSON literals rather than files, because everything here is about the
-    // SCHEMA: which fields a manifest may have, what each of them is allowed to say, and what an
-    // author is told when they get one wrong. The half that needs real files - a model over a cap,
-    // a folder of wavs - is `ModelTests` and `AudioTests`.
-    //
-    // THE SENTENCES ARE PART OF THE DELIVERABLE, so several of these assert on what a problem
-    // says and not only on the fact that there was one. `ContentProblem` exists because "the
-    // difference between a game that is moddable and one that is not is almost entirely the
-    // quality of this sentence", and a test that accepts any sentence is not testing that.
     public sealed class MiniTests
     {
         const string Pack = "grimdark";
@@ -48,7 +37,6 @@ namespace Content.Tests
             return problem;
         }
 
-        // ---- A0: the variant, which is the whole first milestone ----
 
         [Fact]
         public void TheSafestGestureIsAVariantOfAShippedMini()
@@ -68,8 +56,6 @@ namespace Content.Tests
             Assert.True(mini.Tint.IsSomething);
         }
 
-        // THE ID IN THE FILE IS THE LOCAL ONE and the loader scopes it, exactly as a statblock's
-        // is - an author should not type their own pack's name into every file
         [Fact]
         public void TheIdIsScopedByThePackThatShippedIt()
         {
@@ -83,7 +69,6 @@ namespace Content.Tests
                          Good(@"{ ""id"": ""oldbones"", ""variant"": ""rabble"" }", pack: "").Id);
         }
 
-        // DERIVED, NEVER LISTED - the same rule the monsters and the campaign title follow
         [Fact]
         public void ItsDisplayNameIsAKeyDerivedFromTheId()
         {
@@ -101,7 +86,6 @@ namespace Content.Tests
             Assert.Contains("locale/", problem.What);
         }
 
-        // ---- either a variant or a model, never both and never neither ----
 
         [Fact]
         public void AMiniWithBothAVariantAndAModelIsTwoFiguresUnderOneId()
@@ -119,7 +103,6 @@ namespace Content.Tests
                             Bad(@"{ ""id"": ""oldbones"" }", "").What);
         }
 
-        // ---- A2: the path, which is the only field that names a file ----
 
         [Theory]
         [InlineData("../../../etc/passwd")]
@@ -141,10 +124,7 @@ namespace Content.Tests
                          Good(@"{ ""id"": ""oldbones"", ""model"": ""models/skeleton.glb"" }").Model);
         }
 
-        // ---- fit and height ----
 
-        // A0's first gesture is one line, and making an author write the `fit` the height already
-        // implies would be making them say it twice
         [Fact]
         public void AHeightOnItsOwnIsAHeightAndNotAnError()
         {
@@ -178,7 +158,6 @@ namespace Content.Tests
                                 "fit").What);
         }
 
-        // THE MILLIMETRE MISTAKE, which is the one every author makes once
         [Fact]
         public void AFigureTallerThanTheRoomIsAUnitMixUpAndIsCaughtAsOne()
         {
@@ -187,7 +166,6 @@ namespace Content.Tests
                                 "height").What);
         }
 
-        // ---- the tint, and why a palette name is not one ----
 
         [Fact]
         public void ATintIsSixHexDigits()
@@ -198,8 +176,6 @@ namespace Content.Tests
             Assert.Equal("#D8CFB8", tint.ToString());
         }
 
-        // `CONVENTIONS.md`: "The palette is stated once, in tools/palette.ps1". Naming its colours
-        // in content would be a second copy of it, so the refusal explains rather than just says no
         [Fact]
         public void APaletteNameIsRefusedAndTheRefusalSaysWhy()
         {
@@ -208,7 +184,6 @@ namespace Content.Tests
                                 "tint").What);
         }
 
-        // ---- clips and foley, which share one shape ----
 
         [Fact]
         public void ClipsAreKeyedByWhatThePieceIsDoing()
@@ -224,8 +199,6 @@ namespace Content.Tests
             Assert.False(mini.Clips.ContainsKey(Motion.Strike));
         }
 
-        // the words a manifest may use are DERIVED from the `Motion` enum, so the offer in the
-        // message cannot drift from what is accepted
         [Fact]
         public void SomethingAPieceDoesNotDoIsOfferedTheOnesItDoes()
         {
@@ -237,8 +210,7 @@ namespace Content.Tests
                 Assert.Contains(motion, problem.What);
         }
 
-        // A CLIP NAME IS THE MODEL'S OWN and is deliberately NOT held to the id grammar -
-        // "Armature|Death_A" is a real name out of a real exporter
+        // clip names are the model's own, deliberately not held to id grammar
         [Fact]
         public void AClipMayBeCalledWhateverTheExporterCalledIt()
         {
@@ -248,7 +220,6 @@ namespace Content.Tests
                              .Clips[Motion.Topple]);
         }
 
-        // A FOLEY ENTRY IS A FOLDER, because the folder is the list (`ImpactPool`)
         [Fact]
         public void FoleyIsAFolderAndACapturedPathIsHeldToTheSameRule()
         {
@@ -267,7 +238,6 @@ namespace Content.Tests
                              .Foley[Motion.Placed]);
         }
 
-        // ---- the schema is closed, like every other one here ----
 
         [Fact]
         public void AFieldAMiniDoesNotHaveIsATypoAndIsNamed()
@@ -277,8 +247,6 @@ namespace Content.Tests
                                 "stats").What);
         }
 
-        // A MINI NEVER BECOMES A RULE, and the schema is where that is enforced: there is no field
-        // here that touches the dice, and an author who tries gets told the field does not exist
         [Fact]
         public void AMiniCannotCarryAStatblockField()
         {
@@ -301,7 +269,6 @@ namespace Content.Tests
             Assert.Contains(read.Problems, p => p.What.StartsWith("this is not JSON"));
         }
 
-        // ---- and the shared roster a variant is a variant OF ----
 
         [Fact]
         public void TheBaseGameShipsFourMinisAndTheyAreNotNamespaced()
@@ -310,8 +277,6 @@ namespace Content.Tests
             Assert.All(SharedMinis.All, m => Assert.False(ContentId.IsScoped(m.Id)));
         }
 
-        // a shipped mini has no file, because what it stands as is a Godot scene and `content/`
-        // must never name one
         [Fact]
         public void AShippedMiniHasNeitherAVariantNorAModel()
         {

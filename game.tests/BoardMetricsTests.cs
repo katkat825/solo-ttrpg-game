@@ -4,27 +4,12 @@ using Game.Board;
 
 namespace Game.Tests
 {
-    // BoardMetrics is the one place that answers "where is that square", and it is the board's
-    // half of what TrayBounds does for the tray. Two kinds of thing are guarded here:
-    //
-    //   a square's centre and the square under a point must be the SAME mapping, both ways round
-    //   both must hold for ANY board, not just the 8 x 8 of 60 mm the game ships with
-    //
-    // The second is the point. A mapping that happens to be right for one extent and wrong for
-    // every other reads as correct right up until B2 loads a map of a different size - and B2 is
-    // the milestone after next.
-    //
-    // Godot-free in the sense game.tests means: Vector3 is a managed struct, and nothing here
-    // touches a Node or a Resource.
     public class BoardMetricsTests
     {
         static BoardMetrics Board(int columns = 8, int rows = 8, float cell = 0.06f) =>
             new BoardMetrics(columns, rows, cell);
 
-        // ---- the board the game ships with ----
 
-        // since B2 this is the size of a square plus the empty room the board falls back to when
-        // the map file cannot be read - the real extent comes out of the map
         [Fact]
         public void Shipped_IsTheSquareTheGameShipsWith()
         {
@@ -34,7 +19,6 @@ namespace Game.Tests
             Assert.Equal(8, b.Rows);
             Assert.Equal(0.06f, b.CellSize, 4);
 
-            // 480 mm square, which is the tray's 640 x 490 read as a battle map beside it
             Assert.Equal(0.48f, b.Width, 4);
             Assert.Equal(0.48f, b.Depth, 4);
         }
@@ -50,10 +34,8 @@ namespace Game.Tests
             Assert.Equal(0.10f, b.HalfDepth, 4);
         }
 
-        // ---- centred on its own origin ----
 
-        // the property that lets the board be stood anywhere on the table: the node's position IS
-        // the middle of the map, so nothing downstream has to know where a corner is
+        // the node's position is the middle of the map, so nothing downstream needs to find a corner
         [Fact]
         public void TheBoardIsCentredOnItsOwnOrigin()
         {
@@ -71,15 +53,12 @@ namespace Game.Tests
         {
             BoardMetrics b = Board(8, 8);
 
-            // half a square in from the corner of a 0.48 board
             Assert.Equal(-0.21f, b.Centre(new Cell(0, 0)).X, 4);
             Assert.Equal(-0.21f, b.Centre(new Cell(0, 0)).Z, 4);
             Assert.Equal(0.21f, b.Centre(new Cell(7, 7)).X, 4);
             Assert.Equal(0.21f, b.Centre(new Cell(7, 7)).Z, 4);
         }
 
-        // a piece standing on a square has its feet on the felt, so the mat's thickness never
-        // reaches anything that places one
         [Fact]
         public void EverySquareIsOnTheSurface()
         {
@@ -100,8 +79,7 @@ namespace Game.Tests
             Assert.Equal(0.06f, b.Centre(new Cell(3, 5)).Z - here.Z, 5);
         }
 
-        // the axes must not be interchangeable, and on a square board a swap is invisible - so
-        // ask an oblong one
+        // use an oblong board: on a square one an axis swap is invisible
         [Fact]
         public void XRunsAcrossAndYRunsAway()
         {
@@ -117,10 +95,7 @@ namespace Game.Tests
             Assert.Equal(0.15f, alongY.Z, 4);
         }
 
-        // ---- where the lines are (EDGE_WALLS.md) ----
 
-        // a wall is drawn ON the line between two squares, so the board has to be able to say
-        // where a line is - and it is exactly half a square from the middle of either square
         [Fact]
         public void ALineIsHalfwayBetweenTheSquaresItSeparates()
         {
@@ -147,9 +122,6 @@ namespace Game.Tests
             Assert.Equal(centre.Z - b.CellSize * 0.5f, north.Z, 5);
         }
 
-        // the lines round the outside of the map are named by a square one past the last, which
-        // does not exist - and they still have to land somewhere, because that is where the room's
-        // own walls are drawn
         [Fact]
         public void TheLinesRoundTheOutsideOfTheMapHaveAPlace()
         {
@@ -161,7 +133,6 @@ namespace Game.Tests
             Assert.Equal(b.HalfDepth, b.Centre(Border.South(new Cell(0, 7))).Z, 5);
         }
 
-        // and they are on the mat, not above or below it - a wall stands on the board
         [Fact]
         public void EveryLineIsOnTheSurface()
         {
@@ -174,7 +145,6 @@ namespace Game.Tests
             }
         }
 
-        // ---- and back again ----
 
         [Fact]
         public void EverySquaresCentre_IsInThatSquare()
@@ -184,7 +154,6 @@ namespace Game.Tests
                     Assert.Equal(cell, b.At(b.Centre(cell)));
         }
 
-        // a click lands anywhere in a square, not on its middle, so the corners are what matter
         [Fact]
         public void AnywhereInASquare_IsThatSquare()
         {
@@ -212,7 +181,6 @@ namespace Game.Tests
             Assert.Equal(new Cell(2, 4), b.At(centre + new Vector3(0f, 0f, -over)));
         }
 
-        // height is choreography - a piece lifted off the felt is still over the square it left
         [Fact]
         public void HeightIsIgnored()
         {
@@ -224,9 +192,7 @@ namespace Game.Tests
             Assert.Equal(new Cell(6, 1), b.At(centre + new Vector3(0f, -0.5f, 0f)));
         }
 
-        // OFF THE BOARD MUST COME BACK OFF THE BOARD. clamping to the nearest square would make
-        // the far edge of the map a magnet the width of the table; Grid.Contains is what refuses
-        // these, and it can only do that if they arrive as squares that do not exist
+        // off-board points must return off-board squares; clamping would make the far edge a table-wide magnet
         [Fact]
         public void PastTheEdge_IsNotClampedToTheEdge()
         {
@@ -255,7 +221,6 @@ namespace Game.Tests
             Assert.Equal(new Cell(7, 7), b.At(new Vector3(b.HalfWidth - inside, 0f, b.HalfDepth - inside)));
         }
 
-        // ---- boards that make no sense ----
 
         [Fact]
         public void ABoardAPieceCouldStandOn_IsUsable()

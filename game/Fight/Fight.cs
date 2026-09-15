@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
+using Content.Kits;
 using Core.Characters;
 using Core.Combat;
 using Core.Dice;
@@ -12,170 +13,69 @@ using Game.Board;
 using Game.Localization;
 using Game.Tray;
 
-// Game.Board is a namespace AND Game.Board.Board is the type in it, so an unqualified `Board`
-// inside Game.Fight binds to the namespace and not to the node. Aliasing it once here is the
-// whole of the fix, and it keeps every reference below reading as what it is
+// Game.Board is both a namespace and the type; alias so Board binds to the node
 using BoardNode = Game.Board.Board;
 
 namespace Game.Fight
 {
-    // THE FIGHT ON THE TABLE (COMBAT_LOOP.md C0-C2) - one hero, a room of enemies, and the handful
-    // of dice that decides it.
-    //
-    // WHAT THIS IS: the thing that turns a click into a rule, and a rule into something to watch.
-    // It owns no rules and draws nothing. `Encounter` owns the round structure and the action
-    // economy, `CombatEngine` owns whether a swing landed, `DiceTray` throws the hero's own pool,
-    // `Board` says which square was clicked and whether there is a way to another, and
-    // `TableObserver` decides what any of it looks like. This introduces them - the way
-    // `table.tscn` introduces the board and the tray, and for the same reason: neither of them may
-    // know the other exists.
-    //
-    // IT LIVES ON THE TABLE, NOT ON THE BOARD. A fight needs both the board and the tray, and the
-    // one place that knows both are standing on it is `table.tscn`. Putting this inside
-    // `board.tscn` would make the board reach for a tray, which is exactly the coupling B4 avoided.
-    //
-    // THE HERO IS THE BOARD'S HERO. Not a copy - the same Actor the door check swings and damages,
-    // so forcing a door the hard way means walking into the room already Winded and throwing a
-    // smaller Might die at the first foe.
-    //
-    // THE HERO'S DICE ARE ON THE FELT AND EVERYBODY ELSE'S ARE BEHIND THE SCREEN. The hero's swing
-    // is thrown on the real tray and read off it, because CORE_RULES.md pillar 1 says every roll
-    // is a visible handful hitting the table. A foe's swing goes through the resolver: those are
-    // the DM's dice, which THE_TABLE.md says you hear and do not see. What you watch is the piece
-    // move and the blow land.
-    //
-    // MAGIC IS THE SAME ROLL AND THEREFORE THE SAME CLICK (COMBAT_LOOP.md C5). A caster clicking
-    // something he cannot reach but can SEE throws `Heart + Channeling + focus` at it instead of
-    // walking over - same tray, same best two, same Impact die driving the magnitude, and the cost
-    // is a step off his Heart die until he rests. There is no second subsystem here because
-    // CORE_RULES.md section 10 does not have one.
-    //
-    // GEOMETRY FEEDS THE RULES AS FAR AS REACH AND NO FURTHER (COMBAT_LOOP.md C2). You must be
-    // beside something to hit it, and closing the distance costs the action you would have hit
-    // with. That is what makes a room of Rabble pressure rather than a queue. There is deliberately
-    // NO flanking die and NO cover bonus: both would move every number in SIMULATION.md, and
-    // nothing in the sim has a position in it to re-measure them with. CONVENTIONS.md 8 - decide
-    // it, then simulate it - and the simulating is not possible yet, so the decision is "not yet".
     public partial class Fight : Node3D
     {
-        // both set in table.tscn, because only the table knows both are standing on it
         [Export] public NodePath BoardPath { get; set; } = "../Board";
 
         [Export] public NodePath TrayPath { get; set; } = "../DiceTray";
 
-        // the pieces the foes stand as. art direction, so it is authored in the scene rather than
-        // named in code - and a campaign naming its own models (Phase P) replaces these exports
-        // and nothing else
         [Export] public PackedScene RivalPiece { get; set; }
 
         [Export] public PackedScene RabblePiece { get; set; }
 
         [Export] public PackedScene DreadPiece { get; set; }
 
-        // THE HERO'S FIGURE, AND ONLY SO THAT A PACK CAN VARY IT (MINIS_AND_ART.md A0). The board
-        // stands its own hero out of `board.tscn`, which is where it belongs and is not changed by
-        // this phase; what this is for is the one case the shared roster needs a `PackedScene` for
-        // `barbarian` - a pack whose mini is "the shipped Barbarian, bone-white". Leave it unset
-        // and such a variant stands on a placeholder box with a sentence saying why
+        // only so a pack can vary the hero's mini; unset uses the board's own
         [Export] public PackedScene HeroPiece { get; set; }
 
-        // WHERE THE ROOM STARTS. Content, hardcoded exactly as the door check is (Board/DoorCheck.cs)
-        // and for the same reason: Phase P reads spawn points out of the campaign's own map, and
-        // until then a room is a handful of squares said in one place. Set in table.tscn
         [Export] public Vector2I RivalAt { get; set; } = new Vector2I(4, 4);
 
-        // WHAT "THIS ROOM HAS NONE OF THOSE" LOOKS LIKE. A square off the board, because every
-        // square on it is somewhere a piece could legitimately stand and there is no other way to
-        // say nothing with a Vector2I. Phase P reads an encounter out of a campaign and the whole
-        // question goes away
+        // a square off the board: the only way to say 'none' with a Vector2I
         public static readonly Vector2I Nowhere = new Vector2I(-1, -1);
 
-        // Godot's own array rather than Vector2I[] - a C# array of a struct is not a Variant and
-        // the exporter refuses it (GD0102). This is the collection type a .tscn writes anyway
+        // Godot array, not Vector2I[]: a C# struct array is not a Variant, exporter refuses it (GD0102)
         [Export] public Godot.Collections.Array<Vector2I> RabbleAt { get; set; } = new Godot.Collections.Array<Vector2I>();
 
-        // AND WHERE THE BOSS IS, IF THERE IS ONE. One per chapter (CORE_RULES.md section 8), so
-        // most rooms have none - the sentinel below is what "no boss in this room" looks like
-        // until Phase P reads an encounter out of a campaign
         [Export] public Vector2I DreadAt { get; set; } = Nowhere;
 
-        // WHO IS IN THE ROOM, BY ID (P0). Named in the scene rather than in the code, so a campaign
-        // that ships its own `ashfall.ghoul` can be fought by typing it here and changing nothing
-        // else. P4 reads all of this out of an `encounters/` file and these exports go with it
         [Export] public string RabbleId { get; set; } = EngineIds.Rabble;
 
         [Export] public string RivalId { get; set; } = EngineIds.Rival;
 
         [Export] public string DreadId { get; set; } = EngineIds.Dread;
 
-        // WHAT THE HERO IS CARRYING WHEN THE FIGHT STARTS, by item id out of a campaign's
-        // `items/` folder (P1). Empty means whatever his statblock gave him.
-        //
-        // "Getting better means bigger rocks" (CORE_RULES.md pillar 3) is a content statement from
-        // here on: a better axe is a bigger die in a file, and swapping one in is this line in the
-        // scene. Phase R gives the hero a sheet to do it from and this export goes with it
+        // empty means whatever his statblock gave him
         [Export] public string HeroWeapon { get; set; } = "";
 
         [Export] public string HeroArmour { get; set; } = "";
 
-        // WHO STANDS ON EACH OF THE MAP'S SPAWN SLOTS (P2). One id per slot, in order - the first
-        // entry is slot `1`, the second is slot `2`, and so on. Left empty, the fight falls back to
-        // the squares named above, which is how the shipped room still works.
-        //
-        // THE MAP SAYS WHERE AND THIS SAYS WHO. That split is what lets one room be four hounds in
-        // one chapter and a ghoul in the next without anybody redrawing it.
-        //
-        // AND P4 MOVED IT INTO THE CAMPAIGN, exactly as predicted: when the board was pointed at
-        // an encounter, `Board.Plan` is this same list read out of `encounters/`, and this export
-        // is what is left for a scene that names a room without one. The prediction was that
-        // moving it would be "a change of where the list is read from and nothing else", and the
-        // diff is `Roster()` below
+        // one id per spawn slot, in order; empty falls back to the squares above
         [Export] public Godot.Collections.Array<string> Spawns { get; set; } =
             new Godot.Collections.Array<string>();
 
-        // the beat between one automatic thing and the next, in seconds. foe turns are not the
-        // player's to drive, so they are the one part of a fight that can run away from the eye -
-        // long enough to follow a piece moving and a blow landing, short enough that a room of
-        // eight is not a cutscene
         [Export] public float Beat { get; set; } = 0.45f;
 
-        // HOW LONG THE FELT IS LEFT TO BE READ before a throw resolves itself (COMBAT_LOOP.md C4).
-        //
-        // A Nerve re-throws any one die in a pool and you take the new result (CORE_RULES.md
-        // section 7), and there is no way to offer that without a moment in which the dice are
-        // lying there and nothing has happened yet. At a table that moment is real - you look at
-        // what you rolled and decide - so this is a grace period rather than a prompt: click a die
-        // to spend a Nerve on it, click anywhere else to take the throw as it lies, or wait and it
-        // takes itself.
-        //
-        // THE WINDOW ONLY OPENS WHEN THERE IS SOMETHING TO DECIDE. A hero with no Nerve and no
-        // Trouble on the felt has nothing to spend and nothing to shrug, so the throw resolves the
-        // instant it settles and the fight never pauses at all.
-        //
-        // This is the number to argue with after a week of playing. It is an export for that
-        // reason
+        // grace period to spend a Nerve before a throw resolves; opens only when there is something to decide
         [Export] public float ReadSeconds { get; set; } = 1.8f;
 
-        // reproducible fights when you want one: any non-zero value seeds the resolver, so a fight
-        // that produced something you did not believe can be re-run exactly (CONVENTIONS.md 6).
-        // 0 means the clock, which is what an actual session wants
+        // any non-zero value seeds the resolver for a repeatable fight; 0 means the clock
         [Export] public int Seed { get; set; }
 
-        // the roster this fight is built from - the engine's own plus every campaign on disk (P0)
         readonly Game.Campaigns.Library _archetypes = Game.Campaigns.Library.Load(quiet: true);
 
         MiniMaker _minis;
 
-        // WHAT THE DICE DECIDE THAT IS NOT A POOL. A drop is chance, and every source of chance in
-        // this game goes through `IRng` so a seeded run repeats (CONVENTIONS.md 6) - a drop rolled
-        // off anything else would be the first thing to break that. Seeded from the same number the
-        // resolver is, so re-running a fight re-runs the loot with it
+        // loot's own rng stream, so a seeded fight repeats its drops
         IRng _luck;
 
         readonly Pieces _pieces = new Pieces();
 
-        // held as the interface so this file cannot start reaching for TranslationServer, and
-        // handed to every mark on the mat - GodotLocalizer is the ONE place a key becomes text
+        // held as the interface so this file never reaches for TranslationServer
         readonly ILocalizer _text = new GodotLocalizer();
 
         readonly List<Actor> _foes = new List<Actor>();
@@ -186,78 +86,66 @@ namespace Game.Fight
 
         CombatEngine _engine;
 
-        // everything watching this fight. The table and the transcript are in it from the start;
-        // anything that turns up later - a headless check, a replay recorder - joins through Watch
         CompositeCombatObserver _watching;
 
         Encounter _fight;
 
         Actor _hero;
 
-        // the foe the hero is mid-swing at. non-null exactly while the dice are in the air on this
-        // fight's behalf, which is also the guard that stops a second click throwing a second time
+        // non-null while the hero's dice are in the air; also the guard against a second throw
         Actor _swingingAt;
 
-        // the throw being read, kept across an explosion: what the felt said about the swing, and
-        // the Impact die going back in the hand (Tray/ImpactChain.cs)
+        // null for an ordinary swing, deliberately not modelled as an ability
+        Ability _ability;
+
+        // empty for built-in heroes with no class card; they fall back to the shipped abilities
+        IReadOnlyList<Ability> _kit = System.Array.Empty<Ability>();
+
+        // optional; a fight with no DM plays exactly as before
+        [Export] public NodePath DmPath { get; set; }
+
+        Game.Dm.Dm _dm;
+
+        // reveal a foe's Defence once: a number you already know is not a reveal
+        readonly HashSet<Actor> _guardsSeen = new HashSet<Actor>();
+
+        // closing cue plays once; _Process sees the fight over on every later frame
+        bool _cleared;
+
         PoolResult _roll;
 
         ImpactChain _impact;
 
-        // seconds before the next automatic step. the player's turn never waits on this
         double _beat;
 
-        // the order, written down the side of the map (C3)
         TurnOrder _order;
 
-        // the dice in the air are for the turn order rather than for a blow. one throw, at the
-        // top, before anybody has acted
+        // dice in the air are the initiative throw, not a blow
         bool _rollingOrder;
 
-        // and this swing is a readied strike rather than an action - it costs a reaction, is
-        // taken out of turn, and does not advance anybody's turn (Encounter.React)
+        // this swing is a readied reaction: out of turn, advances nobody's turn
         bool _reacting;
 
-        // ---- heroic effort (C4) ----
-
-        // the hero's own tokens, beside his piece
         NerveTokens _nerve;
 
-        // the boss's second half, if this room has a boss in it
         PhaseChange _boss;
 
-        // the throw lying on the felt, unread. Non-null exactly while the window is open
+        // non-null exactly while the read window is open
         TrayThrow _felt;
 
         double _read;
 
-        // a Nerve committed to the NEXT throw, which puts the Heart die in the pool. Committed
-        // rather than spent: the token stands up and the count does not drop until the dice
-        // actually leave the hand, so changing your mind costs nothing
+        // a Nerve committed (not spent) to the next throw: undoing it costs nothing
         bool _heart;
 
-        // and a Trouble on the felt already shrugged off, so closing the window does not then
-        // charge for it
+        // a Trouble already shrugged, so closing the window does not charge for it again
         bool _shrugged;
 
-        // which attribute the throw being read was made with. It decides where a Trouble lands
-        // when there is no gear left to take it (Core.Combat.Trouble)
+        // the attribute the read throw was made with; decides where a Trouble lands
         Attr _using = Attr.Might;
 
-        // the foe whose move was interrupted by that reaction, and whose own action is still owed.
-        // A REACTION INTERRUPTS: it lands before the mover's action is booked, because booking it
-        // is what ends the mover's turn - and the end of a turn is the end of a round when the
-        // mover is last in the order, which wipes the readied flag before anything could use it.
-        // That is exactly the bug this field exists to have fixed: the Rival walked into reach, the
-        // round rolled over, and the hero was no longer watching by the time anybody asked
+        // a reaction lands before the mover's action is booked; without this the round could roll over and drop the readied strike
         Actor _interrupted;
-
-        // ---- what a check can ask, and nothing a rule can (COMBAT_LOOP.md, the verify lists) ----
-        //
-        // FightCheck plays this table headless and holds it to what the felt says. It drives the
-        // fight through Board.Claims - the same entry point a mouse click uses - so these are only
-        // for LOOKING: who is in the fight, which model an Actor is standing as, and where the
-        // round has got to
 
         public Actor Hero => _hero;
 
@@ -273,41 +161,29 @@ namespace Game.Fight
 
         public Mini PieceFor(Actor actor) => _pieces.Of(actor)?.Mini;
 
-        // the felt is lying there unread and a Nerve could still change it (C4)
         public bool Reading => _felt != null;
-
-        // ---- and the three gestures, so a headless check can make them ----
-        //
-        // A Nerve token and a die are both met with a physics ray from wherever the mouse is, and
-        // a check has no mouse. These are the same calls those rays end in, so the check drives
-        // the fight through what a player does rather than round it - the same argument
-        // Board.Claims makes for a click on a square
 
         public void NerveClicked() => OnNerve();
 
         public void DiePicked(int slot) => OnPicked(slot);
 
-        // take the throw as it lies, which is what a click on the board does while the felt is
-        // being read
         public void TakeTheThrow() { if (_felt != null) Read(); }
 
-        // and "I am done", which is what a click on the hero's own piece does
         public void Done() { if (_fight != null && _fight.AwaitingHero) Watch(); }
 
-        // a breather, which is a key (C5)
         public void Breathe() => Breather();
 
-        // ONE MORE THING WATCHING. `ICombatObserver` is the seam between the rules and anything
-        // that cares what happened, and this is how something that was not here at construction
-        // gets on the end of it - the headless check, and anything else that ever wants to wrap a
-        // fight to look at it (CONVENTIONS.md 6). Polling `Encounter.Acting` from outside instead
-        // is what a check tried first, and it raced this node's own _Process: a turn that began
-        // and ended between two samples had never happened as far as the sampler could tell
+        public void UseAbilityKey() => UseChecked();
+
+        public IReadOnlyList<Ability> Kit => _kit;
+
+        public bool HasChecked => FirstOf(Primitive.Check) != null;
+
+        // observer, not polling: a turn that began and ended between two samples is invisible to a poller
         public bool Watch(ICombatObserver observer) => _watching != null && _watching.Add(observer);
 
         public bool Unwatch(ICombatObserver observer) => _watching != null && _watching.Remove(observer);
 
-        // nothing is in the air, nothing is walking, and nobody is waiting out a beat
         public bool Settled =>
             _swingingAt == null && !_rollingOrder && _felt == null && _beat <= 0.0
             && !_pieces.All.Any(p => p.Mini.IsMoving);
@@ -337,27 +213,22 @@ namespace Game.Fight
                 return;
             }
 
+            _kit = KitFor(_hero);
+
             int seed = Seed != 0 ? Seed : (int)Time.GetTicksMsec();
 
             IRng rng = new SeededRng(seed);
 
-            // a stream of its own, so a Nerve-bought re-throw cannot shift what a ghoul was
-            // carrying - two kinds of chance that have nothing to do with each other
             _luck = new SeededRng(seed + 1);
 
-            // BOTH AT ONCE, which is the C0 verify step: the table animates what it is told and
-            // the transcript says what it was told, so a mismatch between them is visible without
-            // instrumenting anything (CONVENTIONS.md 6)
+            // table and transcript both watch, so a mismatch between them is visible
             _watching = new CompositeCombatObserver(
                 new TableObserver(_board, _pieces) { Loot = Drops },
                 new RecordingCombatObserver(GD.Print));
 
             _engine = new CombatEngine(new StandardResolver(rng), observer: _watching);
 
-            // THE FIGURE A FOE STANDS AS, RESOLVED ACROSS EVERY PACK (Phase A). Built here rather
-            // than held as a field, because it needs the board's own metrics and paint - a piece
-            // assembled from a supplied model has to be the same size and wear the same shader as
-            // one instanced from a scene, or the board reads as two different games
+            // built here, not as a field: it needs the board's metrics and paint
             _minis = new MiniMaker(
                 new MiniScenes(HeroPiece, RabblePiece, RivalPiece, DreadPiece),
                 _archetypes.Shelf)
@@ -374,6 +245,8 @@ namespace Game.Fight
 
             if (_boss != null) _fight.Phases(_boss);
 
+            _dm = DmPath != null && !DmPath.IsEmpty ? GetNodeOrNull<Game.Dm.Dm>(DmPath) : null;
+
             _board.Claims = OnClick;
             _tray.Resolved += OnThrown;
             _tray.Picked += OnPicked;
@@ -384,8 +257,11 @@ namespace Game.Fight
             GD.Print("");
             GD.Print($"fight   {_hero} - beside a foe to strike it, anywhere else to move; " +
                      $"{_engine.Options.HeroActionsPerRound} actions a round, {_engine.Options.Pace} squares a move");
-            GD.Print($"        {(TheEffect.Offered(_hero) ? "a foe in sight and out of reach is channelled at" : "not a caster - a foe out of reach is walked at")}" +
-                     $", {(char)KeyToBreathe} takes a breather");
+            GD.Print($"        {(FirstOf(Primitive.Channel) != null ? "a foe in sight and out of reach is channelled at" : "not a caster - a foe out of reach is walked at")}" +
+                     $", {(char)KeyToBreathe} takes a breather" +
+                     $", {(char)KeyToUseAbility} uses a checked ability");
+
+            GD.Print($"kit     {(_kit.Count == 0 ? "nothing" : string.Join(", ", _kit.Select(a => a.Id)))}");
 
             foreach (Piece piece in _pieces.All)
                 GD.Print($"        {piece.Actor} on {_board.CellOf(piece.Mini)}");
@@ -394,29 +270,12 @@ namespace Game.Fight
             else RollTheOrder();
         }
 
-        // ---- a save, taken and put back (CONTENT_PIPELINE.md P6) ----
-
-        // SET BEFORE THE TABLE IS ADDED TO THE TREE, the same moment every other setup export has
-        // to be set: Godot readies a subtree inside `AddChild`, so this is the last instant
-        // anything can be said to a fight before it musters. Not an `[Export]`, because a
-        // `SaveGame` is not a Variant and has no business being one - it is a plain object handed
-        // over by whoever opened the file
+        // set before AddChild: Godot readies the subtree there, the last instant before muster
         public Content.Saves.SaveGame Resuming { get; set; }
 
-        // WHAT WAS ON THE FELT WHEN THE SAVE WAS TAKEN, read back. Null for a save with nothing on
-        // it, and for a fight that was not resumed at all.
-        //
-        // READ AND NOT RE-SEATED, and the distinction is the honest one. The faces round-trip
-        // exactly - `TrayThrow.Read` runs the same arithmetic on them that read them the first
-        // time, so the total, the Impact die, the rings and the snag are the ones that were saved.
-        // What does NOT happen is the physical dice being put back down showing those faces: these
-        // are rigid bodies that arrive at a face by being thrown, and setting one to a face is
-        // teleporting it, which is the one thing this tray has never done. A resumed fight
-        // therefore knows what was thrown and has a clear felt
+        // the saved throw is read back, not re-seated: a resumed fight knows the throw but has a clear felt
         public TrayThrow Restored { get; private set; }
 
-        // TAKE ONE. Everything it needs is public already, which is worth noticing: a save is a
-        // reading of the table, not a privileged view into it
         public Content.Saves.SaveGame Save() => Game.Saves.Savepoint.Of(this, _board, _tray);
 
         void PickItBackUp()
@@ -427,8 +286,7 @@ namespace Game.Fight
 
             Restored = FeltOf(Resuming);
 
-            // A SAVE TAKEN BEFORE THE FIGHT BEGAN still has to start one, and the honest way to
-            // start one is the way it is always started - on the real tray, in front of the player
+            // a save from before the fight still starts one on the real tray
             if (!Resuming.MidFight) { RollTheOrder(); return; }
 
             _order.Write(_fight.Order, _board.Metrics);
@@ -455,13 +313,7 @@ namespace Game.Fight
             return TrayThrow.Read(slots);
         }
 
-        // ONE THROW, AT THE TOP, ON THE REAL TRAY (CORE_RULES.md section 8). The hero's initiative
-        // is his own roll, so it is a visible handful like every other roll of his - Grace and
-        // Insight and no gear die, which for the starting Barbarian is a single d6 on the felt.
-        // Everybody else's is the DM's and is rolled behind the screen.
-        //
-        // A hero with no Grace at all has nothing to throw, and the encounter scores his the same
-        // way it scores a Rabble's: not at all
+        // hero's initiative is a real visible throw; no Grace means nothing to throw and no score
         void RollTheOrder()
         {
             Pool pool = Initiative.PoolFor(_hero);
@@ -488,6 +340,9 @@ namespace Game.Fight
             _fight.Begin(heroInitiative);
             _order.Write(_fight.Order, _board.Metrics);
 
+            // no campaign means no plan and the DM does nothing, which is correct not a gap
+            _dm?.Perform(_board.Plan, Content.Encounters.When.Entered, _board.Campaign);
+
             GD.Print("");
             GD.Print("order   " + string.Join(", ", _fight.Order.Select(
                 a => $"{a.DebugName} {_fight.InitiativeOf(a)}")));
@@ -505,16 +360,13 @@ namespace Game.Fight
             }
         }
 
-        // ---- who is in the room ----
-
         void Muster()
         {
             Enlist(_hero, _board.Piece);
 
             if (FromTheMap()) return;
 
-            // NUMBERED FROM 1, so presentation can say "Rabble 3" out of one key with a {0} in it
-            // rather than gluing an integer onto a translated name (Actor.NameKey)
+            // numbered from 1 so a key with {0} can say 'Rabble 3' without gluing on an integer
             int ordinal = 1;
 
             foreach (Vector2I at in RabbleAt ?? new Godot.Collections.Array<Vector2I>())
@@ -525,21 +377,13 @@ namespace Game.Fight
             if (DreadAt != Nowhere) Recruit(DreadId, DreadAt, "Dread", 0);
         }
 
-        // THE ROOM AS THE MAP DREW IT (P2). One foe per spawn slot, in slot order, and the piece
-        // each stands as is chosen by its tier - the last thing in here a campaign cannot say for
-        // itself, and it goes when a statblock can name its own mini.
-        //
-        // False when there is nothing to place this way, and then the squares in the scene are
-        // used instead. That is a fallback rather than a rival: the shipped cellar has no spawn
-        // glyphs drawn in it, and a room that predates the feature should keep working untouched
+        // false when there is nothing to place this way; the scene's squares are the fallback
         bool FromTheMap()
         {
             IReadOnlyList<string> spawns = Roster();
 
             if (spawns.Count == 0) return false;
 
-            // numbered from 1 so presentation can say "Rabble 3" out of one key with a {0} in it,
-            // exactly as the hardcoded path does. Only the crowd needs it, and the crowd is Rabble
             int ordinal = 1;
             int placed = 0;
 
@@ -547,7 +391,7 @@ namespace Game.Fight
             {
                 string id = spawns[slot - 1];
 
-                // a hole in the list is how you say "this room uses three of its four slots"
+                // a hole in the list is a slot the room does not use
                 if (string.IsNullOrWhiteSpace(id)) continue;
 
                 Cell? at = _board.Map.SpawnAt(slot);
@@ -580,10 +424,6 @@ namespace Game.Fight
             return true;
         }
 
-        // THE ENCOUNTER'S IF THE BOARD LOADED ONE, and the scene's otherwise. One list either
-        // way, so everything below this line is the same code for a campaign and for a hand-set
-        // room - which is the whole reason `EncounterPlan.Roster` hands back a slot-ordered list
-        // rather than something the fight would have to unpack differently
         IReadOnlyList<string> Roster()
         {
             if (_board.Plan != null) return _board.Plan.Roster(_board.Campaign);
@@ -594,21 +434,8 @@ namespace Game.Fight
         static string Listed(MapLayout map) =>
             map.Spawns.Count == 0 ? "none at all" : string.Join(", ", map.Spawns.Keys);
 
-        // WHICH MINI A FOE STANDS AS - ONE LOOKUP AND NO BRANCH (MINIS_AND_ART.md A1).
-        //
-        // This used to be a `switch` on Tier, and said at the line why: "the only thing a
-        // campaign's statblock already says that the scene can read. A statblock that names its
-        // own model (Phase A) replaces this with one lookup and no branch." It does, and the tier
-        // is what is left when nothing was named - the figure every campaign written before this
-        // phase keeps, unchanged.
-        //
-        // <paramref name="slot"/> is the map spawn this one was placed on, or 0 for a foe the
-        // scene placed by square. Carried so a save has a stable name for each foe (P6) - see
-        // `Piece.Slot`
         void Recruit(string id, Vector2I at, string name, int ordinal, int slot = 0)
         {
-            // a scene naming somebody the roster does not have is worth a sentence rather than an
-            // exception - the campaign that had them may simply not be installed
             if (!_archetypes.Has(id))
             {
                 GD.PushError($"fight: there is no '{id}' in the roster " +
@@ -634,15 +461,10 @@ namespace Game.Fight
             _foes.Add(actor);
             Enlist(actor, piece, slot);
 
-            // AND WHAT IT TURNS INTO. A boss is the only thing that does, and what it turns into
-            // is a statblock - so this is the placeholder roster's answer (PhaseChange.Standard)
-            // for exactly as long as BuiltInArchetypes is the roster. Registered here rather than
-            // inside Encounter because a phase change is content and Encounter owns rules
+            // registered here, not in Encounter: a phase change is content
             if (actor.Tier == Tier.Dread) _boss = PhaseChange.Standard(actor);
         }
 
-        // WHAT THE HERO IS HOLDING, out of the campaign's own `items/` (P1). Named in the scene,
-        // so a better axe is a file and a line of scene data and no code at all
         void Equip()
         {
             Take(HeroWeapon, gear => _hero.Wielding(gear), "wielding");
@@ -657,8 +479,6 @@ namespace Game.Fight
 
             if (gear == null)
             {
-                // the campaign that shipped it may simply not be installed, which is a sentence
-                // rather than a crash
                 GD.PushError($"fight: there is no item '{id}' - the hero keeps what his statblock " +
                              $"gave him ({string.Join(", ", _archetypes.Items.Ids)})");
                 return;
@@ -669,13 +489,6 @@ namespace Game.Fight
             GD.Print($"        {_hero.DebugName} is {how} {gear}");
         }
 
-        // WHAT IT WAS CARRYING, drawn once as it falls (P1). The table is the monster's own -
-        // written in the campaign's file beside its statblock - and the draw goes through the
-        // fight's `IRng`, so the same seed finds the same thing on the same body.
-        //
-        // THE HERO PICKS IT UP, because at a table that is what happens: somebody says "anything
-        // on him?" and the answer goes on the sheet. Phase R is where the sheet can show it and
-        // swap it into a hand; until then the satchel is a list of ids and this is how it grows
         void Drops(Actor fallen)
         {
             if (fallen == null || ReferenceEquals(fallen, _hero)) return;
@@ -692,10 +505,7 @@ namespace Game.Fight
                      $"{_hero.DebugName} has {_hero.Satchel.Count} thing(s) in the satchel");
         }
 
-        // a piece, its tally and the mat beside it. A Rabble gets no tally, and that is the rule
-        // showing rather than an omission: no health track, nothing to count (CORE_RULES.md
-        // section 8). It DOES get condition marks - a Rabble can be Winded, it just cannot be
-        // whittled down
+        // a Rabble gets condition marks but no tally: no health track to count
         void Enlist(Actor actor, Mini mini, int slot = 0)
         {
             VigorPips pips = null;
@@ -709,9 +519,6 @@ namespace Game.Fight
             var marks = new ConditionMarks { Name = "Conditions", Text = _text };
             mini.AddChild(marks);
 
-            // and heroic effort, which only the hero has any of. A Rabble's cap is zero, so this
-            // would build nothing for one anyway - the check is here to say so rather than to
-            // leave an empty node beside every mook
             if (actor.NerveCap > 0)
             {
                 var tokens = new NerveTokens { Name = "Nerve" };
@@ -724,50 +531,22 @@ namespace Game.Fight
             _pieces.Add(actor, mini, pips, marks, slot);
         }
 
-        // ---- the hero's turn: a click is an action ----
-
-        // A CLICK ON A SQUARE, offered to the fight before the board does anything with it. True
-        // means the fight took it; false hands it back, so the board still walks its own piece
-        // around a room when there is no fight on
+        // true means the fight took the click; false hands it back to the board
         bool OnClick(Cell cell)
         {
             if (_fight == null) return false;
 
-            // the fight is over - the board is somebody's to walk around again
             if (_fight.IsOver) return false;
 
-            // THE FELT IS BEING READ, so this click is the answer to that and to nothing else:
-            // take the throw as it lies. Swallowed rather than acted on, because a player looking
-            // at the dice and reaching for the board means "these will do" and not "and also move
-            // over there"
+            // while the felt is read, a click takes the throw and nothing else
             if (_felt != null) { Read(); return true; }
 
-            // the dice are in the air, on this fight's behalf or on the door's, or something is
-            // still moving. the hero is busy, and a click now would be a piece walking away from
-            // its own swing
+            // busy: a click now would be a piece walking away from its own swing
             if (!Settled || _board.IsChecking) return true;
 
-            // not his turn. clicks wait, and nothing is said about it: a table where the pieces do
-            // not move when you push them is a table where it is somebody else's go
             if (!_fight.AwaitingHero) return true;
 
-            // OUT OF ACTIONS, BUT THE TURN HAS NOT ENDED (CORE_RULES.md section 7). When the hero
-            // has spent his actions and still holds a Nerve, Encounter.Done PARKS the turn rather
-            // than ending it - so he can decide whether to push for one more or stop, and spending
-            // the Nerve stays his choice to make. In that parked state a click on the board has
-            // nothing to pay for: a swing reaches Encounter.Strike, whose own Ready() gate refuses
-            // it on _actionsLeft and returns null, so the felt reads "beats it" and NOTHING lands -
-            // which is exactly the "the rabble beat defense and did not fall" bug. A move is worse:
-            // March walks the piece and only THEN fails to Spend, so an empty square would be a
-            // free step. Both are the same missing guard, and it is one the rules cannot make
-            // because the rules never see the click.
-            //
-            // The one gesture still worth something here is ending the turn - clicking the hero's
-            // own piece, which is today's end-turn gesture until the initiative marker takes it
-            // over (THE_TABLE.md, "the end-turn gesture"). Everything else is refused with the
-            // choice the player actually has: push with a Nerve, or stop. That line is a
-            // companion/DM cue once that layer exists (COMBAT_LOOP.md C4); for now it is a
-            // GD.Print like the rest of this file's diagnostics
+            // parked with a Nerve but no actions: without this guard a swing lands nothing and a move is a free step
             if (_fight.ActionsLeft <= 0)
             {
                 Piece here = _pieces.On(_board.Squares.At(cell));
@@ -787,13 +566,7 @@ namespace Game.Fight
                 return true;
             }
 
-            // HIS OWN SQUARE IS THE ONE GESTURE THE FIGHT HAS LEFT, and C3 gives it a meaning:
-            // stop, and watch. Give up what is left of the turn and take a readied strike at the
-            // first thing that comes within reach (CORE_RULES.md section 8, one reaction).
-            //
-            // Clicking your own piece rather than pressing a key, because there is no menu on a
-            // table and no keyboard on one either - and because "I stop here, and I am watching
-            // you" is a thing somebody does by tapping their own model
+            // clicking your own piece means stop and take a readied strike
             if (target != null)
             {
                 if (ReferenceEquals(target.Actor, _hero)) Watch();
@@ -804,20 +577,6 @@ namespace Game.Fight
             return true;
         }
 
-        // A CLICK ON A NERVE TOKEN, met with the token's own body rather than with the mat -
-        // see NerveTokens. What it buys is decided here and nowhere else, by what the table is
-        // waiting for, in this order:
-        //
-        //   1. a Trouble on the felt      shrug it off before it resolves
-        //   2. the Heart die already armed  change your mind, and it costs nothing
-        //   3. actions left on this turn    arm the Heart die for the next throw
-        //   4. no actions left              push through and act one more time
-        //
-        // Four spends, one gesture, and a total function - a token click always does exactly one
-        // of them, so there is never a click that reads as nothing happening. The ordering is the
-        // only thing here that is a judgement: a Trouble is the most urgent because it is about to
-        // resolve, and pushing is last because it is the only one that is still available after
-        // everything else on the turn is gone
         public override void _UnhandledInput(InputEvent @event)
         {
             if (_fight == null) return;
@@ -825,6 +584,13 @@ namespace Game.Fight
             if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: KeyToBreathe })
             {
                 Breather();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: KeyToUseAbility })
+            {
+                UseChecked();
                 GetViewport().SetInputAsHandled();
                 return;
             }
@@ -859,7 +625,7 @@ namespace Game.Fight
 
         void OnNerve()
         {
-            // 1. a Trouble is about to resolve
+            // shrug a Trouble before it resolves
             if (_felt != null && _felt.Result.Trouble && !_shrugged)
             {
                 if (!_fight.SpendNerve(_hero)) return;
@@ -872,7 +638,7 @@ namespace Game.Fight
             if (_felt != null) return;
             if (!_fight.AwaitingHero) return;
 
-            // 2. changed his mind about the fourth die
+            // changed his mind about the Heart die
             if (_heart)
             {
                 _heart = false;
@@ -880,7 +646,7 @@ namespace Game.Fight
                 return;
             }
 
-            // 3. the fourth die, for the next throw
+            // the Heart die, for the next throw
             if (_fight.ActionsLeft > 0 && _hero.Nerve > 0 &&
                 Nerve.CanAddHeart(_hero, _hero.BuildPool(_engine.Options.HeroAttackAttr,
                                                          _engine.Options.HeroAttackSkill)))
@@ -890,7 +656,7 @@ namespace Game.Fight
                 return;
             }
 
-            // 4. one more action
+            // no actions left: push through for one more
             if (_fight.Push())
             {
                 GD.Print($"        {_hero.DebugName} pushes through - {_fight.ActionsLeft} action left, " +
@@ -901,14 +667,44 @@ namespace Game.Fight
             GD.Print($"        {_hero.DebugName} has nothing to spend a Nerve on right now");
         }
 
-        // I AM DONE - and watching, if there is a reaction left to watch with. The hero's turn
-        // does not end itself while he still has a Nerve to push with (Encounter.Done), so saying
-        // so is a gesture the fight needs, and this is it
-        // A BREATHER (CORE_RULES.md section 11) - a few minutes anywhere safe, which clears Strain
-        // and gives back one Nerve. A developer affordance on a key rather than a gesture, exactly
-        // as the board's R is, and for the same reason: resting between rooms is Phase P's shape
-        // and this is here so a caster can be watched shrinking and coming back in one sitting
         const Key KeyToBreathe = Key.B;
+
+        const Key KeyToUseAbility = Key.K;
+
+        void UseChecked()
+        {
+            Ability ability = FirstOf(Primitive.Check);
+
+            if (ability == null || _swingingAt != null || !_fight.AwaitingHero) return;
+
+            Actor target = ability.Target == Target.Self ? _hero : WithinReach();
+
+            if (target == null)
+            {
+                GD.Print($"        nothing within reach for {ability.Id}");
+                return;
+            }
+
+            Use(ability, target);
+        }
+
+        Actor WithinReach()
+        {
+            Cell? from = _board.CellOf(_board.Piece);
+
+            if (from == null) return null;
+
+            foreach (Piece piece in _pieces.All)
+            {
+                if (piece.Actor == _hero || piece.Actor.IsDown) continue;
+
+                Cell? to = _board.CellOf(piece.Mini);
+
+                if (to != null && Reaches(from.Value, to.Value)) return piece.Actor;
+            }
+
+            return null;
+        }
 
         void Breather()
         {
@@ -938,12 +734,6 @@ namespace Game.Fight
             _beat = Beat;
         }
 
-        // BESIDE IT, SO SWING. Out of reach but in sight, and a caster throws something at it.
-        // Otherwise close the distance, which is what the action buys instead.
-        //
-        // One click, three meanings, and the geometry picks between them - which is the same
-        // arrangement the whole fight uses: the board answers WHICH SQUARE and everything above it
-        // decides what that means
         void Engage(Actor target)
         {
             Cell? from = _board.CellOf(_board.Piece);
@@ -953,7 +743,7 @@ namespace Game.Fight
 
             if (Reaches(from.Value, to.Value)) { Swing(target); return; }
 
-            if (TheEffect.Offered(_hero) && Sight.Clear(_board.Map, from.Value, to.Value))
+            if (FirstOf(Primitive.Channel) != null && Sight.Clear(_board.Map, from.Value, to.Value))
             {
                 Channel(target);
                 return;
@@ -962,42 +752,71 @@ namespace Game.Fight
             March(to.Value);
         }
 
-        // THE ONE EFFECT (Fight/TheEffect.cs), thrown on the real tray like everything else the
-        // hero rolls. The pool is the caster's own and the cost comes off his Heart die as the
-        // dice leave the hand - a spell that fizzled still took it out of you
-        void Channel(Actor target)
+        IReadOnlyList<Ability> KitFor(Actor hero)
         {
-            Pool pool = TheEffect.Cast(_hero);
+            Content.Classes.ClassCard card = _archetypes.ClassOf(hero?.Id);
+
+            if (card == null) return SharedKit.All;
+
+            Ability[] kit = _archetypes.KitOf(card).ToArray();
+
+            return kit.Length > 0 ? kit : SharedKit.All;
+        }
+
+        Ability FirstOf(Primitive shape)
+        {
+            foreach (Ability ability in _kit)
+                if (ability.Primitive == shape && ability.Offered(_hero) && ability.Affordable(_hero))
+                    return ability;
+
+            return null;
+        }
+
+        // cost comes off as the dice leave the hand, not on landing
+        void Use(Ability ability, Actor target)
+        {
+            if (ability == null) return;
+
+            Pool pool = ability.PoolFor(_hero);
 
             if (pool.Count == 0)
             {
-                GD.PushError("fight: the hero has nothing to channel with");
+                GD.PushError($"fight: the hero has nothing to throw for {ability.Id}");
+                return;
+            }
+
+            if (!ability.Pay(_hero))
+            {
+                GD.Print($"        {_hero.DebugName} cannot pay for {ability.Id}");
                 return;
             }
 
             _swingingAt = target;
+            _ability = ability;
             _reacting = false;
             _interrupted = null;
             _impact = null;
-            _using = TheEffect.Attribute;
+            _using = ability.Attribute;
 
-            // the felt's readout compares the throw to THIS, so it has to be what the rules are
-            // scoring against - the target's Defense, the difficulty a bolt is measured on
-            // (TheEffect). Left at the tray's default it read "vs 9" for every throw and a swing
-            // at a Defense-11 Rival looked like a hit when the rules called it a miss
-            _tray.TargetDifficulty = target.Defense;
+            int against = ability.Difficulty(target?.Defense ?? 0);
+
+            // the readout must score against the ability's own difficulty, or a hit shows for what the rules call a miss
+            _tray.TargetDifficulty = against;
 
             GD.Print("");
-            GD.Print($"channel {_hero.DebugName} at {target.DebugName} - {TheEffect.Attribute} + " +
-                     $"{TheEffect.Skill} + {_hero.WeaponId}, {pool.Count} dice vs defense " +
-                     $"{target.Defense}; strain {_hero.Strain}, Heart now " +
-                     $"{_hero.Attribute(TheEffect.Attribute).Label()}");
+            GD.Print($"ability {_hero.DebugName} uses {ability.Id}" +
+                     (target != null && target != _hero ? $" at {target.DebugName}" : " on himself") +
+                     $" - {ability.Attribute} + {ability.Skill}" +
+                     (ability.UseGear ? $" + {_hero.WeaponId}" : "") +
+                     $", {pool.Count} dice vs {against}" +
+                     (ability.Cost == Cost.None ? "" : $"; {ability.Cost} paid") +
+                     $"; strain {_hero.Strain}, Heart now {_hero.Attribute(Attr.Heart).Label()}");
 
             _tray.Throw(pool);
         }
 
-        // one move action: as far along the way there as Pace reaches, stopping short of a square
-        // somebody is standing on
+        void Channel(Actor target) => Use(FirstOf(Primitive.Channel), target);
+
         void March(Cell to)
         {
             Cell? from = _board.CellOf(_board.Piece);
@@ -1008,9 +827,7 @@ namespace Game.Fight
 
             if (landed == from.Value)
             {
-                // no way there, or nowhere to go - shown on the board rather than in a message box,
-                // because there is no message box on a table (THE_TABLE.md 6). It costs no action:
-                // a refused move is a move that did not happen
+                // a refused move costs no action: it did not happen
                 _board.Refuse(_board.Piece, to, from.Value);
                 return;
             }
@@ -1021,11 +838,7 @@ namespace Game.Fight
             _fight.Spend();
         }
 
-        // ---- geometry, as far as it feeds the rules ----
-
-        // as far as one move carries a piece toward a square. When the square is TAKEN - which is
-        // what "walk at that foe" means - the destination is a square beside it instead, so
-        // clicking an enemy across the room walks up to it rather than being refused
+        // when the target square is taken, aim beside it, so clicking a far enemy walks up to it
         Cell Approach(Cell from, Cell to)
         {
             IReadOnlyList<Cell> route = Route.Between(_board.Map, from, to, Taken) ?? Nearest(from, to);
@@ -1037,8 +850,6 @@ namespace Game.Fight
             return reached[reached.Count - 1];
         }
 
-        // the cheapest way to a square beside that one - the same shape as Board.NearestApproach,
-        // which walks up to a door rather than into it
         IReadOnlyList<Cell> Nearest(Cell from, Cell to)
         {
             IReadOnlyList<Cell> best = null;
@@ -1065,11 +876,7 @@ namespace Game.Fight
                         yield return new Cell(cell.X + dx, cell.Y + dy);
         }
 
-        // REACH. Beside it, and with nothing on the line between - a wall between two squares is a
-        // wall you cannot reach through, which is the same question Route asks of the same corner
-        // and gets the same answer to (EDGE_WALLS.md). Sight is the right test rather than Route's,
-        // because a swing crosses a line and does not walk it: two pieces either side of the corner
-        // where two walls meet can see and hit each other, and neither can step there
+        // sight, not route: a swing crosses a line it cannot walk, so through a corner it can hit but not step
         bool Reaches(Cell from, Cell to)
         {
             if (from == to) return false;
@@ -1078,10 +885,7 @@ namespace Game.Fight
             return Sight.Clear(_board.Map, from, to);
         }
 
-        // ---- the swing, and the die that would not stop ----
-
-        // the hero's own pool - attribute, skill, gear - thrown on the real tray. Every bit of
-        // M0-M9 does the rest; there is no second throwing path and there must never be one
+        // the hero's pool on the real tray; there is no second throwing path and must never be one
         void Swing(Actor target)
         {
             Pool pool = HeroPool();
@@ -1097,8 +901,7 @@ namespace Game.Fight
             _reacting = false;
             _interrupted = null;
 
-            // the felt's readout compares to this - it must be the number the rules score against,
-            // or the console says "vs 9" while the swing is actually measured on the target's Defense
+            // the readout must be the number the rules score against, or the console lies about hits
             _tray.TargetDifficulty = target.Defense;
 
             GD.Print("");
@@ -1109,16 +912,13 @@ namespace Game.Fight
             _tray.Throw(pool);
         }
 
-        // the felt has stopped moving. the tray throws for the board and for itself too, so only an
-        // answer to a question this fight asked is one it may act on
+        // the tray also throws for the board; act only on an answer this fight asked for
         void OnThrown(TrayThrow thrown)
         {
             if (_rollingOrder) { Started(thrown.Result.Total); return; }
 
             if (_swingingAt == null) return;
 
-            // the Impact die has come back down - either the one that went back in the hand, or
-            // the d4 that came out of the box
             if (_impact != null)
             {
                 _impact.Landed(thrown.Slots.Count > 0 ? thrown.Slots[0].Value : 0);
@@ -1127,8 +927,6 @@ namespace Game.Fight
                 return;
             }
 
-            // THE FELT IS LEFT TO BE READ before anything is made of it, so a Nerve can re-throw
-            // one die of it (CORE_RULES.md section 7). Nothing is decided until the window closes
             _felt = thrown;
             _shrugged = false;
 
@@ -1142,14 +940,9 @@ namespace Game.Fight
             Read();
         }
 
-        // is there anything to decide? A Nerve to re-throw a die with, or a Trouble that is about
-        // to resolve and could be shrugged off or taken. With neither, the throw takes itself and
-        // the fight never pauses
         bool Offering() => _hero.Nerve > 0 || _felt.Result.Trouble;
 
-        // THE WINDOW IS CLOSED AND THE THROW IS REAL. Whatever is lying on the felt now is what
-        // happened - including a Trouble that nobody shrugged, which lands and banks a Nerve
-        // (CORE_RULES.md section 7, the loop worth protecting)
+        // window closed, throw is real: an unshrugged Trouble lands and banks a Nerve
         void Read()
         {
             TrayThrow thrown = _felt;
@@ -1176,7 +969,7 @@ namespace Game.Fight
             Settle();
         }
 
-        // DEVELOPER ONLY - not localized, never reaches the screen
+        // developer only, not localized, never reaches the screen
         string Told(Trouble.Cost cost) => cost switch
         {
             Trouble.Cost.Notched => $"the {_hero.WeaponId} is notched, now {_hero.Weapon.Label()}",
@@ -1184,8 +977,7 @@ namespace Game.Fight
             _ => "nothing left to take it",
         };
 
-        // A DIE, PICKED UP AND THROWN AGAIN, FOR A NERVE. The window closes while it is in the
-        // air and opens again on the answer, so a player with three Nerve can re-throw three times
+        // re-throw one die for a Nerve; the window reopens on the answer, so three Nerve is three re-throws
         void OnPicked(int slot)
         {
             if (_felt == null || _swingingAt == null) return;
@@ -1204,29 +996,7 @@ namespace Game.Fight
             _tray.Rethrow(slot);
         }
 
-        // THE IMPACT DIE EXPLODES BY BEING PICKED UP AND THROWN AGAIN (CORE_RULES.md section 2,
-        // SIMULATION.md section 4). `StandardResolver` does it with a loop, which is right for a
-        // fight nobody is watching. In front of a player it is the moment the whole rule exists
-        // for - a d12 rolling 12 into another 12 is something people talk about - so the die goes
-        // back in the hand and onto the felt, alone.
-        //
-        // A pool of one is an ordinary pool as far as the tray is concerned (SEAMS.md section 8,
-        // lifted in C2): it sits the other dice out and throws the one it was handed.
-        //
-        // WHETHER IT IS WORTH PICKING UP AT ALL. The chain knows the die came up its maximum; this
-        // knows whether a bigger number would change anything. A miss and a Rabble both settle
-        // without it - the same short circuit CombatEngine.Attack makes before asking its resolver,
-        // and for the same reason: a roll nobody is going to use is a roll nobody should watch
-        // THE IMPACT DIE IS THROWN, OR THE BLOW LANDS. Two reasons it might still need throwing:
-        // it has never been thrown, because the pool left nothing over and the rules hand you a d4
-        // (CORE_RULES.md section 2); or it came up its maximum and explodes (section 4).
-        //
-        // The first happens whatever the options say - it is not an explosion, it is the die. The
-        // second is `CombatOptions.ImpactExplodes`, which is a dial the sim has measured.
-        //
-        // Both are skipped where the number would not be used anyway: a miss, and a Rabble, which
-        // has no health track for a bigger number to matter to. That is the same short circuit
-        // CombatEngine.Attack makes before asking its resolver
+        // skip the Impact throw where the number is unused: a miss, or a Rabble with no health track
         void Settle()
         {
             if (!_impact.GoesAgain) { Land(); return; }
@@ -1242,8 +1012,7 @@ namespace Game.Fight
             GD.Print(_impact.IsExploding
                 ? $"        the {_impact.Die.Label()} came up {_impact.Die.Sides()} - it goes back " +
                   $"in the hand, {_impact.Total} so far"
-                : $"        nothing was left over, so the {_impact.Die.Label()} comes out of the box " +
-                  "(CORE_RULES 2)");
+                : $"        nothing was left over, so the {_impact.Die.Label()} comes out of the box");
 
             _tray.Throw(_impact.Again());
         }
@@ -1253,18 +1022,30 @@ namespace Game.Fight
             Actor target = _swingingAt;
             int damage = _impact.Total;
             bool reaction = _reacting;
+            Ability ability = _ability;
 
             _swingingAt = null;
             _impact = null;
             _reacting = false;
+            _ability = null;
 
-            // a reaction costs a reaction and nobody's turn; a strike costs the action of whoever
-            // is having one. Encounter is what knows the difference
+            // an ability reads its own outcome, but damage is still _impact.Total, the same as a swing
+            if (ability != null)
+            {
+                Apply(ability, target, damage, reaction);
+                return;
+            }
+
+            // a reaction costs a reaction and nobody's turn; a strike costs the actor's action
             if (reaction) _fight.React(_hero, target, _roll, damage);
             else _fight.Strike(target, _roll, damage);
 
-            // and the interrupted mover gets its turn back - or loses it, if the strike was the
-            // one that took it off the board
+            ReadItBack(target, damage);
+
+            // a Snag (a single 1) has no mechanical effect; it is just the DM reacting
+            if (_roll is { Snag: true }) _dm?.Reacts();
+
+            // the interrupted mover gets its turn back, or loses it if the strike downed it
             if (_interrupted != null)
             {
                 if (_interrupted.IsDown) _fight.EndTurn();
@@ -1273,30 +1054,116 @@ namespace Game.Fight
                 _interrupted = null;
             }
 
-            // BEFORE THE NEXT FRAME, not on it. The observer's flare is recorded inside the strike
-            // above, and a mark that appeared a frame later would be a mark that missed its own
-            // flare - and would leave anything reading the table immediately after an outcome
-            // looking at the state before it
+            // refresh now, not next frame, or a mark misses its own flare
             Refresh();
 
             _beat = Beat;
         }
 
-        // ---- the foes' turns, which the player does not drive ----
+        // damage goes through Encounter.Strike, keeping bolt and swing one mechanism; a no-damage ability still costs the action
+        void Apply(Ability ability, Actor target, int magnitude, bool reaction)
+        {
+            AbilityOutcome outcome = ability.Read(_roll, magnitude, target?.Defense ?? 0);
+
+            GD.Print($"        {outcome}");
+
+            if (outcome.Does(Effect.Damage) && target != null)
+            {
+                if (reaction) _fight.React(_hero, target, _roll, outcome.Magnitude);
+                else _fight.Strike(target, _roll, outcome.Magnitude);
+
+                ReadItBack(target, outcome.Magnitude);
+            }
+            else
+            {
+                // the turn still goes, or a missed checked action would be a free retry
+                _fight.Spend();
+            }
+
+            if (outcome.Does(Effect.Recoil) && outcome.Magnitude > 0)
+            {
+                IReadOnlyList<Condition> taken = _hero.Damage(outcome.Magnitude);
+
+                GD.Print($"        {_hero.DebugName} takes {outcome.Magnitude} from it" +
+                         (taken.Count > 0 ? " - and takes " + string.Join(", ", taken) : ""));
+            }
+
+            // on the target for a channel, on the thrower for a check
+            if (outcome.Condition is { } condition)
+            {
+                Actor wearer = ability.Primitive == Primitive.Channel ? target : _hero;
+
+                if (wearer != null && wearer.ApplyCondition(condition))
+                    GD.Print($"        {wearer.DebugName} is {condition}");
+            }
+
+            if (outcome.Does(Effect.Steady))
+            {
+                Condition pressing = ability.Attribute.Pressing();
+
+                GD.Print(_hero.ClearCondition(pressing)
+                    ? $"        {_hero.DebugName} steadies - {pressing} shaken off"
+                    : $"        {_hero.DebugName} steadies, and was not {pressing} to begin with");
+            }
+
+            Cell? standing = _board.CellOf(_board.Piece);
+            Piece struck = target == null ? null : _pieces.Of(target);
+            Cell? where = struck == null ? null : _board.CellOf(struck.Mini);
+
+            if (outcome.Does(Effect.Rough) && where != null)
+                GD.Print(_board.Foul(where.Value)
+                    ? $"        {where.Value} is difficult ground now"
+                    : $"        {where.Value} was not plain floor to foul");
+
+            if (outcome.Does(Effect.Shove) && struck != null && standing != null)
+                GD.Print(_board.Shove(struck.Mini, standing.Value)
+                    ? $"        {target.DebugName} is shoved back to {_board.CellOf(struck.Mini)}"
+                    : $"        {target.DebugName} has nowhere to be shoved to");
+
+            Refresh();
+
+            _beat = Beat;
+        }
+
+        void ReadItBack(Actor target, int impact)
+        {
+            if (_dm == null || target == null || _roll == null) return;
+
+            int against = target.Defense;
+            bool beat = _roll.Beats(against);
+
+            _dm.Says(beat ? Game.Dm.DmLines.Hit : Game.Dm.DmLines.Miss,
+                     beat ? new object[] { _roll.Total, against, impact }
+                          : new object[] { _roll.Total, against });
+
+            // the first time it is cleared, and never again
+            if (!beat || !_guardsSeen.Add(target)) return;
+
+            // numbered names carry their own {0}; use Format not Get, or the braces show
+            string named = target.Ordinal > 0
+                ? _text.Format(target.NameKey, target.Ordinal)
+                : _text.Get(target.NameKey);
+
+            _dm.Says(Game.Dm.DmLines.Guard, named, against);
+        }
 
         public override void _Process(double delta)
         {
             Refresh();
 
-            // THE BEAT RUNS DOWN EVEN WHEN THE FIGHT IS OVER. It used to be counted after the
-            // early return below, so the last blow of a fight left the table permanently
-            // unsettled - `Settled` false forever, and anything waiting for the fight to finish
-            // waiting for good. Nothing in play noticed, because nothing in play was waiting;
-            // the headless check was, and sat there for forty-five seconds
+            // the beat must run down even when the fight is over, or Settled never comes true and a headless check hangs
             if (_beat > 0.0) _beat = Math.Max(0.0, _beat - delta);
 
-            // the felt is being read. it takes itself when the moment is up, which is what makes
-            // this a grace period rather than a prompt somebody has to dismiss
+            if (_fight is { IsOver: true } && !_cleared)
+            {
+                _cleared = true;
+                _dm?.Perform(_board.Plan, Content.Encounters.When.Cleared, _board.Campaign);
+            }
+
+            // only at an idle table: a rattle on top of a swing is a sound effect, not a tell
+            if (_fight is { IsOver: false } && _fight.AwaitingHero && Settled)
+                _dm?.MightRollForNothing(delta);
+
             if (_felt != null)
             {
                 _read -= delta;
@@ -1310,28 +1177,19 @@ namespace Game.Fight
 
             if (_beat > 0.0) return;
 
-            // the dice are in the air, or a piece is still walking. one thing at a time on a table
             if (!Settled) return;
 
-            // the hero's turn is the player's, and it waits as long as it likes
             if (_fight.AwaitingHero) return;
 
             TakeFoeStep();
         }
 
-        // ONE ACTION of the foe whose turn it is. An ordinary foe gets one, so this is usually the
-        // whole turn: close the distance, or swing if it is already close. That is what makes a
-        // room of Rabble pressure rather than a queue - four of them spend their first turn
-        // arriving, and after that the hero is surrounded and cannot walk away without spending an
-        // action of his own to do it
         void TakeFoeStep()
         {
             Actor foe = _fight.Acting;
 
             if (foe == null) return;
 
-            // cut down in the middle of its own turn - by a readied strike, and one day by
-            // anything else that can happen out of turn. It does not get to finish it
             if (foe.IsDown) { _fight.EndTurn(); return; }
 
             Actor prey = _fight.TargetFor(foe);
@@ -1346,6 +1204,8 @@ namespace Game.Fight
 
             if (Reaches(from.Value, to.Value))
             {
+                _dm?.RollsForSomething();
+
                 _fight.Strike(prey, foe.Tier.AttackAttr(), foe.Tier.AttackSkill());
                 Refresh();
                 _beat = Beat;
@@ -1356,8 +1216,6 @@ namespace Game.Fight
 
             if (landed == from.Value)
             {
-                // penned in behind the others, or no way round at all. it loses the turn, which is
-                // exactly what a crowd of Rabble costs a crowd of Rabble
                 GD.Print($"        {foe.DebugName} cannot get to {prey.DebugName}");
                 _fight.EndTurn();
                 return;
@@ -1366,19 +1224,12 @@ namespace Game.Fight
             _board.Walk(walking, landed);
             GD.Print($"move    {foe.DebugName} {from} to {landed}");
 
-            // AND WALKED ONTO THE HERO'S AXE. The one reaction trigger the game has: the hero gave
-            // up an action to watch, and this is the thing that came within reach. It resolves
-            // BEFORE the mover's action is booked - see _interrupted
             if (React(foe, landed)) return;
 
             _fight.Spend();
             _beat = Beat;
         }
 
-        // THE HERO'S OWN HANDFUL, with the Heart die in it when a Nerve has been committed to
-        // this throw. The commitment is only spent here, as the dice leave the hand - so a player
-        // who armed it and then changed their mind has lost nothing, and a Nerve is never taken
-        // for a throw that did not happen
         Pool HeroPool()
         {
             Pool pool = _hero.BuildPool(_engine.Options.HeroAttackAttr, _engine.Options.HeroAttackSkill);
@@ -1396,8 +1247,7 @@ namespace Game.Fight
             return Nerve.WithHeart(_hero, pool);
         }
 
-        // the readied strike, if there is one to take and something to take it at. True means the
-        // dice are in the air and the mover's turn is on hold until they land
+        // true means the dice are in the air and the mover's turn is on hold
         bool React(Actor foe, Cell landed)
         {
             if (!_fight.IsReadied(_hero) || _fight.ReactionsLeft(_hero) <= 0) return false;
@@ -1415,7 +1265,6 @@ namespace Game.Fight
             _interrupted = foe;
             _impact = null;
 
-            // the readout compares to the thing being struck, same as an ordinary swing
             _tray.TargetDifficulty = foe.Defense;
 
             GD.Print("");
@@ -1426,13 +1275,7 @@ namespace Game.Fight
             return true;
         }
 
-        // ---- the mat is a view of the actors, and never its own copy ----
-
-        // Refreshed every frame rather than written when something happens, so anything that costs
-        // vigor or lands a Condition outside this fight - a door forced the hard way is the one
-        // that exists today - still shows on the table. What the observer adds is the flare: the
-        // one thing a per-frame refresh cannot know is that a Condition is NEW rather than merely
-        // still true
+        // refreshed every frame, so state changed outside the fight still shows; the observer adds only the flare
         void Refresh()
         {
             foreach (Piece piece in _pieces.All)

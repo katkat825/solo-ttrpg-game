@@ -4,45 +4,23 @@ using Game.Tray;
 
 namespace Game.Audio
 {
-    // how a die sounds when the SURFACE decides, which is the honest model of an impact:
-    // what gets struck dominates, and the thing striking it only modulates
-    //
-    // NOT named for a die material, and deliberately so. This class never asks what the die
-    // is made of - it reads the tray's floor and walls, picks between them on DieHit.Flatness,
-    // and shapes the result by force and by die SIZE. An earlier name of WoodenDice implied a
-    // wooden die; the wood was always the tray, and the dice have been onyx the whole time.
-    //
-    // IDieVoice stays the seam for die material, because that is a real thing an ear can hear -
-    // a brass die on felt is not a stone one. It just needs its own sample sets to say so, and
-    // until those exist there is nothing honest for a per-material voice to do. When they
-    // arrive, BrassVoice sits beside this one and DiceTray hands it over instead.
-    //
-    // samples are single impacts sliced out of CC0 recordings by tools/slice_impacts.py,
-    // see THIRD_PARTY.md for sources and licences
+    // the surface decides the sound: what gets struck dominates, and the die only modulates by force and size
     public sealed class SurfaceVoice : IDieVoice
     {
-        // what a die falls back to when nobody has told it where it is
-        // every die in the fairness sweep, and any die dropped into a scene with no tray
+        // fallback when a die hasn't been told where it is: the fairness sweep, and any die in a scene with no tray
         public static readonly SurfaceVoice Shared = new(null);
 
-        // the speed at which a hit is as loud as the sample gets
-        // above it extra force stops adding volume and only adds brightness,
-        // which is what keeps a hard throw from clipping
+        // the speed at which a hit is as loud as the sample gets; past it force adds brightness, not volume, so a hard throw doesn't clip
         const float FullForce = 2.5f;
 
-        // exponent on the force, lifting soft hits toward hard ones
-        // 1 is the honest linear map and it is wrong - a die's last taps carry a fiftieth of the
-        // momentum of its first bounce, so the whole tumble vanishes under the impact that started it
+        // exponent lifting soft hits toward hard: a linear map buries the whole tumble under the first bounce, which carries fifty times the momentum
         const float ForceCurve = 0.75f;
 
         const float SettlingSpeed = 0.8f;   // below this the die is sitting down, not bouncing
 
-        // above this Flatness the die hit the floor, below it a wall
-        // a hard split rather than a blend, because what is being chosen is a folder of samples
-        // and there is no halfway between two recordings
+        // above this Flatness the die hit the floor, below it a wall; a hard split because there's no halfway between two sample folders
         const float FloorFlatness = 0.5f;
 
-        // two dice meeting: sharper and smaller than either of them hitting the tray
         const float DieOnDieDb = -2.5f;
 
         const float DieOnDiePitch = 1.09f;
@@ -59,8 +37,7 @@ namespace Game.Audio
             _walls = tray?.Walls;
         }
 
-        // larger solids are heavier, land on more surface and ring lower
-        // this is the ONLY thing about the die itself that reaches the sound
+        // larger solids ring lower; the size is the only thing about the die itself that reaches the sound
         static float SizePitch(Die size) => size switch
         {
             Die.D4 => 1.20f,
@@ -76,14 +53,12 @@ namespace Game.Audio
 
         public DieSound Struck(in DieHit hit)
         {
-            // amplitude rather than energy - amplitude is what a fader is measured in and what
-            // the ear reports; squaring it makes soft taps vanish before they get quiet
+            // amplitude, not energy: it's what a fader measures and the ear reports; squaring would make soft taps vanish before they got quiet
             float force = Mathf.Clamp(hit.Speed / FullForce, 0f, 1f);
 
             float db = Mathf.LinearToDb(Mathf.Pow(Mathf.Max(force, 0.02f), ForceCurve));
 
-            // harder is also brighter - a real die struck hard rings up as well as louder
-            // without this a heavy throw is the same tap with the fader raised
+            // harder is brighter too: without the pitch lift a heavy throw is just the same tap with the fader raised
             float pitch = SizePitch(hit.Size) * Mathf.Lerp(0.94f, 1.06f, force);
 
             AudioStream stream;
@@ -107,8 +82,7 @@ namespace Game.Audio
             // the throw is heard through its first contact, so it leads slightly
             if (hit.IsFirst) db += 1.5f;
 
-            // the last few taps as it drops onto its face
-            // the settle layer, arrived at from the physics rather than from a timer
+            // the settle layer, the last taps as it drops onto its face, driven by physics not a timer
             if (hit.Remaining < SettlingSpeed)
             {
                 db -= 2.5f;
@@ -120,8 +94,7 @@ namespace Game.Audio
 
         public DieSound Shaken(Die size, int tap, int taps)
         {
-            // not its own recording - the impact samples played small, fast and high, which is
-            // what a rattle physically is, and so it can never drift out of character with them
+            // reuses the impact samples played small, fast and high (what a rattle is), so it can't drift out of character with them
             float through = taps <= 1 ? 1f : (float)tap / (taps - 1);
 
             return new DieSound(

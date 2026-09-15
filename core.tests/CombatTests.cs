@@ -7,10 +7,6 @@ using Xunit;
 
 namespace Core.Tests
 {
-    // covers the combat engine end to end
-    // hits and misses against defense, Rabble folding to any successful hit
-    // encounters terminating and naming a winner
-    // and the action economy - two hero actions a round against one
     public class CombatTests
     {
         static CombatEngine Engine(IRng rng, CombatOptions opts = null) =>
@@ -22,7 +18,6 @@ namespace Core.Tests
             var hero = Fixtures.Hero();
             var mook = Fixtures.Mook();
 
-            // beats defense 7 comfortably
             var o = Engine(new ScriptedRng(6, 6, 6)).Attack(hero, mook, Attr.Might, Skill.Blades);
             mook.Damage(o.Damage);
 
@@ -34,7 +29,7 @@ namespace Core.Tests
         public void MissedAttack_DealsNoDamage()
         {
             var hero = Fixtures.Hero();
-            var rival = Fixtures.Rival(); // defense 11
+            var rival = Fixtures.Rival();
 
             var o = Engine(new ScriptedRng(2, 2, 2)).Attack(hero, rival, Attr.Might, Skill.Blades);
 
@@ -58,8 +53,6 @@ namespace Core.Tests
         [Fact]
         public void MoreHeroActions_ProducesMoreWins()
         {
-            // one action a round is unsurvivable
-            // this is the whole reason the hero gets two
             Assert.True(WinsWith(2) > WinsWith(1));
         }
 
@@ -84,15 +77,13 @@ namespace Core.Tests
             Assert.Equal(1, foes.Count(f => f.Tier == Tier.Rival));
         }
 
-        // ---- the rule "Rabble die to any hit", stated once (COMBAT_LOOP.md C2, SEAMS.md 5) ----
 
         [Fact]
         public void ZeroDamage_DoesNotRemoveARabble()
         {
             var mook = Fixtures.Mook();
 
-            // this killed one until Phase C. a miss reports Damage 0, so the engine applying an
-            // outcome was one guard away from clearing the board with a whiff
+            // a miss reports damage 0; without the guard, applying it would clear the board with a whiff
             mook.Damage(0);
 
             Assert.False(mook.IsDown);
@@ -102,7 +93,7 @@ namespace Core.Tests
         public void AMissOnARabble_LeavesItStanding()
         {
             var hero = Fixtures.Hero();
-            var mook = Fixtures.Mook();   // defense 7
+            var mook = Fixtures.Mook();
             var engine = Engine(new ScriptedRng(1, 1, 1));
 
             var o = engine.Attack(hero, mook, Attr.Might, Skill.Blades);
@@ -127,17 +118,15 @@ namespace Core.Tests
             Assert.True(mook.IsDown);
         }
 
-        // ---- a swing resolved off dice that were already thrown (COMBAT_LOOP.md C0) ----
 
         [Fact]
         public void Resolve_TakesTheDamageOffTheFelt_RatherThanRollingAgain()
         {
             var hero = Fixtures.Hero();
-            var rival = Fixtures.Rival();       // defense 11
+            var rival = Fixtures.Rival();
 
-            // the tray threw this: 6 + 6 counted, the leftover d6 showing 5 is the Impact die
             var roll = Thrown(rival.Defense + 1, Die.D6);
-            var engine = Engine(new ScriptedRng(1));   // any roll here would be a hidden one
+            var engine = Engine(new ScriptedRng(1));
 
             var o = engine.Resolve(hero, rival, roll, impact: 5);
             engine.Apply(o);
@@ -171,13 +160,11 @@ namespace Core.Tests
             Assert.Equal(mook.MaxVigor, o.Damage);
         }
 
-        // the felt and the sim reach the same verdict about the same numbers
         [Fact]
         public void Resolve_AndAttack_AgreeOnTheSameThrow()
         {
             var hero = Fixtures.Hero();
 
-            // 4, 4, 4 with the impact die then rolling 3 - no explosion, one call each
             var thrown = Engine(new ScriptedRng(4, 4, 4, 3)).Attack(hero, Fixtures.Rival(), Attr.Might, Skill.Blades);
             var offTheFelt = Engine(new ScriptedRng(1)).Resolve(hero, Fixtures.Rival(), thrown.Roll, impact: 3);
 
@@ -185,7 +172,6 @@ namespace Core.Tests
             Assert.Equal(thrown.Damage, offTheFelt.Damage);
         }
 
-        // a pool result standing in for one the tray produced: a total, and a leftover die
         static PoolResult Thrown(int total, Die impact) => new PoolResult(
             new[]
             {

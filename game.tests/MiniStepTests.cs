@@ -3,23 +3,8 @@ using Game.Board;
 
 namespace Game.Tests
 {
-    // The move is the milestone, so the move is what is guarded. B1 is verified by eye - it has
-    // to be, because "it should sound like a piece on a mat" is not a number - but three of its
-    // claims are machine-checkable and they are the ones that would rot silently:
-    //
-    //   IT NEVER ENDS UP BETWEEN CELLS. the curve ends AT the destination, exactly
-    //   IT NEVER SINKS THROUGH THE FELT. no phase dips below the surface it is travelling over
-    //   IT HESITATES. there is a stretch where the piece is over its destination and NOT MOVING
-    //
-    // The third is the one worth having a test for at all. A hover that quietly turns into a
-    // deceleration still looks fine in motion, reads as damping rather than deliberation, and
-    // nobody would ever catch it by watching - it is only the difference between a piece being
-    // placed and a piece coasting to a stop.
-    //
-    // Godot-free in the sense game.tests means: Vector3 is a managed struct.
     public class MiniStepTests
     {
-        // a square's width apart, the ordinary case
         static MiniStep NextDoor() =>
             new MiniStep(new Vector3(-0.03f, 0f, 0.09f), new Vector3(0.03f, 0f, 0.09f));
 
@@ -28,7 +13,6 @@ namespace Game.Tests
 
         static Vector3 Flat(Vector3 v) => new Vector3(v.X, 0f, v.Z);
 
-        // ---- the ends ----
 
         [Fact]
         public void ItStartsWhereThePieceIs()
@@ -39,8 +23,7 @@ namespace Game.Tests
             Assert.Equal(step.From, step.At(-1f));
         }
 
-        // the whole of "it never ends up between cells": the destination is RETURNED, not
-        // integrated toward, so a long session cannot drift a piece off its square
+        // the destination is returned, not integrated toward, so a long session can't drift a piece off its square
         [Fact]
         public void ItEndsExactlyOnTheSquare()
         {
@@ -59,7 +42,6 @@ namespace Game.Tests
             Assert.True(step.IsDone(step.Duration));
         }
 
-        // ---- how long it takes ----
 
         [Fact]
         public void FurtherTakesLonger()
@@ -77,7 +59,6 @@ namespace Game.Tests
             Assert.Equal(MiniStep.MaxSlideSeconds, absurd.SlideSeconds, 4);
         }
 
-        // the lift is choreography and must not be charged for as distance
         [Fact]
         public void HeightDoesNotMakeAMoveTakeLonger()
         {
@@ -98,7 +79,6 @@ namespace Game.Tests
             Assert.Equal(step.HoverEnds + MiniStep.SetDownSeconds, step.Duration, 5);
         }
 
-        // ---- what it does on the way ----
 
         [Fact]
         public void ItLeavesTheSquareOnlyAfterItHasLifted()
@@ -109,8 +89,6 @@ namespace Game.Tests
                 Assert.Equal(Flat(step.From), Flat(step.At(t)));
         }
 
-        // it commits over the destination and THEN comes down - the whole reason the hesitation
-        // reads as deliberation rather than as a slow landing
         [Fact]
         public void ItIsOverItsDestinationForTheWholeHoverAndSetDown()
         {
@@ -120,7 +98,6 @@ namespace Game.Tests
                 Assert.Equal(Flat(step.To), Flat(step.At(t)));
         }
 
-        // THE HESITATION. a stretch where the piece is neither travelling nor descending
         [Fact]
         public void ItHolds_Still_BeforeItCommits()
         {
@@ -131,7 +108,6 @@ namespace Game.Tests
             Vector3 first = step.At(held + 0.001f);
             Vector3 last = step.At(step.HoverEnds - 0.001f);
 
-            // long enough to read as a pause rather than as a frame of stillness
             Assert.True(step.HoverEnds - held > 0.08f);
             Assert.Equal(first.Y, last.Y, 5);
             Assert.Equal(Flat(first), Flat(last));
@@ -156,8 +132,6 @@ namespace Game.Tests
             Assert.InRange(when, step.SlideEnds, step.HoverEnds);
         }
 
-        // it slides, it does not fly: THE_BOARD.md B1 says the piece slides across the felt, and
-        // a piece carried a centimetre up is a hand moving a piece through the air
         [Fact]
         public void ItSlidesLowAcrossTheFelt()
         {
@@ -178,8 +152,6 @@ namespace Game.Tests
                 Assert.True(step.At(t).Y >= 0f, $"below the felt at {t}s");
         }
 
-        // a jump in the curve is a piece teleporting for one frame, which is exactly the thing
-        // this whole class exists to prevent
         [Fact]
         public void ThePathIsContinuous()
         {
@@ -191,7 +163,6 @@ namespace Game.Tests
             {
                 Vector3 now = step.At(t);
 
-                // 4 ms of the fastest phase, with room to spare - the slide clamps at 0.9 s
                 Assert.True((now - previous).Length() < 0.01f, $"jumped at {t}s");
                 previous = now;
             }
@@ -213,9 +184,7 @@ namespace Game.Tests
             }
         }
 
-        // ---- a route round a wall (B3) ----
 
-        // the way round a pillar: out, along, and back in. what a hand does with a piece
         static Vector3[] RoundAWall() => new[]
         {
             new Vector3(-0.15f, 0f, 0.09f),
@@ -225,8 +194,6 @@ namespace Game.Tests
             new Vector3(0.09f, 0f, 0.03f),
         };
 
-        // the distance from a point to the route itself - zero if the piece is on the path it was
-        // given, and the whole of "it walks round the wall rather than through it"
         static float OffTheRoute(Vector3 point, Vector3[] through)
         {
             float nearest = float.MaxValue;
@@ -258,9 +225,7 @@ namespace Game.Tests
             Assert.Equal(5, step.Waypoints);
         }
 
-        // THE POINT OF THE WHOLE THING. a route that eased between its two ends would cut the
-        // corner and walk the piece straight through the wall it was routed around, and would look
-        // perfectly smooth doing it
+        // easing between the two ends would cut the corner and walk the piece through the wall it routed around
         [Fact]
         public void ThePieceStaysOnTheRoute()
         {
@@ -287,8 +252,6 @@ namespace Game.Tests
             Assert.Equal(through.Length, reached);
         }
 
-        // the long way round takes longer than the short way there - the duration is the path's,
-        // not the destination's
         [Fact]
         public void TheLongWayRoundTakesLonger()
         {
@@ -300,7 +263,6 @@ namespace Game.Tests
             Assert.True(round.SlideSeconds > straight.SlideSeconds);
         }
 
-        // one lift, one hesitation, one set-down for the whole route - not ceremony at every square
         [Fact]
         public void AWholeRouteIsSetDownOnce()
         {
@@ -331,14 +293,12 @@ namespace Game.Tests
             Assert.Equal(one.From, one.At(one.Duration));
         }
 
-        // ---- a refusal (B3) ----
 
         static readonly Vector3 Here = new Vector3(-0.03f, 0f, 0.09f);
 
         static readonly Vector3 Denied = new Vector3(0.15f, 0f, -0.21f);
 
-        // the invariant that matters, and it holds by construction rather than by care: a refusal
-        // is a path that ends where it began
+        // a refusal is a path that ends where it began
         [Fact]
         public void ARefusedMoveEndsExactlyWhereItStarted()
         {
@@ -360,12 +320,10 @@ namespace Game.Tests
                 if (Flat(step.At(t) - Here).Length() > Flat(furthest - Here).Length())
                     furthest = step.At(t);
 
-            // it went toward the refused square, and only a fraction of the way
             Assert.True(Flat(furthest - Here).Normalized().Dot(Flat(Denied - Here).Normalized()) > 0.99f);
             Assert.Equal(MiniStep.RefusalLean, Flat(furthest - Here).Length(), 3);
         }
 
-        // unmistakably a move being started, unmistakably not one being made
         [Fact]
         public void ARefusalNeverReachesTheNextSquare()
         {
@@ -404,7 +362,6 @@ namespace Game.Tests
             }
         }
 
-        // ---- the click ----
 
         [Fact]
         public void ItIsSetDownOnce()
@@ -423,9 +380,6 @@ namespace Game.Tests
             Assert.Equal(1, clicks);
         }
 
-        // a frame that steps clean over the end of the move still has to make a noise - a piece
-        // that lands silently every twentieth move is worse than one that never makes a sound,
-        // because the second one gets fixed
         [Fact]
         public void ALongFrameDoesNotSwallowTheClick()
         {

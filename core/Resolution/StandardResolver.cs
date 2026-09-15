@@ -5,10 +5,6 @@ using Core.Dice;
 
 namespace Core.Resolution
 {
-    // the dice system as written, and the default IResolver
-    // throw the pool, sum the best two, the largest leftover die is Impact
-    // ties break toward the player - equal rolls count the SMALLER die
-    // which leaves the larger one free to be Impact
     public sealed class StandardResolver : IResolver
     {
         readonly IRng _rng;
@@ -22,10 +18,7 @@ namespace Core.Resolution
             if (pool.Count == 0)
                 throw new InvalidOperationException("Cannot resolve an empty pool.");
 
-            // ROLL HERE, READ THERE. The dice are thrown in pool order - which is what makes a
-            // seeded run repeat - and what the throw MEANS is `PoolResult.From`, so the arithmetic
-            // has one implementation and save/load reads a throw the same way the table does
-            // (SEAMS.md section 9)
+            // thrown in pool order so a seed repeats; PoolResult.From reads the result, the same as save/load
             var thrown = pool.Dice
                 .Select(d => (d.LabelKey, d.Die, Value: _rng.Roll(d.Die.Sides())))
                 .ToList();
@@ -33,9 +26,6 @@ namespace Core.Resolution
             return PoolResult.From(thrown);
         }
 
-        // a maximum roll rolls again and adds
-        // simulated as a pacing lever, not a power one
-        // enemies explode too, so win rates barely move but fights shorten ~15%
         public int RollImpact(Die impact, bool explodes = true)
         {
             int sides = impact.Sides();

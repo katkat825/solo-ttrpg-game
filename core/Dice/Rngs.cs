@@ -3,41 +3,16 @@ using System.Collections.Generic;
 
 namespace Core.Dice
 {
-    // the three implementations of IRng
-    // SeededRng is what the game runs on - a seed replays a session exactly
-    // ScriptedRng feeds tests a known sequence
-    // RecordingRng wraps either and keeps the raw rolls
 
-    // ---------------------------------------------------------------------------------------
-    // SeededRng owns its generator outright, and owning it is the whole point.
-    //
-    // It used to wrap System.Random. The sequence System.Random gives a seed is documented as
-    // an implementation detail, not a contract, and it has already changed once - between .NET
-    // Framework and .NET Core. The project's horizon is a decade of hand-editable saves and
-    // seeded replay (ARCHITECTURE.md 8), so that is a quiet, years-out failure: a save stores a
-    // seed, a future .NET upgrade changes the algorithm, every replay diverges, and no test
-    // fails on the day it breaks because nothing in this repo changed.
-    //
-    // So the stream is defined here instead. SplitMix64 expands the seed into 256 bits of
-    // state; xoshiro256** produces the stream. Both are small, well studied, and public
-    // domain. Every operation is ulong arithmetic, which C# defines exactly - no floats, no
-    // platform width, no culture - so the sequence is identical on every machine and every
-    // runtime version, forever.
-    //
-    // THIS IS NOW A FIXED ARTIFACT. SeededRngTests.GoldenSequence_IsPinnedForever holds the
-    // first rolls off three seeds. Changing anything below breaks it loudly, which is the
-    // durable-replay promise made mechanical - the same move PoolOdds made for the Snag rate.
-    // If that test fails, the generator moved and every stored seed just changed meaning.
-    // ---------------------------------------------------------------------------------------
+    // owns its own generator so a seed replays identically across .NET versions - System.Random's stream is not a contract
+    // changing anything below breaks the pinned golden-sequence test, which is the point
     public sealed class SeededRng : IRng
     {
         ulong _s0, _s1, _s2, _s3;
 
         public SeededRng(int seed)
         {
-            // seeding xoshiro from a small integer directly leaves nearby seeds correlated for
-            // their first outputs - seeds 1 and 2 would open with visibly similar rolls.
-            // SplitMix64 is the author's prescribed fix: one counter in, four scrambled words out
+            // SplitMix64 scrambles the seed first, so nearby seeds don't open with similar rolls
             ulong x = unchecked((ulong)seed);
 
             _s0 = SplitMix64(ref x);
@@ -45,13 +20,10 @@ namespace Core.Dice
             _s2 = SplitMix64(ref x);
             _s3 = SplitMix64(ref x);
 
-            // all-zero is xoshiro's one fixed point and would emit zeros forever
-            // four consecutive SplitMix64 draws cannot actually produce it, but the generator
-            // should not rest on that being true
+            // all-zero is xoshiro's fixed point - four SplitMix64 draws can't hit it, but guard anyway
             if ((_s0 | _s1 | _s2 | _s3) == 0) _s3 = 1;
         }
 
-        // inclusive 1..sides, uniform, no modulo bias
         public int Roll(int sides)
         {
             if (sides < 1)
@@ -61,19 +33,7 @@ namespace Core.Dice
             return (int)(Bounded((ulong)sides) + 1);
         }
 
-        // Lemire's multiply-shift - a uniform value in [0, n) taking one draw almost always.
-        //
-        // The obvious `% n` is wrong here and wrong in a way this project is unusually exposed
-        // to. 2^64 is not divisible by 6, 10, 12 or 20, so the leftover values crowd the low
-        // faces - a die that rolls slightly low, forever. That is precisely the skew FaceTally
-        // and check-fairness.ps1 exist to hunt, so a biased mapping would poison the instrument
-        // as well as the dice, and every table in SIMULATION.md is driven by the mean of a die.
-        //
-        // Multiply the draw by n and take the high word: that partitions 2^64 into n buckets.
-        // The buckets differ in size by at most one, and the low word says which draws fall in
-        // the ragged first 2^64 mod n products. Reject those and redraw, and the buckets are
-        // exactly equal. The rejection rate is under n / 2^64 - it has never once fired for a
-        // d20 and never will, but it is what makes the mapping exact rather than merely close
+        // plain % n would crowd the low faces - the exact skew FaceTally hunts
         ulong Bounded(ulong n)
         {
             ulong high = Math.BigMul(NextUlong(), n, out ulong low);
@@ -89,7 +49,6 @@ namespace Core.Dice
             return high;
         }
 
-        // xoshiro256** - period 2^256 - 1, passes BigCrush, five lines of state update
         ulong NextUlong()
         {
             unchecked
@@ -110,7 +69,6 @@ namespace Core.Dice
 
         static ulong Rotl(ulong x, int k) => (x << k) | (x >> (64 - k));
 
-        // SplitMix64 - a counter run through a fixed-point-free mixer, used only for seeding
         static ulong SplitMix64(ref ulong x)
         {
             unchecked

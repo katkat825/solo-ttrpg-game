@@ -2,10 +2,7 @@ using Core.Dice;
 
 namespace Core.Resolution
 {
-    // the one rule, behind a seam
-    // every action resolves through here
-    // so it can be wrapped, swapped or faked without touching a caller
-    // the resolver owns its RNG, so a seeded one replays a session identically
+    // the one resolution seam - it owns its RNG, so a seed replays identically
     public interface IResolver
     {
         PoolResult Resolve(Pool pool);

@@ -5,33 +5,24 @@ using Game.Audio;
 
 namespace Game.Dice
 {
-    // one physical die - weight, tumble, a shape, and a face that can be read when it settles
-    // named DieBody rather than Die because Core.Dice.Die is the enum for die SIZE
-    // owns throw impulses, rest detection, and which collisions were hard enough to be worth hearing
-    // owns no opinion about a bad throw (IDieRecovery), about noise (DieAudio), or about meaning (core/)
-    // deliberately not a [Tool] script - building in the editor would bake a stale mesh and mass into die.tscn
+    // named DieBody rather than Die because Core.Dice.Die is the die-size enum
+    // deliberately not a [Tool] script, or the editor would bake a stale mesh and mass into die.tscn
     public partial class DieBody : RigidBody3D
     {
         [Signal] public delegate void SettledEventHandler(int value);
 
-        // one signal per recovery action, because a listener counting "how often was a die cocked"
-        // and a listener counting "how often did we re-throw it" are asking different questions
-        // these carried one signal and two different counters until 2026-08-20, and every consumer
-        // that added them up got a number roughly 3x the truth - see SEAMS.md
+        // one signal per recovery action: a merged signal once let consumers add the counters and overcount ~3x
         [Signal] public delegate void NudgedEventHandler(float alignment, int attempt);
 
         [Signal] public delegate void CockedEventHandler(float alignment, int attempt);
 
         [Signal] public delegate void LeftTrayEventHandler(int attempt);
 
-        // every collision hard enough to be worth hearing - see Listen
-        // a plain C# event, not a [Signal], because DieHit is a struct and signals carry only Variants
-        // it also doesn't survive Duplicate(), which is right - the fairness sweep clones dice and wants none of it
+        // a plain C# event, not a [Signal]: DieHit is a struct and signals carry only Variants
         public event Action<DieHit> Struck;
 
         Die _size = Die.D6;
 
-        // everything about the die's body is rebuilt from this, in the inspector or at runtime
         [Export] public Die Size
         {
             get => _size;
@@ -42,68 +33,46 @@ namespace Game.Dice
             }
         }
 
-        // the tuning below is all [Export] - throw feel is a question you answer by playing with it
-
-        // launch speed, metres per second, before the drop adds to it
         [Export] public float ThrowSpeedMin { get; set; } = 0.8f;
         [Export] public float ThrowSpeedMax { get; set; } = 1.3f;
 
-        // upward share of the launch direction - higher arcs hang longer
         [Export] public float LiftMin { get; set; } = 0.10f;
         [Export] public float LiftMax { get; set; } = 0.35f;
 
-        // sideways spread, as a share of forward - kept low
-        // a wide spread makes three dice converge and collide mid-flight, the main cause of cocked landings
+        // kept low: a wide spread makes three dice converge and collide mid-flight, the main cause of cocked landings
         [Export] public float Spread { get; set; } = 0.12f;
 
         [Export] public float SpinMin { get; set; } = 12f;
         [Export] public float SpinMax { get; set; } = 30f;
 
-        // below these for RestHoldSeconds counts as settled
         [Export] public float RestLinearSpeed { get; set; } = 0.02f;
         [Export] public float RestAngularSpeed { get; set; } = 0.15f;
         [Export] public float RestHoldSeconds { get; set; } = 0.2f;
 
-        // how squarely the resting face must point at the felt, as a dot product
-        // 1.0 is dead flat, 0.9 allows about 26 degrees of tilt
-        // a FLOOR, not the figure used - some shapes need tighter and get it, see RequiredAlignment
+        // how squarely the resting face must point at the felt, as a dot product (1.0 flat, 0.9 ~26deg)
+        // a floor, not the value used: some shapes need stricter, see RequiredAlignment
         [Export] public float CockedAlignment { get; set; } = 0.9f;
 
         // give-up count for cocked re-throws, so a wedged die can't loop forever
         [Export] public int MaxCockedRethrows { get; set; } = 3;
 
-        // a cocked die is nudged before it is re-thrown - it almost always drops flat,
-        // and doesn't yank the die across the tray the way a re-throw does
         [Export] public float NudgeSpeed { get; set; } = 0.45f;
 
         [Export] public int MaxNudges { get; set; } = 2;
 
-        // the frame this die's bounds are measured in - the tray it was thrown into
-        // null means world space, which is die.tscn opened on its own: no tray, nothing to leave,
-        // and the two numbers below measured from the world origin exactly as they were before F2
-        //
-        // deliberately a Node3D and not the tray itself: Game.Dice must not reach into Game.Tray,
-        // and a frame is all the die needs. deliberately not [Export] either - a node reference
-        // exported on a scene that is instanced three times is a NodePath waiting to break
+        // null means world space: die.tscn opened on its own, with nothing to leave
+        // not [Export]: a node reference exported on a scene instanced three times is a NodePath waiting to break
         public Node3D TraySpace { get; set; }
 
-        // out of the tray: below this Y, or beyond this radius from the origin - both measured in
-        // TraySpace, so the tray can stand anywhere. they were world coordinates until F2, which
-        // is what made a tray at the world origin the only tray that worked (SEAMS.md 8)
-        //
-        // not [Export] any more, and that is the point: how big the tray is has never been a
-        // property of a die. DiceTray derives both from the tray it measured and hands them over
-        // - see Game.Tray.TrayBounds. What is left here is what a die uses when nothing has told
-        // it otherwise, and it is the shipped tray's own figures
+        // out of the tray: below this Y or beyond this radius, both measured in TraySpace so the tray can stand anywhere
+        // defaults for a die nothing has told otherwise; DiceTray measures the real tray and hands these over
         public float LostBelowY { get; set; } = -0.2f;
 
         public float LostRadius { get; set; } = 0.6f;
 
-        // re-throws for an escaped die, before the default policy takes whatever is showing
         [Export] public int MaxLostRethrows { get; set; } = 3;
 
-        // dice are given a material, not a mass - a bigger, rounder solid comes out heavier,
-        // as a real set does. 400 reproduces the 0.05 kg cube M0 was tuned against
+        // dice get a density, not a mass, so a bigger solid comes out heavier like a real set
         // only collisions feel it: speed and spin are set directly, so a throw ignores shape
         [Export] public float Density { get; set; } = 400f;
 
@@ -111,7 +80,6 @@ namespace Game.Dice
 
         bool _showNumbers = true;
 
-        // off for the fairness sweep, which builds fifty dice for a run that has no screen
         [Export] public bool ShowNumbers
         {
             get => _showNumbers;
@@ -122,13 +90,11 @@ namespace Game.Dice
             }
         }
 
-        // a line per settle and per cocked re-throw - on in the tray, off for the sweep
-        // the give-up case stays loud either way; if that one is frequent, that IS the finding
+        // the give-up case logs regardless; if that one is frequent, that is the finding
         [Export] public bool LogSettles { get; set; } = true;
 
         bool _reportContacts = true;
 
-        // watch collisions and raise Struck - off for the sweep, same reason the numbers come off
         [Export] public bool ReportContacts
         {
             get => _reportContacts;
@@ -136,34 +102,27 @@ namespace Game.Dice
             {
                 _reportContacts = value;
 
-                // both halves switched together - clearing only the count would leave the monitor
-                // running and reporting nothing, which looks identical to a die that touches nothing
+                // set both together: ContactMonitor on with MaxContactsReported at 0 reports nothing, looking like a die that never touches anything
                 ContactMonitor = value;
                 MaxContactsReported = value ? ContactsWatched : 0;
             }
         }
 
-        // a d12 landing flat reports several points at once and they are summed into one hit,
-        // so this only has to be enough that the sum isn't clipped
+        // a d12 landing flat reports several contacts at once; enough that the summed hit isn't clipped
         const int ContactsWatched = 6;
 
-        // how hard a collision has to be to count, as the speed the die lost to it
-        // mass-independent on purpose, so a d4 and a d12 need the same real bump
-        // it has to clear gravity - the felt pushes a resting die back up 0.08 m/s a tick at 120 Hz
+        // collision threshold, as the speed the die lost to it; mass-independent so a d4 and d12 need the same bump
+        // has to clear gravity: the felt pushes a resting die back up ~0.08 m/s per tick at 120 Hz
         [Export] public float MinHitSpeed { get; set; } = 0.18f;
 
-        // shortest gap between two hits
-        // one bounce lasts several steps, and without this one collision fires four times and rips
+        // one bounce lasts several steps; without this gap one collision fires several times and rips
         [Export] public float MinHitGap { get; set; } = 0.045f;
 
-        // what to do about a throw that can't be read - substitutable without touching any physics
         public IDieRecovery Recovery { get; set; }
 
-        // derived rather than stored, so it answers before the node is ready and can never
-        // disagree with Size; the solids are immutable and cached, so asking is a lookup
+        // derived, not stored, so it answers before the node is ready and can't disagree with Size; solids are cached
         public DieSolid Solid => DieSolid.For(Size);
 
-        // CockedAlignment or the shape's own minimum, whichever is stricter
         public float RequiredAlignment => Mathf.Max(CockedAlignment, Solid.MinFlatAlignment);
 
         DieFaceTable _faces;
@@ -202,15 +161,12 @@ namespace Game.Dice
 
         public bool IsSettled => !_inFlight;
 
-        // physically still right now, unlike IsSettled, which latches when the settle was declared
-        // a re-thrown die can bump one that had already settled, and nothing re-arms its flight
-        // tracking - so IsSettled stays true while the face on top changes
-        // a caller reading several dice at once has to wait for this as well
+        // physically still now, unlike IsSettled which latches when the settle was declared
+        // a re-thrown die can bump one already settled, so IsSettled can stay true while its face changes; wait on this too
         public bool IsAtRest =>
             LinearVelocity.Length() < RestLinearSpeed && AngularVelocity.Length() < RestAngularSpeed;
 
-        // zero while a throw is in the air, so a caller that forgets to check IsSettled gets an
-        // obviously wrong number rather than a stale plausible one
+        // zero while a throw is in the air, so a caller that skips IsSettled gets an obviously wrong number, not a stale plausible one
         public int SettledValue { get; private set; }
 
         public override void _Ready()
@@ -219,16 +175,13 @@ namespace Game.Dice
 
             Recovery ??= new NudgeThenRethrow(MaxNudges, MaxCockedRethrows, MaxLostRethrows);
 
-            // re-applied rather than assumed: an [Export] setter does not run for the default value,
-            // so without this the field would say true while the physics server watched nothing
+            // re-apply: an [Export] setter never runs for the default value, so without this the physics server would watch nothing while the field says true
             ReportContacts = _reportContacts;
 
             Build();
         }
 
-        // cut the die from its solid: mesh, collision hull, numerals, face table, mass
-        // idempotent - a Size change calls it again, and so does a duplicate, which arrives
-        // carrying a copy of the numbers the original had already grown
+        // rebuild mesh, hull, numerals, face table and mass from the solid; idempotent - Size changes and duplicates call it again
         void Build()
         {
             DieSolid solid = Solid;
@@ -257,10 +210,8 @@ namespace Game.Dice
             Launch(from);
         }
 
-        // split from Throw so the cocked and escaped paths can re-throw without resetting the
-        // attempt counters that bound them
-        // energy scales the horizontal push - at zero the die drops inside the tray and cannot escape
-        // the tumble is unscaled: a gentle throw should still look like a roll, not a placement
+        // split from Throw so the cocked and escaped paths re-throw without resetting the attempt counters that bound them
+        // energy scales the horizontal push; at zero the die drops inside the tray and cannot escape
         void Launch(Transform3D from, float energy = 1f)
         {
             _lastThrowFrom = from;
@@ -292,8 +243,7 @@ namespace Game.Dice
             });
         }
 
-        // a small lift and spin in place, to topple a die resting on an edge or on a neighbour
-        // deliberately weak - enough to unseat it, not enough to move it, so one throw still looks like one
+        // a small lift and spin in place to topple a die on an edge or a neighbour, deliberately weak so one throw still looks like one
         void Nudge()
         {
             Vector3 dir = new Vector3(
@@ -307,9 +257,7 @@ namespace Game.Dice
             });
         }
 
-        // in flight from THIS instant, not from whenever the physics server next runs
-        // the kick lands in _IntegrateForces, several idle frames away in a headless run with no vsync
-        // a caller polling IsSettled in between would read the last throw's face as this one's
+        // in flight from this instant, not when the physics server next runs: the kick lands in _IntegrateForces frames later headless, and a caller polling IsSettled between would read the last throw's face
         void Queue(Kick kick)
         {
             _kick = kick;
@@ -325,8 +273,7 @@ namespace Game.Dice
 
         public override void _IntegrateForces(PhysicsDirectBodyState3D state)
         {
-            // before the kick, not after: the contacts on the state are what the last step solved,
-            // so reading them after a teleport describes a collision at an address the die has left
+            // listen before the kick: the state's contacts are what the last step solved, so reading them after a teleport describes an address the die has left
             if (_reportContacts) Listen(state);
 
             if (!_kickQueued) return;
@@ -334,9 +281,7 @@ namespace Game.Dice
 
             if (_kick.Reposition) state.Transform = _kick.Where;
 
-            // velocities set outright rather than as impulses
-            // the same thing for a cube, whose inertia is equal about every axis, but not for the rest
-            // a die's tumble should be the spin it was given, not what its inertia made of a torque
+            // set velocities outright, not as impulses: a die's tumble should be the spin it was given, not what its inertia makes of a torque
             state.LinearVelocity = _kick.Linear;
             state.AngularVelocity = _kick.Angular;
 
@@ -345,11 +290,9 @@ namespace Game.Dice
             _stillTime = 0;
         }
 
-        // turns this step's contacts into at most one Struck, or the die buzzes instead of clattering
-        // SUMMED, not per contact - a cube landing flat touches the felt at four corners in one step,
-        // and those four impulses added are what makes a flat slam bigger than a corner tap
-        // RISING EDGE - a bounce is in contact for several steps at 120 Hz, so only the onset fires
-        // MASS-INDEPENDENT - impulse over mass is the speed the collision cost the die
+        // summed, not per contact: a flat landing touches at several corners in one step, and the sum is what makes a flat slam bigger than a corner tap
+        // rising edge only: a bounce is in contact for several steps at 120 Hz, so only the onset fires
+        // mass-independent: impulse over mass is the speed the collision cost the die
         void Listen(PhysicsDirectBodyState3D state)
         {
             _sinceHit += state.Step;
@@ -362,8 +305,7 @@ namespace Game.Dice
 
             for (int i = 0; i < contacts; i++)
             {
-                // magnitudes, not vectors: a die wedged between two walls is being hit twice,
-                // and adding those as vectors would cancel them into silence
+                // sum magnitudes, not vectors: a die wedged between two walls is hit twice, and vector-adding would cancel them into silence
                 float force = state.GetContactImpulse(i).Length();
                 impulse += force;
 
@@ -389,8 +331,7 @@ namespace Game.Dice
                     impulse > 0f ? flatness / impulse : 0f,
                     againstDie,
 
-                    // the fastest-moving point rather than the centre - a die can drift at walking
-                    // pace while spinning hard, and that is a tumble, not a settle
+                    // fastest-moving point, not the centre: a die can drift slowly while spinning hard, which is a tumble not a settle
                     state.LinearVelocity.Length() + state.AngularVelocity.Length() * Solid.Circumradius,
 
                     _hits == 1));
@@ -405,8 +346,7 @@ namespace Game.Dice
 
             _flightTime += delta;
 
-            // an escaped die never comes to rest, so without this the tray waits forever for a
-            // Settled that will never arrive. roughly one throw in 2,000 gets out
+            // an escaped die never comes to rest, so without this the tray waits forever for a Settled that never arrives
             if (HasLeftTray())
             {
                 _inFlight = false;
@@ -470,8 +410,7 @@ namespace Game.Dice
                     return;
                 }
 
-                // wedged somewhere the throw can't shake it out of
-                // the nearest face is a guess, not a reading - but looping silently is worse, so say so loudly
+                // the nearest face is a guess, not a reading, but looping silently is worse, so say it loudly
                 GD.Print($"{Name}: STILL cocked at {alignment:0.000} (needs {required:0.000}) - taking {value} anyway");
             }
 
@@ -483,15 +422,11 @@ namespace Game.Dice
             EmitSignal(SignalName.Settled, value);
         }
 
-        // alignment is a dot product - 1.0 is dead flat, below RequiredAlignment means cocked
-        // not always the face on top: a d4 has a corner up there and is read from the face on the felt
-        // live, not cached - valid mid-tumble, it just won't mean much until the die stops
+        // alignment is a dot product: 1.0 flat, below RequiredAlignment is cocked
+        // not always the top face: a d4 has a corner up and is read from the face on the felt
         public (int Value, float Alignment) ReadFace() => _faces.Read(GlobalBasis);
 
-        // hand this die the tray another one is already being thrown into
-        // the fairness sweep clones its dice, and Duplicate() copies [Export]s only - the three
-        // properties above are deliberately not, so the clone would otherwise be measured against
-        // the world origin while the original was measured against the tray
+        // Duplicate() copies [Export]s only; the three properties above are not, so a cloned sweep die would measure against the world origin instead of the tray
         public void BoundLike(DieBody other)
         {
             TraySpace = other.TraySpace;
@@ -499,8 +434,7 @@ namespace Game.Dice
             LostRadius = other.LostRadius;
         }
 
-        // asked in the tray's own space, so moving the tray moves what "out" means with it
-        // a die that has left the tray is one outside the tray's extent, wherever the tray stands
+        // asked in the tray's own space, so moving the tray moves what 'out' means with it
         bool HasLeftTray()
         {
             Vector3 p = TraySpace?.ToLocal(GlobalPosition) ?? GlobalPosition;

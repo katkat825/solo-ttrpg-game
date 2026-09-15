@@ -1,8 +1,6 @@
 namespace Core.Dice
 {
-    // the only source of randomness in the game
-    // nothing in core/ may touch System.Random directly
-    // that constraint is what keeps tests deterministic and sim runs reproducible
+    // the only source of randomness in core - nothing here may touch System.Random directly
     public interface IRng
     {
         // inclusive 1..sides

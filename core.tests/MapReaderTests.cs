@@ -3,18 +3,6 @@ using Xunit;
 
 namespace Core.Tests
 {
-    // The reader is the engine/content boundary on the board, so what is guarded here is both
-    // halves of it: a good map becomes exactly the map that was drawn, and a bad one is REFUSED
-    // AND NAMED rather than half-loaded.
-    //
-    // The second half is the one worth the trouble. A map that loads with a wall missing is a room
-    // with a hole in it and nothing to tell you - the failure mode this whole class exists to make
-    // impossible, and the same one `check-locale.ps1` exists for on the other side of the project.
-    //
-    // SINCE EDGE_WALLS.md THE FORMAT IS DOUBLE RESOLUTION: 2H+1 lines of 2W+1 characters, squares
-    // on the odd/odd positions and the lines between them on the rest. That is most of what these
-    // cases are about - a glyph in the wrong kind of position is now a real and likely mistake, and
-    // every one of them gets named.
     public class MapReaderTests
     {
         static MapLayout Read(params string[] lines)
@@ -34,9 +22,6 @@ namespace Core.Tests
             return problem;
         }
 
-        // the example out of EDGE_WALLS.md, with a hero put on it: three floor squares open to each
-        // other, a shut door under the middle one, and below it floor, rock and difficult ground
-        // with walls between them
         static MapLayout Example() => Read(
             "+-+-+-+",
             "|@ . .|",
@@ -44,7 +29,6 @@ namespace Core.Tests
             "|.|#|~|",
             "+-+-+-+");
 
-        // ---- the picture in the file is the picture on the table ----
 
         [Fact]
         public void TheExtentIsHalfTheCharacters()
@@ -72,30 +56,25 @@ namespace Core.Tests
         {
             MapLayout map = Example();
 
-            // the outside of the map, all the way round
             Assert.Equal(Edge.Wall, map.At(Border.North(new Cell(0, 0))));
             Assert.Equal(Edge.Wall, map.At(Border.West(new Cell(0, 0))));
             Assert.Equal(Edge.Wall, map.At(Border.East(new Cell(2, 0))));
             Assert.Equal(Edge.Wall, map.At(Border.South(new Cell(1, 1))));
 
-            // the top row is open to itself
             Assert.Equal(Edge.None, map.At(Border.East(new Cell(0, 0))));
             Assert.Equal(Edge.None, map.At(Border.East(new Cell(1, 0))));
 
-            // and the bottom row is not
             Assert.Equal(Edge.Wall, map.At(Border.East(new Cell(0, 1))));
             Assert.Equal(Edge.Wall, map.At(Border.East(new Cell(1, 1))));
         }
 
-        // an 'x' is a door whichever way its line runs, because the POSITION already said which way
-        // it faces - which is the whole reason the format is drawn this way
         [Fact]
         public void ADoorSitsOnTheLineItWasDrawnOn()
         {
             MapLayout map = Example();
 
             Assert.Equal(Edge.Door, map.At(Border.South(new Cell(1, 0))));
-            Assert.Equal(Edge.Door, map.At(Border.North(new Cell(1, 1))));   // the same line
+            Assert.Equal(Edge.Door, map.At(Border.North(new Cell(1, 1))));
         }
 
         [Fact]
@@ -109,8 +88,7 @@ namespace Core.Tests
             Assert.Equal(Edge.Door, map.At(Border.East(new Cell(0, 0))));
         }
 
-        // the first line of the file is the far side of the table, which is what makes a map
-        // readable at a glance: you are looking at it from your seat
+        // the file's first line is the far side of the table, read from your seat
         [Fact]
         public void TheFirstLineIsTheFarSide()
         {
@@ -132,12 +110,10 @@ namespace Core.Tests
 
             Assert.Equal(new Cell(0, 0), map.Start);
 
-            // and the square under the mark is floor, so a start can never be inside a wall
             Assert.Equal(Tile.Floor, map.At(map.Start));
             Assert.True(map.IsPassable(map.Start));
         }
 
-        // ---- what is not map ----
 
         [Fact]
         public void CommentsAndBlankLinesAreNotPartOfTheGrid()
@@ -156,8 +132,7 @@ namespace Core.Tests
             Assert.Equal(1, map.Rows);
         }
 
-        // ';' rather than '#', because '#' is rock - a comment character that is also a glyph eats
-        // the first row of every map with rock in its left column
+        // comment char is ';' not '#': '#' is rock and would eat maps with rock in the left column
         [Fact]
         public void RockInColumnZeroIsRock()
         {
@@ -170,8 +145,7 @@ namespace Core.Tests
             Assert.Equal(1, map.Rows);
         }
 
-        // A SPACE IS A GLYPH NOW - it means "no wall" - so a line whose east end is open ends in
-        // one, and every editor in the world eats those. the format cannot depend on a setting
+        // a trailing space is a glyph ("no wall"); the format must not depend on editors keeping it
         [Fact]
         public void ALineCutShortByAnEditorIsPaddedWithOpenLines()
         {
@@ -194,7 +168,6 @@ namespace Core.Tests
             Assert.Equal(1, map.Rows);
         }
 
-        // ---- refusals, each naming the line the author is looking at ----
 
         [Fact]
         public void AnEvenNumberOfLinesIsRefused()
@@ -232,8 +205,6 @@ namespace Core.Tests
             Assert.Contains("line 1", problem);
         }
 
-        // the mistake the double-resolution format makes likely, and the one it is worth catching:
-        // a glyph one position out from where it belongs
         [Fact]
         public void ASquareGlyphOnALineIsRefused()
         {
@@ -260,8 +231,6 @@ namespace Core.Tests
             Assert.Contains("square", problem);
         }
 
-        // a '-' is a wall along a line between two ROWS; typed on a vertical line it is an
-        // off-by-one, and the reader knows which kind of line it is looking at
         [Fact]
         public void AWallRunningTheWrongWayIsRefused()
         {
@@ -286,7 +255,6 @@ namespace Core.Tests
             Assert.Contains("line 3", problem);
         }
 
-        // a corner may be a '+' or a space, because a map with no junction there is still a map
         [Fact]
         public void ASpaceOnACornerIsFine()
         {
@@ -349,7 +317,6 @@ namespace Core.Tests
             Assert.Contains("at least 3", Refuse("+", "|"));
         }
 
-        // ---- the legend is derived, not written twice ----
 
         [Fact]
         public void TheLegendNamesEveryGlyphThatParses()
@@ -359,12 +326,10 @@ namespace Core.Tests
             foreach (char glyph in new[] { '.', '~', '#', '|', '-', 'x', MapReader.StartGlyph, MapReader.CornerGlyph })
                 Assert.Contains(glyph.ToString(), legend);
 
-            // and says which of the two kinds of position each belongs to
             Assert.Contains("squares", legend);
             Assert.Contains("lines", legend);
         }
 
-        // ---- numbered spawns: the map says where, the encounter says who (P2) ----
 
         [Fact]
         public void NumberedSquaresAreSpawnSlots()
@@ -380,7 +345,6 @@ namespace Core.Tests
             Assert.Equal(new Cell(2, 0), map.SpawnAt(2));
         }
 
-        // the hero is slot 0 and keeps its own glyph, because every map must have one
         [Fact]
         public void TheHeroIsSlotZero()
         {
@@ -393,8 +357,6 @@ namespace Core.Tests
             Assert.DoesNotContain(MapLayout.HeroSlot, map.Spawns.Keys);
         }
 
-        // a spawn stands on floor, for the same reason the hero's start does: a spawn you can see
-        // in the picture cannot drift into a wall
         [Fact]
         public void ASpawnStandsOnFloor()
         {
@@ -429,8 +391,6 @@ namespace Core.Tests
             Assert.Null(map.SpawnAt(7));
         }
 
-        // a map is edited as it is played - a door forced, wreckage dropped - and the spawns have
-        // to survive that, because an encounter may still be placing things after the first blow
         [Fact]
         public void SpawnsSurviveTheMapBeingChanged()
         {
@@ -445,7 +405,6 @@ namespace Core.Tests
             Assert.Equal(new Cell(1, 0), after.SpawnAt(1));
         }
 
-        // and the legend says so, derived rather than written out
         [Fact]
         public void TheLegendMentionsSpawns()
         {

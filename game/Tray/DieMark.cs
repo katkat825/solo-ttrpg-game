@@ -4,11 +4,7 @@ using Game.Dice;
 
 namespace Game.Tray
 {
-    // one die's mark on the felt - a ring around it and its name written beside it
-    // no panel and no overlay: the marks lie on the table with the dice and read from the same angle
-    // the Impact die is the one that did NOT count, but it is the one picked up and thrown for damage
-    // so it is marked as the live die rather than the spare - heavier ring, ember colour, halo, slow breath
-    // draws what DieRole says and decides nothing itself
+    // the Impact die didn't count but is the one thrown again for damage, so it's marked as the live die, not the spare
     public partial class DieMark : Node3D
     {
         // followed every frame, so a bumped die takes its ring with it
@@ -22,13 +18,10 @@ namespace Game.Tray
         // injected, so this file cannot reach for TranslationServer
         public ILocalizer Text { get; set; }
 
-        // how big the tray is and where its felt sits, measured off the scene by DiceTray
-        // the felt edges used to be two hand-copied world coordinates here, which is what made a
-        // tray anywhere but the world origin put every name in the woodwork - SEAMS.md 8
+        // tray size and felt position, measured off the scene by DiceTray
         public TrayBounds Bounds { get; set; } = TrayBounds.Shipped;
 
-        // the frame Bounds is expressed in. null means the tray stands at the world origin,
-        // which is what this file assumed outright until F2
+        // the frame Bounds is expressed in; null means the tray stands at the world origin
         public Node3D TraySpace { get; set; }
 
         const float FeltLift = 0.0012f;  // clear of the felt, so the ring never fights the floor for the pixel
@@ -38,10 +31,10 @@ namespace Game.Tray
         const float CountedThickness = 0.0028f;
         const float ImpactThickness = 0.0060f;
 
-        const float HaloGap = 0.0045f;   // Impact ring to the second ring outside it
+        const float HaloGap = 0.0045f;
         const float HaloThickness = 0.0014f;
 
-        const float LabelHeight = 0.0125f;  // cap height on the felt, in metres - see TrayBounds for how wide that is
+        const float LabelHeight = 0.0125f;
 
         const float LabelGap = 0.008f;
 
@@ -49,11 +42,9 @@ namespace Game.Tray
 
         const float BreathSeconds = 2.4f;   // slow enough to read as alive, not as a blink
 
-        // far enough apart to tell at a glance on dark green felt, and neither is a "wrong answer" red
         static readonly Color CountedInk = new(0.92f, 0.84f, 0.55f);
         static readonly Color ImpactInk = new(1.00f, 0.47f, 0.13f);
 
-        // a die with no role still says what it is, quietly - never happens in a three-die pool
         static readonly Color SpareInk = new(0.42f, 0.46f, 0.44f);
 
         Label3D _label;
@@ -71,9 +62,7 @@ namespace Game.Tray
             Build();
             Retranslate();
 
-            // placed before it is ever drawn. a mark built this frame does not get a _Process
-            // until the next one, and a ring sitting at the tray's centre for a frame reads as a
-            // fourth die that is not there
+            // place it before it's ever drawn: a mark built this frame gets no _Process until next, and a ring at the tray centre reads as a fourth die
             Follow();
         }
 
@@ -88,10 +77,7 @@ namespace Game.Tray
             if (_label != null && Text != null) _label.Text = Text.Get(LabelKey);
         }
 
-        // where this die's mark stops, so anything drawn outside it - the name, a snag flash -
-        // is placed against one formula instead of against a second copy of the constants above
-        // static and pure, so a caller can ask before the mark is built and never has to guess
-        // at ordering. a die with no role draws no ring but still reserves the space one would take
+        // where the mark's outer edge lands, so a name or snag flash places against one formula, not a copy of the constants; a role of None still reserves the ring's space
         public static float OuterRadiusFor(DieSolid solid, DieRole role)
         {
             float outer = solid.Circumradius + RingGap
@@ -131,8 +117,7 @@ namespace Game.Tray
             {
                 Name = "Name",
 
-                // deliberately the key: if the locale lookup were ever skipped, the felt reads
-                // attr.might.name, which is impossible to mistake for a translation
+                // deliberately the raw key: if the lookup were ever skipped, the felt reads attr.might.name, impossible to mistake for a translation
                 Text = LabelKey,
 
                 FontSize = GlyphResolution,
@@ -143,8 +128,7 @@ namespace Game.Tray
                 DoubleSided = false,
                 AlphaCut = Label3D.AlphaCutMode.Discard,
 
-                // Godot would translate a Label3D's text itself, a second place a key becomes words
-                // with the pseudolocale on it would bracket the already bracketed string
+                // disabled: Godot would translate the Label3D itself, a second lookup that double-brackets under the pseudolocale
                 AutoTranslateMode = AutoTranslateModeEnum.Disabled,
 
                 // lying on the felt, glyph tops away from the camera, so it reads upright from the near side
@@ -155,15 +139,12 @@ namespace Game.Tray
         }
 
         // below the die, above it when below would hit the near wall, slid along when the word is long
-        // a name that has slid under the woodwork looks exactly like a die that was never marked
-        // dieAt is in the TRAY's space, and so are the edges it is clamped against - the whole
-        // comparison is inside one frame, which is what lets the tray stand anywhere
+        // dieAt and the edges are both in tray space, so the whole comparison stays in one frame and the tray can stand anywhere
         void PlaceLabel(Vector3 dieAt)
         {
             float z = dieAt.Z + _labelDrop > Bounds.FeltNearEdge ? -_labelDrop : _labelDrop;
 
-            // measured every frame rather than cached when the text was set
-            // a Label3D builds its mesh after the fact, so asking as the string changes answers about the last one
+            // measured every frame, not cached: a Label3D builds its mesh after the fact, so asking as the text changes answers about the last one
             float half = _label.GetAabb().Size.X * 0.5f;
 
             float side = Bounds.FeltSideEdge;
@@ -189,13 +170,8 @@ namespace Game.Tray
             return instance;
         }
 
-        // follow the die rather than snapshotting where it was
-        // a die knocked loose later would leave its ring behind, and a ring around empty felt lies
-        //
-        // asked in the tray's space and answered in it: Position, not GlobalPosition, because
-        // TrayMarks sits exactly on the tray's origin and holds itself there. the ring was pinned
-        // to a world Y until F2, which is what left it on the floor of the room the moment the
-        // tray stood anywhere else
+        // follow the die rather than snapshot: a die knocked loose would leave its ring behind on empty felt
+        // answered in tray space (Position, not GlobalPosition), because TrayMarks holds itself on the tray's origin
         void Follow()
         {
             Vector3 p = TraySpace?.ToLocal(Die.GlobalPosition) ?? Die.GlobalPosition;

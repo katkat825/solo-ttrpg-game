@@ -3,19 +3,11 @@ using Xunit;
 
 namespace Game.Tests
 {
-    // the contract check-fairness.ps1, check-locale.ps1 and anything wiring them into CI read:
-    // what a check says and what it exits with
-    //
-    // it was hand-rolled in DiceFairness and again in LocaleAudit until F5, with nothing holding
-    // the two copies together. these are the cases that would have caught them drifting, and the
-    // ones the next three checks (a board sweep, a combat replay, a campaign-load audit) inherit
-    // for free by deriving from HeadlessCheck
     public class CheckVerdictTests
     {
         [Fact]
         public void Passing_IsZero_AndFailing_IsOne()
         {
-            // a check that exits 0 on failure is worse than no check at all
             Assert.Equal(0, CheckVerdict.ExitCode(true));
             Assert.Equal(1, CheckVerdict.ExitCode(false));
 
@@ -30,7 +22,6 @@ namespace Game.Tests
             Assert.Equal("FAIRNESS CHECK FAILED", CheckVerdict.Line("fairness", false));
         }
 
-        // the exact lines both checks printed before F5, so the refactor is provably silent
         [Fact]
         public void TheWordingIsWhatTheTwoChecksPrintedBefore()
         {
@@ -43,7 +34,6 @@ namespace Game.Tests
         [Fact]
         public void DetailIsAppendedToAFailureOnly()
         {
-            // "passed with 0 problems" is noise
             Assert.Equal("locale check passed", CheckVerdict.Line("locale", true, "with 0 problems"));
 
             Assert.Equal("LOCALE CHECK FAILED with 0 problems",

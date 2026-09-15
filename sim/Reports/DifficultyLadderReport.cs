@@ -4,9 +4,7 @@ using Core.Resolution;
 
 namespace Sim
 {
-    // chance to beat each difficulty, per pool
-    // the ladder these figures are checked against was verified by exact enumeration
-    // so a drift of more than a few tenths of a percent means the resolver has a bug
+    // figures verified by exact enumeration; a drift past a few tenths of a percent means a resolver bug
     static class DifficultyLadderReport
     {
         static readonly int[] Dcs =

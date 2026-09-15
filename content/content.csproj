@@ -14,23 +14,6 @@
     <ProjectReference Include="../core/core.csproj" />
   </ItemGroup>
 
-  <!--
-    THE WORLD, READ OFF A DISK. core/ is the rules; this is everything the rules are pointed at.
-
-    It must NEVER reference Godot, for the same reason core/ must not: a campaign folder is a
-    folder, and the thing that reads one should be testable headless, runnable from the sim, and
-    still here if the engine ever changes. It uses System.IO deliberately - a campaign lives
-    OUTSIDE the .pck (Steam drops subscribed items in a directory of its own), so it is an
-    ordinary file on an ordinary disk and Godot's FileAccess would be the wrong tool.
-
-    net8.0 because game/ references it and Godot 4.7 targets net8.0.
-
-    WHY core/ IS NOT SPLIT TO MAKE THIS POSSIBLE. CONVENTIONS.md's split trigger for pulling
-    `localization/` out is "content/ needs Localization without needing Combat". That turned out
-    not to be the shape of it: reading a statblock means building an `Actor`, which is
-    `Characters`, which sits above `Localization` and below `Combat` - so splitting would move the
-    line and save nothing. One project with clean namespaces is still the right answer, and the
-    trigger can be re-read when something appears that genuinely needs half of core.
-  -->
+  <!-- campaign content read off disk; never references Godot, so it stays testable headless and runnable from the sim -->
 
 </Project>

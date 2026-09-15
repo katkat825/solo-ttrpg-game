@@ -5,25 +5,15 @@ using Xunit;
 
 namespace Core.Tests
 {
-    // the grid is extent plus occupancy and nothing else, so what has to hold is that the two
-    // halves never disagree: a piece is in exactly one square, a square holds at most one piece,
-    // and every refusal leaves the board exactly as it was.
-    //
-    // this is where core/ earns out on the board. "the mini never ends up between cells or off
-    // the board" is B1's verify line and it is checked by eye there; here it is checked by
-    // machine, which is the only way that claim survives B3's pathfinding
     public class GridTests
     {
-        // a piece is anything the view cares to put on a square - the grid only ever compares
-        // them by identity
         sealed class Piece
         {
             public readonly string Name;
 
             public Piece(string name) => Name = name;
 
-            // deliberately wrong-headed: two pieces with the same name claim to be equal, which
-            // is exactly the trap ReferenceEqualityComparer exists to avoid
+            // two same-named pieces claim equality: the trap referenceequalitycomparer must avoid
             public override bool Equals(object obj) => obj is Piece other && other.Name == Name;
 
             public override int GetHashCode() => Name.GetHashCode();
@@ -31,7 +21,6 @@ namespace Core.Tests
 
         static Grid<Piece> Board(int columns = 8, int rows = 8) => new Grid<Piece>(columns, rows);
 
-        // ---- extent ----
 
         [Fact]
         public void Extent_IsWhatItWasBuiltWith()
@@ -51,8 +40,8 @@ namespace Core.Tests
             Assert.True(grid.Contains(new Cell(0, 0)));
             Assert.True(grid.Contains(new Cell(7, 4)));
 
-            Assert.False(grid.Contains(new Cell(8, 4)));   // one past the last column
-            Assert.False(grid.Contains(new Cell(7, 5)));   // one past the last row
+            Assert.False(grid.Contains(new Cell(8, 4)));
+            Assert.False(grid.Contains(new Cell(7, 5)));
             Assert.False(grid.Contains(new Cell(-1, 0)));
             Assert.False(grid.Contains(new Cell(0, -1)));
         }
@@ -82,7 +71,6 @@ namespace Core.Tests
             Assert.False(grid.Place(new Piece("mini"), new Cell(0, 0)));
         }
 
-        // ---- occupancy ----
 
         [Fact]
         public void APlacedPiece_IsOnItsSquareAndNowhereElse()
@@ -151,7 +139,6 @@ namespace Core.Tests
             Assert.Single(grid.Cells, grid.IsOccupied);
         }
 
-        // ---- refusals, and that they leave the board alone ----
 
         [Fact]
         public void OffTheBoard_IsRefused()
@@ -164,7 +151,6 @@ namespace Core.Tests
             Assert.False(grid.Place(mini, new Cell(8, 0)));
             Assert.False(grid.Move(mini, new Cell(-1, 0)));
 
-            // still exactly where it was
             Assert.Equal(new Cell(3, 4), grid.CellOf(mini));
             Assert.Single(grid.Cells, grid.IsOccupied);
         }
@@ -209,7 +195,6 @@ namespace Core.Tests
             Assert.False(grid.Move(stranger, new Cell(1, 1)));
             Assert.False(grid.IsOccupied(new Cell(1, 1)));
 
-            // Place is how a piece arrives, and it works where Move would not
             Assert.True(grid.Place(stranger, new Cell(1, 1)));
         }
 
@@ -225,10 +210,7 @@ namespace Core.Tests
             Assert.False(grid.IsOccupied(new Cell(1, 1)));
         }
 
-        // ---- identity ----
 
-        // the Piece above claims two same-named pieces are equal. the board must not believe it:
-        // a grid keyed on Equals would report the second mini standing where the first one is
         [Fact]
         public void TwoPiecesThatCallThemselvesEqual_AreStillTwoPieces()
         {
@@ -245,7 +227,6 @@ namespace Core.Tests
             Assert.Same(second, grid.At(new Cell(4, 4)));
         }
 
-        // ---- leaving ----
 
         [Fact]
         public void RemovingAPiece_FreesItsSquare()
@@ -259,7 +240,7 @@ namespace Core.Tests
             Assert.False(grid.IsOccupied(new Cell(3, 3)));
             Assert.Null(grid.CellOf(mini));
 
-            Assert.False(grid.Remove(mini));   // and it stays gone
+            Assert.False(grid.Remove(mini));
         }
     }
 }

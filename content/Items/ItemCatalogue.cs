@@ -7,18 +7,6 @@ using Core.Characters;
 
 namespace Content.Items
 {
-    // EVERY PIECE OF GEAR A CAMPAIGN SHIPS, AND THE ENGINE'S OWN (CONTENT_PIPELINE.md P1).
-    //
-    // The same shape as `JsonArchetypeSource`: a folder of JSON files, one item each, loaded whole,
-    // with every problem reported and nothing thrown. A folder diffs and reviews per item, and an
-    // author adding a sword should not open the file that also has the plate mail in it.
-    //
-    // IT IS NOT AN `IArchetypeSource`, because there is no seam for gear to sit behind - nothing in
-    // `core/` looks gear up by id. `Actor` holds a `Gear` it was handed, and who hands it one is the
-    // caller's business: a statblock inlines its own (`"gear": { ... }`), and a campaign's
-    // `items/` folder is where the ones that get picked up and swapped live. So this is a
-    // catalogue and not a source, and the day something in the rules needs to resolve an id there
-    // is an obvious interface to add.
     public sealed class ItemCatalogue
     {
         public const string Extension = ".json";
@@ -33,12 +21,21 @@ namespace Content.Items
 
         public bool Has(string id) => id != null && _items.ContainsKey(id);
 
-        // null rather than an exception: "the campaign that had that sword is not installed" is an
-        // ordinary thing for a save to run into (P6), and the caller shows the hero empty-handed
+        // null rather than throw; a save may name gear from a campaign nobody installed
         public Gear Of(string id) =>
             id != null && _items.TryGetValue(id, out Gear gear) ? gear : null;
 
-        // ---- reading a folder ----
+
+        public static ItemCatalogue Of(IEnumerable<Gear> gear)
+        {
+            var catalogue = new ItemCatalogue();
+
+            foreach (Gear one in gear ?? Array.Empty<Gear>())
+                if (one?.Id != null) catalogue._items[one.Id] = one;
+
+            return catalogue;
+        }
+
 
         public static ItemCatalogue Read(string folder)
         {
@@ -87,9 +84,7 @@ namespace Content.Items
             _items[gear.Id] = gear;
         }
 
-        // ANOTHER CATALOGUE'S ITEMS, FOLDED IN. Gear ids are a shared namespace (see ItemReader), so
-        // two campaigns that both ship a `torch` are describing the same word - and the first one
-        // loaded keeps it, said out loud rather than decided by enumeration order
+        // shared namespace; the first-loaded torch wins where two catalogues have the id
         public IReadOnlyList<string> Absorb(ItemCatalogue other)
         {
             var taken = new List<string>();
@@ -112,7 +107,6 @@ namespace Content.Items
             Directory.EnumerateFiles(folder, "*" + Extension, SearchOption.TopDirectoryOnly)
                      .OrderBy(Path.GetFileName, StringComparer.Ordinal);
 
-        // DEVELOPER ONLY - not localized, never reaches a player
         public override string ToString() =>
             $"{_items.Count} items" + (_problems.Count > 0 ? $", {_problems.Count} problems" : "");
     }

@@ -17,7 +17,7 @@ Core.Combat        the fight loop, targeting, the observer seam
 ```
 
 The four at the bottom don't know about each other either. `Core.Space` is the newest of them
-(B0–B3) and the only one nothing above it uses yet — the board, as geometry:
+and the only one nothing above it uses yet — the board, as geometry:
 
 | | |
 |---|---|
@@ -31,14 +31,13 @@ The four at the bottom don't know about each other either. `Core.Space` is the n
 | `Route` | A* over the map. diagonals count as one square, and a corner is open if there is a way round it |
 | `Sight` | is the line between two squares clear. symmetric by construction, and it agrees with `Route` about corners |
 
-`game/Board` draws all of it; `COMBAT_LOOP.md` decides how much of it the dice care about. The
+`game/Board` draws all of it. The
 pathfinding and the line of sight are exactly the fiddly geometry that is miserable to check by
 eye and trivial to check with a test — `RouteTests` checks every route on a map against a flood
 fill that knows nothing about heuristics, and `SightTests` checks symmetry on all 784 pairs of
 squares in a room rather than on three examples.
 
-**The wall model was reworked in `EDGE_WALLS.md`** after the board was built once with walls as
-cells: a wall is a feature of the line between two squares, and the squares on both sides of it are
+**The wall model.** A wall is a feature of the line between two squares, and the squares on both sides of it are
 ordinary floor. That is what a wall is on a wet-erase battle map, and a one-square-thick wall drawn
 the old way read as hollow because it was.
 
@@ -90,7 +89,7 @@ An actor's attribute dice are a base plus an ordered list of `TraitModifier`s, e
 current dice, which is the invariant that keeps applying an effect and clearing one from computing
 the same value two different ways.
 
-Three properties, and they are the reason it came off `Actor` in F3 rather than after classes and
+Three properties, and they are the reason it came off `Actor` early rather than after classes and
 items landed on it:
 
 - **Order is irrelevant.** Steps are summed and the die moves along the ladder once. A step up
@@ -100,7 +99,7 @@ items landed on it:
   and "three stacks" become indistinguishable and nobody can tell the rule from a bug.
 - **Provenance is kept.** `RemoveAllFrom(source)` takes the ring off without disturbing the rage.
 
-`CORE_RULES.md` §9 "Saturation" is the rules text this implements, including the one place it feeds
+This implements the saturation rule, including the one place it feeds
 back into combat: a Condition pressing on a die the ladder refuses to move is one the actor cannot
 absorb, and `Actor.IsOverwhelmed` makes it `IsDown`.
 

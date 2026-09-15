@@ -4,10 +4,6 @@ using Godot;
 
 namespace Game.Dice
 {
-    // turns a DieSolid into the three things Godot needs to show a die
-    // a mesh to draw, a shape to collide with, and the numerals painted on the faces
-    // everything here is a pure function of the solid
-    // so no die is ever assembled by hand - one die.tscn covers all five sizes
     public static class DieParts
     {
         const float Lift = 0.0004f;      // how far the numerals float off the face
@@ -17,9 +13,7 @@ namespace Game.Dice
         public const string NumbersNode = "Numbers";
 
         // flat-shaded - each face keeps its own corners, or the edges round off in the lighting
-        // wound clockwise seen from outside, which is Godot's front-facing, so the solid's rims
-        // are walked backwards here
-        // get it wrong and the die renders inside out, visible only as the faces vanishing
+        // wound clockwise from outside (godot front-facing), so the rims are walked backwards here, or the die renders inside out
         public static ArrayMesh BuildMesh(DieSolid solid)
         {
             var vertices = new List<Vector3>();
@@ -49,24 +43,19 @@ namespace Game.Dice
             return mesh;
         }
 
-        // a convex hull, never a trimesh - trimesh on a moving body is slow and lets fast bodies through
-        // a hull is exact for a convex solid anyway
+        // convex hull, never a trimesh: trimesh on a moving body is slow and lets fast bodies through
         public static ConvexPolygonShape3D BuildHull(DieSolid solid) =>
             new() { Points = solid.Vertices };
 
-        // a 6 and a 9 are the same glyph turned round, and a die gives no other clue
-        // one mark on one of the pair separates them, and keeps the mark meaning "six"
-        // add 9 here for the more usual look; the d4 has neither
+        // 6 and 9 are the same glyph turned round; underline the 6 to tell them apart
         static readonly int[] Underlined = { 6 };
 
-        // underline geometry in multiples of the glyph's em, measured rather than guessed
-        // at font size 64 the baseline sits 0.39 em below the label's middle, a digit is 0.58 em wide
+        // underline geometry in ems of the glyph, measured not guessed
         const float UnderlineDrop = 0.47f;
         const float UnderlineWidth = 0.62f;
         const float UnderlineThickness = 0.07f;
 
-        // one Label3D per face - three per face on the d4, which is numbered at its corners
-        // the numerals and the face table come off the same solid, so they cannot disagree
+        // one Label3D per face; three per face on the d4, which is numbered at its corners
         public static Node3D BuildNumbers(DieSolid solid, Color ink)
         {
             var root = new Node3D { Name = NumbersNode };
@@ -98,8 +87,7 @@ namespace Game.Dice
 
                 if (Array.IndexOf(Underlined, numeral.Value) < 0) continue;
 
-                // a child of the label, so it inherits the numeral's plane and its offsets stay in glyph units
-                // coplanar with the text but never on top of it
+                // a child of the label so it inherits the numeral's plane and its offsets stay in glyph units
                 label.AddChild(new MeshInstance3D
                 {
                     Name = "Underline",
@@ -115,10 +103,7 @@ namespace Game.Dice
             return root;
         }
 
-        // +Z looks along facing, which is the way a Label3D reads
-        // up of zero means choose one, which is what a numeral in the middle of a face wants
-        // the choice dodges the faces pointing straight up and down, where up in the plane means
-        // nothing - the camera sits at the near side, so the top face's text has to run away from it
+        // +z runs along facing; up of zero picks a fallback for the top and bottom faces, where an in-plane up is undefined
         static Transform3D Facing(Vector3 position, Vector3 facing, Vector3 up)
         {
             Vector3 z = facing.Normalized();

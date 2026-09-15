@@ -2,9 +2,6 @@ using Core.Localization;
 
 namespace Core.Characters
 {
-    // localization keys for the trait enums
-    // lives beside the enums it names so the two cannot drift apart
-    // every key goes through KeyConventions, so the grammar holds by construction
     public static class TraitKeys
     {
         public static string Key(this Attr a) =>
@@ -25,7 +22,6 @@ namespace Core.Characters
         public static string DescriptionKey(this Condition c) =>
             KeyConventions.Key(KeyConventions.ConditionNs, c.ToString().ToLowerInvariant(), "description");
 
-        // tiers are developer-facing today, but keyed like anything else
         public static string Key(this Tier t) =>
             KeyConventions.Key(KeyConventions.ActorNs, "tier_" + t.ToString().ToLowerInvariant(), "name");
     }

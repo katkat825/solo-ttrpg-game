@@ -6,17 +6,6 @@ using Content.Schema;
 
 namespace Content.Encounters
 {
-    // EVERY ENCOUNTER A CAMPAIGN SHIPS (CONTENT_PIPELINE.md P4).
-    //
-    // The same shape as `ItemCatalogue` and `JsonArchetypeSource`, for the third time and
-    // deliberately: a folder of JSON files, one per thing, read whole, every problem collected and
-    // nothing thrown. Three folders that behave identically are a thing an author learns once.
-    //
-    // NOT FOLDED ACROSS CAMPAIGNS, which is the one way this differs from the other two. Monster
-    // and gear ids end up in one shared roster because a fight has to look up `ashfall.ghoul`
-    // without knowing where it came from. An encounter is only ever named by its own campaign's
-    // `campaign.json`, so there is nothing to collide with and no reason to flatten - `the_yard`
-    // in two campaigns is two encounters, and both keep their name.
     public sealed class EncounterBook
     {
         public const string Extension = ".json";
@@ -32,15 +21,13 @@ namespace Content.Encounters
 
         public bool Has(string id) => id != null && _plans.ContainsKey(id);
 
-        // null rather than an exception, for the reason `ItemCatalogue.Of` gives: a save that
-        // names an encounter out of a campaign nobody has installed is an ordinary thing (P6)
+        // null rather than throw; a save may name an encounter from a campaign nobody installed
         public EncounterPlan Of(string id) =>
             id != null && _plans.TryGetValue(id, out EncounterPlan plan) ? plan : null;
 
         public IEnumerable<EncounterPlan> All =>
             _plans.Keys.OrderBy(i => i, StringComparer.Ordinal).Select(i => _plans[i]);
 
-        // ---- reading a folder ----
 
         public static EncounterBook Read(string folder)
         {
@@ -95,7 +82,6 @@ namespace Content.Encounters
             Directory.EnumerateFiles(folder, "*" + Extension, SearchOption.TopDirectoryOnly)
                      .OrderBy(Path.GetFileName, StringComparer.Ordinal);
 
-        // DEVELOPER ONLY - not localized, never reaches a player
         public override string ToString() =>
             $"{_plans.Count} encounters" + (_problems.Count > 0 ? $", {_problems.Count} problems" : "");
     }

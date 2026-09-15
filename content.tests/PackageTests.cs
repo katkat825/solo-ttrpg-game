@@ -8,18 +8,6 @@ using Xunit;
 
 namespace Content.Tests
 {
-    // A CAMPAIGN FOLDER, READ WHOLE (CONTENT_PIPELINE.md P4).
-    //
-    // Written against a real folder on a real disk rather than against strings, because half of
-    // what P4 promises is about files being where they say they are: a manifest whose id matches
-    // its folder, an encounter naming a map in `maps/`, a monster dropping an item the campaign
-    // ships. None of that can be tested with a JSON literal, and all of it is what breaks while
-    // authoring.
-    //
-    // THE ISOLATION BOUNDARY IS THE THING MOST WORTH PINNING. A folder with a corrupt manifest has
-    // to come back as a value that says so - not an exception, not a half-loaded campaign, and not
-    // silence. Every test below that reaches for `Failed` is testing the behaviour that keeps one
-    // bad subscribed item from taking the other seven down with it.
     public sealed class PackageTests : IDisposable
     {
         readonly string _root;
@@ -32,10 +20,9 @@ namespace Content.Tests
 
         public void Dispose()
         {
-            try { Directory.Delete(_root, recursive: true); } catch { /* a temp folder */ }
+            try { Directory.Delete(_root, recursive: true); } catch { }
         }
 
-        // ---- a campaign, built one file at a time ----
 
         string Folder(string campaign = Ashfall)
         {
@@ -73,7 +60,6 @@ namespace Content.Tests
             ""gear"": { ""id"": ""claw"", ""die"": ""d6"" }
         }";
 
-        // 4 x 2, one spawn slot at (1, 0) and the hero at (0, 1)
         const string Yard = @"+-+-+-+-+
 |. . 1 .|
 + + + + +
@@ -89,7 +75,6 @@ namespace Content.Tests
             ""cues"": [ { ""when"": ""entered"", ""cue"": ""it_opens"" } ]
         }";
 
-        // the smallest campaign that loads clean, which every test below either reads or breaks
         void WholeCampaign(string id = Ashfall)
         {
             Write(id, ManifestReader.FileName, Manifest(id));
@@ -103,7 +88,6 @@ namespace Content.Tests
         static string Why(Package package) =>
             string.Join(" | ", package.Problems.Select(p => p.ToString()));
 
-        // ---- the whole thing ----
 
         [Fact]
         public void AFolderWithEveryPartOfACampaignInItLoadsClean()
@@ -130,7 +114,6 @@ namespace Content.Tests
             Assert.Equal("yard", plan.Map);
             Assert.Equal(1, Assert.Single(plan.Placements).Slot);
 
-            // scoped on the way out, because a fight looks monsters up in one shared roster
             Assert.Equal(new[] { "ashfall.ghoul" }, plan.Roster(Ashfall));
         }
 
@@ -162,7 +145,6 @@ namespace Content.Tests
             Assert.Contains("quest.ashfall.one.title", manifest.Keys());
         }
 
-        // ---- the isolation boundary ----
 
         [Fact]
         public void AFolderWithNoManifestIsAFolderAndNotACampaign()
@@ -174,8 +156,6 @@ namespace Content.Tests
             Assert.True(package.Failed);
             Assert.Contains(package.Problems, p => p.What.Contains("campaign.json"));
 
-            // AND NOTHING IN IT IS IN PLAY. The monster is sitting right there and is not loaded,
-            // which is the whole of the boundary: all of a campaign or none of it
             Assert.Null(package.Monsters);
         }
 
@@ -211,9 +191,6 @@ namespace Content.Tests
             Assert.NotEmpty(package.Problems);
         }
 
-        // MOVE THE FOLDER OUT AND IT LEAVES THE SHELF; MOVE IT BACK AND IT RETURNS - P4's verify,
-        // and the reason it is worth a test is that nothing is cached anywhere. A loader that held
-        // a campaign after its folder was gone would pass every other test in this file
         [Fact]
         public void AFolderThatIsMovedOutLeavesTheShelfAndComesBackWhenItReturns()
         {
@@ -240,7 +217,6 @@ namespace Content.Tests
             Assert.False(Read().Failed);
         }
 
-        // ---- the manifest's own fields ----
 
         [Fact]
         public void TheIdAndTheFolderNameHaveToMatch()
@@ -297,9 +273,6 @@ namespace Content.Tests
             Assert.Contains(package.Problems, p => p.Where == "engine");
         }
 
-        // WAS "dependencies IS RESERVED AND SAYS SO" UNTIL PHASE A. The field was refused
-        // non-empty from P4 until A4 made it live; what is still refused is a dependency that is
-        // not a PACK ID, because `somebody.minis` is two segments and a pack id is one
         [Fact]
         public void ADependencyThatIsNotAPackIdIsRefused()
         {
@@ -326,8 +299,6 @@ namespace Content.Tests
             Assert.Equal(new[] { "grimdark" }, package.Manifest.Dependencies);
         }
 
-        // NOTHING IN THE FOLDER KNOWS WHETHER `grimdark` IS INSTALLED, and that is deliberate -
-        // it is a question about the shelf, and `ShelfTests` is where it is asked
         [Fact]
         public void AnEmptyDependenciesListIsFine()
         {
@@ -361,7 +332,6 @@ namespace Content.Tests
             Assert.Contains(package.Problems, p => p.Where == "preview");
         }
 
-        // ---- the questions no single file can answer ----
 
         [Fact]
         public void AnEncounterOnAMapTheCampaignDoesNotShipIsNamed()
@@ -411,8 +381,6 @@ namespace Content.Tests
             Assert.Contains(package.Problems, p => p.Where.StartsWith("chapters[0].encounters["));
         }
 
-        // AN ENCOUNTER NO CHAPTER NAMES IS A FILE THAT WILL NEVER BE PLAYED, which is a mistake
-        // that is completely invisible until somebody wonders why a room never came up
         [Fact]
         public void AnEncounterNoChapterNamesIsNamed()
         {
@@ -457,8 +425,6 @@ namespace Content.Tests
             Assert.Empty(package.Problems);
         }
 
-        // EVERY PROBLEM AT ONCE - the thing that makes authoring a list to work through rather
-        // than a load-fix-load loop (ContentProblem). Three separate mistakes, one read
         [Fact]
         public void EveryProblemInTheFolderIsReportedInOneRead()
         {

@@ -5,14 +5,9 @@ using Core.Resolution;
 
 namespace Sim
 {
-    // the standard fight - Barbarian against N Rabble and one Rival
-    // the report that settled the action economy, at 1, 2 and 3 hero actions a round
-    // and the Rabble sweep, which checks the tier adds pressure rather than length
     static class EncounterReport
     {
-        // the one place this report names a concrete roster
-        // every balance number below comes out of whatever source is bound here, so pointing
-        // it at a campaign's statblocks is this line and nothing else
+        // the one place this report names a concrete roster; rebind here to measure a campaign's statblocks
         static readonly IArchetypeSource Archetypes = new BuiltInArchetypes();
 
         readonly struct Stats
@@ -43,8 +38,7 @@ namespace Sim
             Table.Title("Rabble count sensitivity (hero: 2 actions)");
             Table.Header("rabble", "win %", "avg rounds", "vigor left");
 
-            // difficulty should climb steeply while round count stays flat
-            // more pressure, not more grind
+            // difficulty should climb steeply while round count stays flat: more pressure, not more grind
             foreach (var n in new[] { 2, 4, 6, 8 })
                 WriteRow(n.ToString(), Run(trials, actions: 2, rabble: n));
         }

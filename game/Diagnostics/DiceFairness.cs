@@ -8,30 +8,18 @@ using Game.Dice;
 
 namespace Game.Diagnostics
 {
-    // runs thousands of real physics rolls 
-    // includes single and multi die collision, different die shapes
-    // verifies that each die shape produces mostly uniform distribution
-    // helps catch physics/collision biases before they affect game balance
     public partial class DiceFairness : HeadlessCheck
     {
         protected override string Subject => "fairness";
 
-        // dice tray (all dice hit this layer)
         const uint TrayLayer = 1;
 
-        // solo dice - masks tray
         const uint SoloLayer = 2;
 
-        // multiple dice colliding
-        // bit 0 belongs to the tray. Godot has 32.
+        // 31 = Godot's 32 collision layers minus the tray's
         const int MaxCollidingPools = 31;
 
-        // THE SWEEP'S DEFAULTS LIVE HERE AND NOWHERE ELSE (F5)
-        //
-        // check-fairness.ps1 stated its own copies of these and had already diverged - it
-        // defaulted -Tray to 'wood' while this file defaulted to "none", so the script and the
-        // thing it runs disagreed about what an unqualified sweep measures. the script passes
-        // only what it was actually given now, and RequestedFrom fills in the rest from here
+        // the sweep's defaults live only here; the script once had its own copies and they diverged
         public const int DefaultThrows = 2000;
 
         public const int DefaultSoloPools = 50;
@@ -40,42 +28,28 @@ namespace Game.Diagnostics
 
         public const Die DefaultShape = Die.D6;
 
-        // number of dice to keep in the air when pools collide
         const int TargetDiceInFlight = 48;
 
-        // read only the current dice
         public IReadOnlyList<DieBody> SceneDice { get; set; }
 
-        // pool member i uses point i, so a pool cannot be larger than this
+        // pool member i uses point i, so a pool cannot exceed the number of points
         public IReadOnlyList<Node3D> ThrowPoints { get; set; }
 
         public int Throws { get; set; } = DefaultThrows;
 
-        // dice thrown together, colliding with each other - 1 means each die is alone
+        // dice thrown together and colliding; 1 means each die is alone
         public int PoolSize { get; set; } = DefaultPoolSize;
 
         public Die Shape { get; set; } = DefaultShape;
 
-        // independent pools in the air at once - zero is sensible default
         public int Pools { get; set; }
 
-        // which tray skin the dice are landing in - set by DiceTray from the skin it applied,
-        // so the report always names the tray that was actually measured
-        //
-        // tray skin changes friction and bounce
-        // bounce is what decides how a die settles
-        // current skins - felt is fine and wood is fine
-        //
-        // there is no default tray for a sweep to pick: the default is WHATEVER THE SCENE SHIPS
-        // WITH, which is the only answer that keeps meaning "the tray the game is played in" when
-        // the scene's skin changes. --tray= overrides it and DiceTray applies that before
-        // anything is thrown. the placeholder below is only ever seen if DiceTray forgets to set it
+        // set by DiceTray from the skin it applied, so the report names the tray actually measured
+        // no default tray: the scene's own skin is the default; 'unset' shows only if DiceTray forgets to set it
         public string TrayName { get; set; } = "unset";
 
-        // fail-safe for a pool that somehow never comes to rest - should recover itself
         public double StuckSeconds { get; set; } = 10.0;
 
-        // one pool: dice that hit each other - thrown and read as a unit
         sealed class PoolRun
         {
             public readonly List<DieBody> Dice = new();
@@ -128,11 +102,11 @@ namespace Game.Diagnostics
             DieBody template = SceneDice[0];
             Node parent = template.GetParent();
 
-            // before a single clone is taken, so every copy is already the right shape
+            // set the template's shape before cloning, so every copy is right
             template.ShowNumbers = false;
             template.Size = Shape;
 
-            // scene dice fill pool zero. left over is benched before a single throw
+            // scene dice fill pool zero; the rest are benched before any throw
             int reused = Math.Min(PoolSize, SceneDice.Count);
             for (int i = reused; i < SceneDice.Count; i++) Bench(SceneDice[i]);
 
@@ -172,10 +146,7 @@ namespace Game.Diagnostics
             clone.Name = $"P{poolIndex:00}D{seat}";
             parent.AddChild(clone);
 
-            // Duplicate() copies [Export]s, and since F2 where the tray is is not one of them -
-            // it is handed to each die by whatever owns the tray. without this a clone measures
-            // its escape from the world origin while the die it was cut from measures from the
-            // tray, and the sweep's "left the tray" count stops describing the game
+            // Duplicate copies exports but not the tray binding, so a clone must be re-bound or its 'left the tray' count is meaningless
             clone.BoundLike(template);
 
             return clone;
@@ -196,28 +167,23 @@ namespace Game.Diagnostics
 
             if (PoolSize == 1)
             {
-                // one shared layer that nothing masks - solo dice see the tray and nothing else
+                // solo dice see the tray and nothing else
                 die.CollisionLayer = SoloLayer;
                 die.CollisionMask = TrayLayer;
             }
             else
             {
-                // a layer per pool
-                // members mask their own layer, so they collide with each
-                // other exactly as in play
-                // with no pool but their own
+                // a layer per pool, so members collide with each other but not across pools
                 uint layer = 1u << (poolIndex + 1);
                 die.CollisionLayer = layer;
                 die.CollisionMask = layer | TrayLayer;
             }
 
-            // thousands of settle lines would bury the report.
             die.LogSettles = false;
 
             die.ReportContacts = false;
 
-            // one handler per action - Nudged and Cocked were one signal until 2026-08-20,
-            // and adding them together is what made this counter report roughly 3x the truth
+            // one handler each: Nudged and Cocked were once one signal, which inflated this counter ~3x
             die.Nudged += (_, _) => _nudges++;
             die.Cocked += (_, _) => _cockedRethrows++;
             die.LeftTray += _ => _leftTray++;
@@ -230,7 +196,7 @@ namespace Game.Diagnostics
             pool.InFlight = true;
             pool.LaunchedAt = _elapsed;
 
-            // same frame for the whole pool - that IS the experiment when they collide
+            // same frame for the whole pool: that is the experiment when they collide
             for (int seat = 0; seat < pool.Dice.Count; seat++)
                 pool.Dice[seat].Throw(ThrowPoints[seat].GlobalTransform);
         }
@@ -268,7 +234,7 @@ namespace Game.Diagnostics
 
             for (int seat = 0; seat < pool.Dice.Count; seat++)
             {
-                // read live (same as DiceTray) so it measures the same number as live game
+                // read live, the same way DiceTray does, so it measures the game's number
                 (int value, float alignment) = pool.Dice[seat].ReadFace();
 
                 if (alignment < pool.Dice[seat].RequiredAlignment) _acceptedCocked++;
@@ -285,8 +251,7 @@ namespace Game.Diagnostics
             }
         }
 
-        // named apart from HeadlessCheck.Finish on purpose: this is the whole closing report,
-        // and the base's Finish - the verdict line and the exit code - is the last thing it does
+        // named apart from the base Finish: this is the whole report, and base Finish is its last line
         void Conclude()
         {
             _finished = true;
@@ -294,10 +259,7 @@ namespace Game.Diagnostics
             GD.Print("");
             foreach (string line in _tally.DebugLines()) GD.Print(line);
 
-            // a pool can look uniform overall while one seat in it is skewed
-            // the middle die gets hit from both sides, the outer two don't
-            // averaging would hide bias
-            // so each seat is judged on its own.
+            // each seat judged on its own: a pool can look uniform while a middle seat, hit from both sides, is skewed
             if (PoolSize > 1)
             {
                 GD.Print("");
@@ -307,8 +269,7 @@ namespace Game.Diagnostics
             }
 
             GD.Print("");
-            // the maths lives on FaceTally in core/Statistics, where it has tests
-            // this file only decides how to say it, because only this file knows the subject is a tray
+            // the maths is on FaceTally (tested in core); this file only knows the subject is a tray
             GD.Print($"average pip {_tally.MeanPip:0.0000} against {_tally.ExpectedMeanPip:0.0000} " +
                      $"expected - {_tally.MeanDriftZ:+0.00;-0.00} standard errors ({DriftSentence(_tally)})");
 
@@ -324,13 +285,11 @@ namespace Game.Diagnostics
                        || _bySeat.Any(t => t.Verdict == Fairness.Biased)
                        || _tally.DriftVerdict == Fairness.Biased;
 
-            // the verdict line and the exit code come off HeadlessCheck, so this sweep and the
-            // locale audit cannot disagree about what 0 and 1 mean
+            // verdict and exit code come off HeadlessCheck, so checks cannot disagree on what 0 and 1 mean
             Finish(!biased);
         }
 
-        // the numbers and the verdict come from FaceTally; the wording is this file's job
-        // "this tray rolls high" is a sentence about a tray, and core/ has never heard of one
+        // numbers from FaceTally; the tray wording is this file's, because core knows no tray
         static string DriftSentence(FaceTally tally) => tally.DriftVerdict switch
         {
             Fairness.Biased => "BIASED - this tray rolls " + (tally.DriftsHigh ? "high" : "low"),
@@ -338,10 +297,7 @@ namespace Game.Diagnostics
             _ => "no directional drift",
         };
 
-        // <code>godot --headless --path game -- --fairness=2000 --dice=3</code>
-        // <c>--dice</c> is the pool size - how many dice are thrown together and collide.
-        // <c>--shape</c> is the number of sides, so <c>--shape=12</c> measures d12s.
-        // <c>--parallel</c> is only a speed knob and changes nothing about the measurement
+        // --parallel is only a speed knob; it changes nothing about the measurement
         public static bool RequestedFrom(
             IEnumerable<string> args,
             out int throws, out int poolSize, out int pools, out Die shape, out string tray)
@@ -351,7 +307,7 @@ namespace Game.Diagnostics
             pools = 0;
             shape = DefaultShape;
 
-            // null means "leave the scene's skin alone" - see TrayName
+            // null means leave the scene's skin alone
             tray = null;
 
             bool asked = false;

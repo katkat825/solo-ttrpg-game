@@ -3,10 +3,7 @@ using Core.Localization;
 
 namespace Game.Localization
 {
-    // the ONLY place a key turns into text
-    // forwards to Godot's translation system, so we inherit CSV/PO import, locale fallback
-    // and live locale switching
-    // resolving a key anywhere inside core/ means something has gone wrong
+    // the only place a key turns into text
     public sealed class GodotLocalizer : ILocalizer
     {
         public string Get(string key) => TranslationServer.Translate(key);
@@ -19,11 +16,7 @@ namespace Game.Localization
             return string.Format(pattern, args);
         }
 
-        // Godot echoes the key back when a translation is missing, so a miss is loud
-        // the pseudolocale complicates that quietly: it mangles whatever Translate returns
-        // INCLUDING the echoed key, so "I got something other than the key back" becomes true for
-        // every key in existence and this starts insisting the locale is complete
-        // so compare against what a miss would actually look like right now
+        // Godot echoes the key back on a miss; but the pseudolocale mangles even that echo, so compare against what a miss actually looks like now, not against the key
         public bool Has(string key) => TranslationServer.Translate(key) != Missing(key);
 
         // what Godot hands back for a key it doesn't have, under the current settings

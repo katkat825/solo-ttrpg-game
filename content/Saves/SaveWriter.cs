@@ -7,18 +7,6 @@ using Core.Characters;
 
 namespace Content.Saves
 {
-    // A SAVE, WRITTEN OUT (CONTENT_PIPELINE.md P6).
-    //
-    // HAND-EDITABLE IS A PROPERTY OF THE WRITER, not of the format. Indented, one field per line,
-    // fields in the order a person would want to read them, words rather than numbers for
-    // everything that has a word (`"winded"`, `"d8"`) - because "in 2036 you will want to
-    // hand-edit a save, and you'll be glad it's readable" is a claim about what comes out of
-    // here. `JsonSerializer` with default options would produce a correct file that nobody wants
-    // to open.
-    //
-    // AND THE SAME VOCABULARY THE CAMPAIGN FILES USE (`Content.Schema.Vocabulary`), so a save and
-    // a statblock spell a die and a condition the same way. Two dialects would be one more thing
-    // to learn for no reason at all.
     public static class SaveWriter
     {
         public static string Write(SaveGame save)
@@ -29,8 +17,6 @@ namespace Content.Saves
             {
                 json.WriteStartObject();
 
-                // WHAT BUILT IT, FIRST, because it is the first thing anybody looking at a strange
-                // save needs and the first thing a reader checks
                 json.WriteNumber("format", save.Format);
                 json.WriteString("engine", (save.Engine ?? Core.EngineVersion.Current).ToString());
 
@@ -84,9 +70,7 @@ namespace Content.Saves
             json.WriteNumber("vigor", actor.Vigor);
             json.WriteNumber("nerve", actor.Nerve);
 
-            // ONLY WHAT IS TRUE OF THIS ONE. A save with `"ordinal": 0, "notches": 0, "strain": 0`
-            // on every line of a room of eight is a file nobody can scan - the interesting fields
-            // are the ones that are there
+            // omit zeros so the interesting fields are the ones actually written
             if (actor.Seat >= 0) json.WriteNumber("seat", actor.Seat);
             if (actor.Initiative > 0) json.WriteNumber("initiative", actor.Initiative);
             if (actor.Slot > 0) json.WriteNumber("slot", actor.Slot);
@@ -118,8 +102,17 @@ namespace Content.Saves
                 json.WriteEndArray();
             }
 
-            // A PAIR RATHER THAN TWO FIELDS, because a square is one fact and half of one is
-            // meaningless - and because `[3, 2]` is how anybody would write a square down
+            if (actor.Growth.Count > 0)
+            {
+                json.WritePropertyName("growth");
+                json.WriteStartArray();
+
+                foreach (string step in actor.Growth) json.WriteStringValue(step ?? "");
+
+                json.WriteEndArray();
+            }
+
+            // a pair, not two fields: [3, 2] is how anyone writes a square, and half of one is meaningless
             if (actor.OnTheBoard)
             {
                 json.WritePropertyName("at");
@@ -132,11 +125,8 @@ namespace Content.Saves
             json.WriteEndObject();
         }
 
-        // ---- and onto a disk ----
 
-        // Never throws. A save that cannot be written is a sentence the caller shows the player,
-        // not an exception out of the middle of a fight - which is the same rule the campaign
-        // readers follow and for a much more pressing reason: the player is standing there
+        // never throws; a save that can't be written is a sentence for the player, not an exception mid-fight
         public static ContentProblem To(string path, SaveGame save)
         {
             try

@@ -1,0 +1,10 @@
+{
+  "id": "steady_guard",
+  "primitive": "check",
+  "attribute": "might",
+  "skill": "blades",
+  "gear": true,
+  "versus": 9,
+  "pass": [ "steady" ],
+  "fail": [ "condition" ]
+}

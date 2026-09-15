@@ -7,19 +7,6 @@ using Core.Space;
 
 namespace Content.Encounters
 {
-    // AN ENCOUNTER FILE, READ AND REFUSED BY NAME (CONTENT_PIPELINE.md P4).
-    //
-    // The shape is documented on `EncounterPlan`. What is worth saying here is what this reader
-    // can and cannot check on its own: it knows the SPAWN SLOT RANGE, because `MapReader` owns the
-    // glyphs and they are `1`-`9`, so a placement on slot 12 is refused here and now. It does NOT
-    // know whether the map has that slot drawn on it, or whether the campaign ships that monster -
-    // both of those are questions about OTHER files, and a reader that only ever sees one file
-    // cannot answer them.
-    //
-    // THAT IS WHAT `Validator` IS FOR, and the split is deliberate: everything answerable from one
-    // file is answered at the field, in the file, as it is read; everything that needs two files
-    // is answered once, across the whole folder, by the thing that has both open. A campaign that
-    // passes both has no dangling references in it at all.
     public static class EncounterReader
     {
         public static Read<EncounterPlan> Parse(string json, string file)
@@ -125,10 +112,6 @@ namespace Content.Encounters
                 return placements;
             }
 
-            // AN ENCOUNTER WITH NOBODY IN IT is a room to walk through, and there is no rule that
-            // says a campaign may not have one - but it is also exactly what a half-written file
-            // looks like, so it is worth a sentence at load rather than a fight that musters
-            // nobody and sits there
             if (value.GetArrayLength() == 0)
                 problems.Add(new ContentProblem(
                     file, "placements",
@@ -153,8 +136,6 @@ namespace Content.Encounters
 
                 if (placement == null) continue;
 
-                // TWO THINGS ON ONE SQUARE is not a crowd, it is a mistake: the board holds one
-                // piece per cell, so the second would silently not be placed
                 Placement standing = placements.Find(p => p.Slot == placement.Slot);
 
                 if (standing != null)
@@ -196,9 +177,7 @@ namespace Content.Encounters
                 return null;
             }
 
-            // THE RANGE COMES FROM THE MAP FORMAT and is not a second opinion about it. `1`-`9`
-            // are the glyphs `MapReader` reads as spawns, so this is derived from the same two
-            // constants the reader uses and cannot drift from them
+            // the range is derived from MapReader's own glyph constants, so it can't drift from them
             if (slot < FirstSlot || slot > LastSlot)
             {
                 problems.Add(new ContentProblem(
@@ -286,9 +265,7 @@ namespace Content.Encounters
                 else if (entry.TryGetProperty("encounter", out JsonElement extra) &&
                          extra.ValueKind != JsonValueKind.Null)
                 {
-                    // A FIELD THAT IS IGNORED IS WORSE THAN ONE THAT IS REFUSED: an author who
-                    // wrote `"then": "next", "encounter": "the_crypt"` believes they have said
-                    // where to go, and silence would let them ship believing it
+                    // refused, not ignored: an encounter on a non-goto trigger would silently do nothing
                     problems.Add(new ContentProblem(
                         file, $"{where}.encounter",
                         $"only 'goto' goes to a named encounter - '{Vocabulary.NameOf(then)}' " +
@@ -302,7 +279,7 @@ namespace Content.Encounters
             return triggers;
         }
 
-        static readonly string[] CueFields = { "when", "cue" };
+        static readonly string[] CueFields = { "when", "cue", "gesture", "hesitant", "at" };
 
         static IReadOnlyList<Cue> Cues(JsonElement root, string file, List<ContentProblem> problems)
         {
@@ -352,10 +329,92 @@ namespace Content.Encounters
                     continue;
                 }
 
-                cues.Add(new Cue(when, id.GetString()));
+                Gesture gesture = Does(entry, file, where, problems);
+
+                bool hesitant = Hesitant(entry, gesture, file, where, problems);
+
+                int slot = At(entry, gesture, file, where, problems);
+
+                cues.Add(new Cue(when, id.GetString(), gesture, hesitant, slot));
             }
 
             return cues;
+        }
+
+        // the gesture vocabulary is closed; an unknown one is refused here, not mid-fight
+        static Gesture Does(JsonElement entry, string file, string where,
+                            List<ContentProblem> problems)
+        {
+            if (!entry.TryGetProperty("gesture", out JsonElement value)) return Gesture.Push;
+
+            if (value.ValueKind == JsonValueKind.String &&
+                Vocabulary.TryWord(value.GetString(), out Gesture gesture))
+                return gesture;
+
+            problems.Add(new ContentProblem(
+                file, $"{where}.gesture",
+                $"'{Shown(value)}' is not something the DM's hands can do - it is one of " +
+                $"{Vocabulary.Offer<Gesture>()}. The vocabulary is the engine's and the timing is " +
+                "yours; a gesture outside that list is animation work, " +
+                "not campaign data"));
+
+            return Gesture.Push;
+        }
+
+        static bool Hesitant(JsonElement entry, Gesture gesture, string file, string where,
+                             List<ContentProblem> problems)
+        {
+            if (!entry.TryGetProperty("hesitant", out JsonElement value)) return false;
+
+            if (value.ValueKind != JsonValueKind.True && value.ValueKind != JsonValueKind.False)
+            {
+                problems.Add(new ContentProblem(
+                    file, $"{where}.hesitant",
+                    $"'{Shown(value)}' is not true or false - hesitant is the pause before a mini " +
+                    "goes down"));
+                return false;
+            }
+
+            bool hesitant = value.ValueKind == JsonValueKind.True;
+
+            if (hesitant && !gesture.CanHesitate())
+            {
+                problems.Add(new ContentProblem(
+                    file, $"{where}.hesitant",
+                    $"a {gesture.Word()} cannot hesitate - the pause is the variant of a " +
+                    $"'{Gesture.Place.Word()}' - a whole story in " +
+                    "half a second - and it means nothing anywhere else"));
+                return false;
+            }
+
+            return hesitant;
+        }
+
+        static int At(JsonElement entry, Gesture gesture, string file, string where,
+                      List<ContentProblem> problems)
+        {
+            if (!entry.TryGetProperty("at", out JsonElement value)) return 0;
+
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out int slot) ||
+                slot < 1)
+            {
+                problems.Add(new ContentProblem(
+                    file, $"{where}.at",
+                    $"'{Shown(value)}' is not a spawn slot - a whole number from 1, drawn on the " +
+                    "map this encounter names"));
+                return 0;
+            }
+
+            if (!gesture.NeedsASquare())
+            {
+                problems.Add(new ContentProblem(
+                    file, $"{where}.at",
+                    $"a {gesture.Word()} does not happen at a square - it happens at the table or " +
+                    "behind the screen, so there is nowhere for a slot to be"));
+                return 0;
+            }
+
+            return slot;
         }
 
         static bool Word<TEnum>(JsonElement entry, string field, string file, string where,

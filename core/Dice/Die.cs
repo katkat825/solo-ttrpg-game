@@ -2,9 +2,7 @@ using System;
 
 namespace Core.Dice
 {
-    // the die sizes the game uses, and the ladder they step along
-    // the enum value IS the side count, so a cast gives you the faces
-    // None means no die at all - an untrained skill or an empty gear slot
+    // the enum value is the side count, so a cast gives you the faces
     public enum Die
     {
         None = 0,
@@ -23,7 +21,6 @@ namespace Core.Dice
 
         public static bool IsReal(this Die d) => d != Die.None;
 
-        // damage and strain step dice down - clamps at d4, never off the ladder
         public static Die StepDown(this Die d)
         {
             int i = Array.IndexOf(Ladder, d);
@@ -38,16 +35,7 @@ namespace Core.Dice
             return Ladder[Math.Min(Ladder.Length - 1, i + 1)];
         }
 
-        // moves a die n places along the ladder in one go - negative is down, positive is up
-        // this is the only place a stack of modifiers reaches the ladder, and it is one move
-        // rather than a replay, which is what makes the order effects arrived in irrelevant
-        // (CORE_RULES.md section 9, "Saturation")
-        //
-        // <paramref name="delivered"/> is how far it actually moved, so a caller can tell three
-        // steps down from d6 (a d4, two refused) from one step down from d6 (a d4, none refused)
-        // clamping without reporting is the silent saturation this exists to remove
-        //
-        // None is not on the ladder at all: no die, nothing to step, delivered 0
+        // one move along the ladder, not a replay, so the order modifiers arrived in doesn't matter
         public static Die StepBy(this Die d, int steps, out int delivered)
         {
             int i = Array.IndexOf(Ladder, d);

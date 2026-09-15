@@ -3,9 +3,6 @@ using Core.Resolution;
 
 namespace Core.Combat
 {
-    // what the combat engine hands to an observer
-    // immutable records of one swing and one whole fight
-    // they carry actors and the raw roll, so a view can replay the detail
     public sealed class AttackOutcome
     {
         public Actor Attacker { get; }
@@ -23,7 +20,7 @@ namespace Core.Combat
             Damage = damage;
         }
 
-        // DEVELOPER ONLY - not localized, never shown to a player
+        // debug only, never localized - keep it off the screen
         public override string ToString() =>
             $"{Attacker.DebugName} -> {Target.DebugName}: {Roll} => " +
             (Hit ? $"HIT for {Damage}" : "miss");
@@ -42,7 +39,7 @@ namespace Core.Combat
             HeroVigorRemaining = vigor;
         }
 
-        // DEVELOPER ONLY - not localized, never shown to a player
+        // debug only, never localized - keep it off the screen
         public override string ToString() =>
             $"{(HeroWon ? "victory" : "defeat")} in {Rounds} rounds, {HeroVigorRemaining} vigor left";
     }

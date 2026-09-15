@@ -9,11 +9,6 @@ using Xunit;
 
 namespace Game.Tests
 {
-    // the companion's cue, before there is a companion
-    //
-    // nothing says these lines yet, so what can be checked is the hook and the rate: that a
-    // Snag on the felt produces a key a translator could be handed, that the key obeys the
-    // grammar, and that the tally counts what actually happened rather than what was expected
     public class SnagCueTests
     {
         static readonly Die[] Starting = { Die.D8, Die.D6, Die.D6 };
@@ -26,10 +21,8 @@ namespace Game.Tests
 
         static SnagCue Cue(int seed = 4242) => new SnagCue(Starting, new SeededRng(seed));
 
-        // ---- the hook ----
 
-        // the whole point of M9: a Snag hands over a KEY, never words. if this ever returns
-        // something a locale file could not be keyed by, dialogue has leaked into game/
+        // a snag hands over a key, never words; anything unkeyable means dialogue leaked into game/
         [Fact]
         public void ASnagProducesAKeyThatObeysTheGrammar()
         {
@@ -49,7 +42,6 @@ namespace Game.Tests
             Assert.Null(cue.LastKey);
         }
 
-        // two 1s is Trouble, which has its own bark and is deliberately not this one
         [Fact]
         public void TroubleIsNotASnag()
         {
@@ -60,7 +52,6 @@ namespace Game.Tests
             Assert.Equal(1, cue.Throws);
         }
 
-        // ---- the tally ----
 
         [Fact]
         public void EveryThrowIsCounted_NotOnlyTheOnesThatSnag()
@@ -76,8 +67,6 @@ namespace Game.Tests
             Assert.Equal(2 / 3.0, cue.Rate, 10);
         }
 
-        // bigger dice snag less, so a count carried across a change of shapes is measuring a
-        // table that no longer exists
         [Fact]
         public void ChangingThePoolStartsTheCountAgain()
         {
@@ -100,10 +89,7 @@ namespace Game.Tests
         public void AnEmptyPoolIsRefused() =>
             Assert.Throws<ArgumentNullException>(() => new SnagCue(null));
 
-        // ---- repeatability ----
 
-        // the rng is a seam so a seeded session says the same things twice - which is what
-        // makes "re-run with the same seed" a debugging technique rather than a hope
         [Fact]
         public void TheSameSeedPicksTheSameLines()
         {
@@ -117,11 +103,8 @@ namespace Game.Tests
             Assert.Equal(Session().ToList(), Session().ToList());
         }
 
-        // ---- a rebuild is not a change of shapes (Phase C) ----
 
-        // the tray rebuilds its pool on every throw a fight asks for, so the tally has to survive
-        // a Reset that changed nothing. it did not, and the running count read "0 of 1 throws"
-        // after every swing - a measurement of the last throw and of nothing else
+        // the tally must survive the tray's per-throw reset; it once read "0 of 1" after every swing
         [Fact]
         public void ResettingToTheSameShapes_KeepsTheCount()
         {

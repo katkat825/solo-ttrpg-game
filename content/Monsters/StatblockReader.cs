@@ -10,39 +10,9 @@ using Core.Dice;
 
 namespace Content.Monsters
 {
-    // JSON IN, A STATBLOCK OUT, AND EVERY REASON IT IS NOT ONE (CONTENT_PIPELINE.md P0).
-    //
-    //     {
-    //       "id": "ghoul",
-    //       "tier": "rival",
-    //       "vigor": 8,
-    //       "defense": 11,
-    //       "attributes": { "might": "d8", "grace": "d6" },
-    //       "skills": { "blades": "d6" },
-    //       "gear": { "id": "claw", "die": "d6" },
-    //       "behaviour": "strongest_first"
-    //     }
-    //
-    // THE ID IN THE FILE IS THE LOCAL ONE. A campaign writes `"id": "ghoul"` and the loader scopes
-    // it to `ashfall.ghoul` - because an author should not have to write their own campaign's name
-    // into every file, and because a campaign that is renamed or forked should not need every file
-    // edited. The scoping is the loader's, which is also the only place that knows which campaign
-    // this folder is (`Campaigns/ContentId.cs`).
-    //
-    // IT COLLECTS RATHER THAN THROWS. Every problem in the file comes back at once, named, because
-    // a validator that stops at the first mistake turns hand-authoring into a load-fix-load loop -
-    // and hand-authoring is the whole point (`ARCHITECTURE.md` section 7: hand-write the data
-    // files until it hurts).
-    //
-    // READ BY HAND RATHER THAN DESERIALIZED. `JsonSerializer` with a class would be a third of the
-    // length and would say "The JSON value could not be converted to Content.Monsters.Statblock",
-    // which is a sentence nobody can act on. Reading the document field by field is what makes
-    // "attributes.might: 'd7' is not a die (d4, d6, d8, d10, d12)" possible, and that sentence is
-    // the deliverable.
     public static class StatblockReader
     {
-        // <paramref name="campaign"/> is the campaign folder's unique id, or null/empty for the
-        // engine's own roster - which keeps its un-prefixed ids (CONVENTIONS.md section 7)
+        // null/empty campaign means the engine's own roster, kept un-prefixed
         public static Read<Statblock> Parse(string json, string file, string campaign)
         {
             var problems = new List<ContentProblem>();
@@ -59,7 +29,7 @@ namespace Content.Monsters
             }
             catch (JsonException bad)
             {
-                // the one case where there IS a line, because the text is still text
+                // the one case with a real line number; the text is still text here
                 return Read<Statblock>.Bad(new ContentProblem(
                     file, "", "this is not JSON - " + bad.Message,
                     (int)(bad.LineNumber ?? 0) + 1));
@@ -100,8 +70,7 @@ namespace Content.Monsters
             }
         }
 
-        // the fields a statblock may have. Anything else is a typo, and a typo that is silently
-        // ignored is a monster that is quietly not what its author wrote
+        // a field not listed here is a typo; silently ignoring it is a monster quietly not what its author wrote
         static readonly string[] Fields =
         {
             "id", "tier", "vigor", "defense", "attributes", "skills", "gear", "behaviour", "loot",
@@ -120,15 +89,7 @@ namespace Content.Monsters
             }
         }
 
-        // WHAT IT STANDS AS (MINIS_AND_ART.md A1). The last thing in the fight a campaign could
-        // not say for itself: `Fight.ModelFor` chose a figure by TIER, because tier was the only
-        // thing about a foe that a statblock already said and the scene could read.
-        //
-        // A BARE NAME IS THIS PACK'S OWN MINI, OR ONE OF THE SHARED ROSTER'S, which is the same
-        // rule `variant` follows in a mini manifest; a dotted one is another pack's and wants a
-        // line in `dependencies`. Optional, and a statblock that says nothing keeps the tiered
-        // figure it has had since Phase C - a campaign should not have to ship art to ship a
-        // monster
+        // bare is this pack's or the game's; a dotted id is another pack's and wants a dependencies line
         static string Mini(JsonElement root, string file, List<ContentProblem> problems)
         {
             if (!root.TryGetProperty("mini", out JsonElement value)) return "";
@@ -174,8 +135,7 @@ namespace Content.Monsters
 
             string scoped = ContentId.IsCampaign(campaign) ? ContentId.Scoped(campaign, local) : local;
 
-            // the keys made from it have to survive the grammar, and this is where that is cheap
-            // to say - three layers before a locale audit finds it and cannot say where it came from
+            // refused here rather than three layers away in a locale audit
             if (!ContentId.NamesSomethingKeyable(scoped))
             {
                 problems.Add(new ContentProblem(
@@ -229,8 +189,6 @@ namespace Content.Monsters
             return number;
         }
 
-        // an object of word -> die, which is what both `attributes` and `skills` are. One reader,
-        // because they differ only in which enum the words come from
         static IReadOnlyDictionary<TEnum, Die> Dice<TEnum>(
             JsonElement root, string field, string file, List<ContentProblem> problems)
             where TEnum : struct, Enum
@@ -318,11 +276,7 @@ namespace Content.Monsters
             gearDie = rated;
         }
 
-        // GEAR IDS ARE NOT SCOPED, and that is deliberate rather than an oversight. A gear key is
-        // `gear.axe.name` and the engine already ships one; a campaign's `claw` would collide with
-        // another campaign's `claw` in the key table, which is the thing scoping exists to prevent.
-        // P1 is where items become a schema of their own and the decision has somewhere to live -
-        // until then a campaign's gear names are its own problem and the audit will say so.
+        // gear ids are not scoped; a campaign's claw shares the key table with the engine's gear
 
         static string Behaviour(JsonElement root, string file, List<ContentProblem> problems)
         {
@@ -342,8 +296,6 @@ namespace Content.Monsters
             return value.GetString();
         }
 
-        // what the author actually wrote, quoted back at them. A value they can see in their own
-        // file is worth more than a type name
         static string Text(JsonElement value) => value.ValueKind switch
         {
             JsonValueKind.String => value.GetString(),

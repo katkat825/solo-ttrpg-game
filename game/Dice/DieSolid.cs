@@ -6,14 +6,9 @@ using Core.Dice;
 
 namespace Game.Dice
 {
-    // the shape of one die, as maths rather than as an asset
-    // Godot ships box, sphere and cylinder, so d4/d8/d10/d12 need geometry from somewhere
-    // a downloaded mesh and a hand-written face table are two descriptions that can silently disagree
-    // generating them means the render mesh, the hull, the numerals and the face table are all one
-    // a solid is vertices plus either normals or polygons - the rest, winding included, is derived
+    // generated, not an asset, so the mesh, hull, numerals and face table are one description that can't silently disagree
     public sealed class DieSolid
     {
-        // one face, in the die's own space
         public readonly struct Facet
         {
             public readonly Vector3 Normal;
@@ -43,8 +38,7 @@ namespace Game.Dice
             public readonly Vector3 Position;
             public readonly Vector3 Facing;
 
-            // zero leaves the choice to DieParts - right in the middle of a face,
-            // wrong for a d4's, which has to point at the corner it belongs to
+            // zero lets DieParts centre it on the face; a d4 needs it pointing at the corner
             public readonly Vector3 Up;
 
             public readonly int Value;
@@ -62,10 +56,8 @@ namespace Game.Dice
             }
         }
 
-        // die size as centre to furthest corner
-        // not by edge length or volume - a shared edge length gives a tiny d12 and an enormous d4
-        // picked so each solid stands about 50 mm on the felt, which makes five shapes read as one set
-        // the d6 is the exact cube the M0-M3 tuning and fairness numbers were measured on - don't drift it
+        // sized by circumradius, not edge length or volume, so the five shapes read as one ~50mm set
+        // the d6 is the exact cube the tuning and fairness numbers were measured on - don't drift it
         static readonly Dictionary<Die, float> Radius = new()
         {
             [Die.D4] = 0.0380f,
@@ -107,9 +99,7 @@ namespace Game.Dice
         public float Volume { get; }
 
         // the alignment below which this shape cannot be lying flat
-        // two faces of a d10 meet at about 145 degrees, so a d10 on that edge still scores 0.95,
-        // where a cube on its edge scores 0.71 - one fixed number misses the d10 or rejects flat d4s
-        // so this sits halfway between flat and on the shallowest edge, per shape
+        // per shape because one fixed number would miss the d10's shallow edge or reject flat d4s
         public float MinFlatAlignment { get; }
 
         // the same normals the mesh was built from, by construction
@@ -141,13 +131,8 @@ namespace Game.Dice
             }
         }
 
-        // ---------------------------------------------------------------- the five solids
-
-        // the d4, and the one genuine special case in the set
-        // a tetrahedron at rest has a vertex on top and no face, so the upward normal is noise
-        // apex-read convention: a corner's number belongs to the face opposite it, the one on the felt,
-        // so the code reads DOWNWARD, the player reads the apex, and they always agree
-        // get it wrong and nothing crashes, nothing looks broken, and every d4 is quietly wrong
+        // a tetrahedron rests on a vertex with no upward face, so the upward normal is noise
+        // apex-read: a corner's number is on the face opposite it against the felt, so the code reads downward and the player reads the apex
         static DieSolid Tetrahedron()
         {
             Vector3[] v =
@@ -207,10 +192,7 @@ namespace Game.Dice
             return FromNormals(Die.D8, v, faces, DieFaceTable.ReadFrom.UpwardFace, AtFaceCentres);
         }
 
-        // a pentagonal trapezohedron - ten kite faces, opposite faces summing to eleven
-        // the ring offset c is not free: a kite's four corners are only coplanar when the apex
-        // sits at (3 + 4*phi) times it
-        // wrong and the faces bow, the hull rounds them off, and the die rolls oddly with nothing to see
+        // the ring offset c is not free: a kite's corners are coplanar only with the apex at (3 + 4*phi) times it, or the faces bow
         static DieSolid Trapezohedron()
         {
             const float h = 1f;
@@ -269,9 +251,7 @@ namespace Game.Dice
                 v.Add(new Vector3(a * phi, 0, b * inv));
             }
 
-            // the twelve face directions of THIS vertex set
-            // note the order inside each triple - the icosahedron's vertices as usually written
-            // give twelve normals that touch one corner each and no face at all
+            // the order inside each triple matters: the usual icosahedron vertices give normals that touch a corner, not a face
             var faces = new (Vector3, int)[]
             {
                 (new Vector3(0, phi, 1), 1),   (new Vector3(0, -phi, -1), 12),
@@ -285,12 +265,9 @@ namespace Game.Dice
             return FromNormals(Die.D12, v.ToArray(), faces, DieFaceTable.ReadFrom.UpwardFace, AtFaceCentres);
         }
 
-        // ---------------------------------------------------------------- construction
-
         delegate Numeral[] Numbering(Vector3[] vertices, Facet[] facets, float radius);
 
-        // a face's rim is every vertex furthest along its normal - saves hand-listing sixty
-        // indices for the d12, and a typo gives a missing face rather than a subtly wrong one
+        // a face's rim is every vertex furthest along its normal, so a typo yields a missing face, not a subtly wrong one
         static DieSolid FromNormals(
             Die size, Vector3[] vertices, (Vector3 Normal, int Value)[] faces,
             DieFaceTable.ReadFrom readFrom, Numbering numbering)
@@ -320,8 +297,7 @@ namespace Game.Dice
                 Vector3 normal = (scaled[ring[1]] - scaled[ring[0]])
                     .Cross(scaled[ring[2]] - scaled[ring[0]]).Normalized();
 
-                // outward, whatever order the ring was written in
-                // every solid here is centred on the origin, so the face's own middle says which way is out
+                // flip to outward: every solid is centred on the origin, so the face centre points the way out
                 if (normal.Dot(centre) < 0f)
                 {
                     Array.Reverse(ring);
@@ -334,8 +310,7 @@ namespace Game.Dice
             return new DieSolid(size, scaled, facets, readFrom, numbering(scaled, facets, radius));
         }
 
-        // everything within a whisker of the furthest is on that face - on a solid this
-        // regular the next vertex in is nowhere near
+        // vertices within a whisker of the furthest are the face; on solids this regular the next one in is nowhere near
         static int[] RimAlong(Vector3[] vertices, Vector3 normal)
         {
             float furthest = vertices.Max(v => v.Dot(normal));
@@ -367,10 +342,7 @@ namespace Game.Dice
 
         const float CornerHeight = 0.90f;  // numeral size, as a share of the face's inradius
 
-        // the d4's numbers go in the corners - three to a face, twelve in all
-        // a tetrahedron at rest shows three faces and hides the fourth, and the hidden one is the answer
-        // so an apex-read d4 prints it at the top CORNER of all three faces you can see
-        // numbering the faces instead puts the result face down on the felt where nobody can read it
+        // the d4's numbers sit in the corners (three per face) so the result shows at the top corner, not face-down on the felt
         static Numeral[] AtCorners(Vector3[] vertices, Facet[] facets, float radius)
         {
             var numerals = new List<Numeral>();
@@ -378,9 +350,7 @@ namespace Game.Dice
             foreach (Facet f in facets)
             foreach (int corner in f.Ring)
             {
-                // facet i was built as the face opposite vertex i - see Tetrahedron
-                // so this corner's number is the facet with its index, which is also the face
-                // the die rests on when this corner is uppermost
+                // corner's value is facets[corner] - the face opposite it, the one on the felt when this corner is up
                 int value = facets[corner].Value;
 
                 Vector3 outward = vertices[corner] - f.Centre;
@@ -397,8 +367,6 @@ namespace Game.Dice
 
             return numerals.ToArray();
         }
-
-        // ---------------------------------------------------------------- measurements
 
         static Vector3 Average(IEnumerable<Vector3> points)
         {
@@ -453,8 +421,7 @@ namespace Game.Dice
                 shallowest = Mathf.Max(shallowest, facets[i].Normal.Dot(facets[j].Normal));
             }
 
-            // on that edge the better face leans half the angle between them, and the half-angle
-            // cosine of an angle whose cosine is d is sqrt((1+d)/2)
+            // half-angle: the cosine of half an angle whose cosine is d is sqrt((1+d)/2)
             float onEdge = Mathf.Sqrt((1f + shallowest) / 2f);
 
             return (onEdge + 1f) / 2f;

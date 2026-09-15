@@ -5,41 +5,21 @@ using Content.Campaigns;
 using Content.Encounters;
 using Content.Minis;
 using Content.Schema;
+using Core.Characters;
+using Core.Dice;
 
 namespace Game.Diagnostics
 {
-    // THE CONTENT VALIDATOR, RUN OVER EVERY CAMPAIGN ON DISK (CONTENT_PIPELINE.md P4).
-    //
-    // "A content validator the loader runs over a campaign, reporting every schema problem at once
-    // with the file and line - the thing that makes hand-authoring a campaign, yours or a
-    // player's, tolerable rather than a load-crash-fix loop."
-    //
-    // IT IS NOT A SECOND PROGRAM. `Content.Campaigns.Package.Read` is the validator, and it is
-    // also exactly what the game runs when it loads a shelf - so this check cannot pass something
-    // the game then refuses, and cannot refuse something the game then plays. All this adds is a
-    // console, a verdict and an exit code.
-    //
-    // WHAT IT REPORTS WHEN NOTHING IS WRONG MATTERS AS MUCH AS WHAT IT REPORTS WHEN SOMETHING IS.
-    // An author who has just written a campaign wants to see it read back: the id it registered
-    // under, the monsters, the rooms, the encounters, who stands on which slot, and what nothing
-    // has got round to running yet. A validator that only speaks up to complain is a validator
-    // nobody runs until they are already stuck.
-    //
-    // Run it with check-campaign.ps1. Everything printed is developer and author diagnostic,
-    // exempt from localization like `Actor.DebugName`.
+    // everything printed is developer and author diagnostic, exempt from localization
     public partial class CampaignCheck : HeadlessCheck
     {
         protected override string Subject => "campaign";
 
-        // A GAME WITH NO CAMPAIGNS INSTALLED IS NOT A FAILURE - that is a fresh install, and
-        // ARCHITECTURE.md section 8 is explicit that it has to boot and play. Turn this on in a
-        // build where a campaign is expected to be there
+        // no campaigns is not a failure (fresh install); turn this on where one is expected
         [Export] public bool ExpectSome { get; set; }
 
         public override void _Ready()
         {
-            // the same shape every other check uses: only what was actually asked for on the
-            // command line, so the export above stays the single place the default lives
             foreach (string arg in OS.GetCmdlineUserArgs())
                 if (arg == "--expect-some") ExpectSome = true;
 
@@ -61,11 +41,7 @@ namespace Game.Diagnostics
                 if (found == 0) GD.Print("  none installed");
             }
 
-            // EVERY FOLDER SIDE BY SIDE, WHICH IS THE ONLY WAY TWO OF THE CHECKS CAN BE MADE
-            // (MINIS_AND_ART.md A4). "Is the pack this one depends on installed" and "does this
-            // mini id resolve across every root" are questions about the shelf rather than about
-            // a folder, so the validator assembles one - the same `Shelf` the game assembles when
-            // it loads, for the same reason the read is the same read
+            // a Shelf side by side, because cross-pack checks are shelf questions, not folder ones
             Shelf shelf = Shelf.Of(read);
 
             foreach (Shelf.Entry entry in shelf.Entries) Check(entry, shelf);
@@ -93,14 +69,12 @@ namespace Game.Diagnostics
         {
             Package package = entry.Package;
 
-            // THE FOLDER NAME FIRST AND ALWAYS, even for a campaign that failed so early it never
-            // learned its own id - "which folder" is the only thing an author can act on
+            // folder name first, even for a campaign too broken to know its id: it is all an author can act on
             GD.Print($"  {package.Id}");
 
             foreach (ContentProblem problem in package.Problems) Problem("  " + problem);
 
-            // WAITING IS NOT BROKEN, and the shelf has to say which it is. One of these is a bug
-            // report and the other is a subscription somebody has not made yet (A4)
+            // missing deps is waiting, not broken: a subscription not yet made, not a bug
             if (entry.Missing.Count > 0)
             {
                 GD.Print($"        did not load - it needs {string.Join(", ", entry.Missing)}, " +
@@ -111,9 +85,7 @@ namespace Game.Diagnostics
 
             if (package.Failed)
             {
-                // THE ISOLATION BOUNDARY, SAID OUT LOUD. A failed campaign is still on the shelf
-                // and contributes nothing, which is the behaviour that keeps one bad subscribed
-                // item from taking the other seven with it
+                // a failed campaign stays on the shelf but contributes nothing, so one bad item does not sink the rest
                 GD.Print("        did not load - nothing in it is in play, and the rest of the " +
                          "shelf is unaffected");
                 GD.Print("");
@@ -122,10 +94,7 @@ namespace Game.Diagnostics
 
             Manifest manifest = package.Manifest;
 
-            // ITS STRINGS, REGISTERED, because the title below is a key and a key with no
-            // translation server behind it is just the key again. `Library` does this when the
-            // game loads a shelf; the validator does it here for the same reason and with the
-            // same call, so a campaign whose CSV is missing reads as missing in both
+            // register its strings, or the title below is just its key; the game does the same, so a missing CSV shows in both
             int strings = Game.Campaigns.CampaignLocale.Register(package.Folder);
 
             GD.Print($"        format {manifest.Format}, needs engine {manifest.Engine} " +
@@ -135,22 +104,44 @@ namespace Game.Diagnostics
             if (manifest.Tags.Count > 0)
                 GD.Print($"        tags: {string.Join(", ", manifest.Tags)}");
 
-            // THE TITLE IS A KEY AND NOT A FIELD (Manifest), so what a shelf would actually show
-            // is what the locale says - and printing both is how an author sees that the CSV they
-            // wrote is the one being read
+            // the title is a key, not a field; printing both shows an author the CSV being read is theirs
             GD.Print($"        titled '{Text(manifest.NameKey)}' ({manifest.NameKey}), " +
                      $"{strings} strings");
 
             GD.Print($"        {package.Monsters.Ids.Count} monsters, {package.Items.Ids.Count} " +
                      $"items, {package.Maps.Count} maps, {package.Encounters.Ids.Count} encounters" +
-                     (package.Minis.Ids.Count > 0 ? $", {package.Minis.Ids.Count} minis" : ""));
+                     (package.Minis.Ids.Count > 0 ? $", {package.Minis.Ids.Count} minis" : "") +
+                     (package.Classes.Ids.Count > 0 ? $", {package.Classes.Ids.Count} classes" : "") +
+                     (package.Kit.Ids.Count > 0 ? $", {package.Kit.Ids.Count} abilities" : ""));
+
+            foreach (Content.Classes.ClassCard card in package.Classes.All)
+            {
+                Actor hero = package.Classes.Create(card.Id);
+
+                GD.Print($"        class {card.Id} - titled '{Text(card.NameKey)}', " +
+                         $"vigor {hero.MaxVigor}, defense {hero.Defense}, {hero.NerveCap} nerve");
+
+                GD.Print($"          {Rated(hero)}");
+
+                GD.Print($"          holding {Held(card, hero)}, standing as " +
+                         (card.MiniId.Length > 0 ? card.MiniId : "whatever its tier gives it"));
+
+                foreach (string local in card.Kit)
+                {
+                    Content.Kits.Ability ability = package.Kit.Find(local);
+
+                    GD.Print($"          kit {local} -> " +
+                             (ability == null ? "NOTHING - no such ability" : ability.ToString()) +
+                             (ability == null ? "" : $", titled '{Text(ability.NameKey)}'"));
+                }
+
+                foreach (Content.Classes.Growth step in card.Growth)
+                    GD.Print($"          growth {step} - carried; who hands it out is Phase R");
+            }
 
             if (manifest.Dependencies.Count > 0)
                 GD.Print($"        needs: {string.Join(", ", manifest.Dependencies)}");
 
-            // WHAT EACH MINI ACTUALLY RESOLVED TO, which is the one thing an author of a variant
-            // cannot see from the file they wrote: "oldbones as rabble, 82 mm, tinted #D8CFB8" is
-            // the whole of A0 read back to them
             foreach (MiniManifest mini in package.Minis.All)
             {
                 Mounted mounted = shelf.Mount(package.Id, ContentId.LocalOf(mini.Id));
@@ -185,17 +176,39 @@ namespace Game.Diagnostics
                 GD.Print($"          spawn {placement.Slot} {where} - {placement.Monster}");
             }
 
-            // READ, CARRIED, AND NOT YET RUN. Printed rather than hidden, because a slot that
-            // silently does nothing is indistinguishable from a slot that is broken
+            // triggers printed though not yet run: a silent slot is indistinguishable from a broken one
             foreach (Trigger trigger in plan.Triggers)
                 GD.Print($"          trigger {trigger} - carried; the runner is Phase R");
 
             foreach (Cue cue in plan.Cues)
-                GD.Print($"          cue {cue} - carried; the DM learns it in Phase D");
+                GD.Print($"          cue {cue}" +
+                         (cue.LineKey(package.Id) is { } line
+                             ? $" - \"{Text(line)}\""
+                             : " - no words, just the gesture"));
         }
 
-        // through the same localizer the game draws its marks with, so a missing string looks here
-        // exactly the way it would look on the table
+        // derived from the enums in sheet order, so a sixth skill needs no edit here
+        static string Rated(Actor hero)
+        {
+            var rated = new List<string>();
+
+            foreach (Attr a in System.Enum.GetValues<Attr>())
+                if (hero.Attribute(a).IsReal())
+                    rated.Add($"{Text(a.Key())} {hero.Attribute(a).Label()}");
+
+            foreach (Skill s in System.Enum.GetValues<Skill>())
+                if (hero.SkillDie(s).IsReal())
+                    rated.Add($"{Text(s.Key())} {hero.SkillDie(s).Label()}");
+
+            return rated.Count == 0 ? "no dice at all" : string.Join(", ", rated);
+        }
+
+        static string Held(Content.Classes.ClassCard card, Actor hero) =>
+            card.Wields == null
+                ? "nothing"
+                : $"{Text(hero.WeaponKey)} {hero.Weapon.Label()} ({card.Wields})";
+
+        // the same localizer the game uses, so a missing string looks here as it would on the table
         static string Text(string key)
         {
             string english = Godot.TranslationServer.Translate(key);

@@ -3,10 +3,7 @@ using Core.Dice;
 
 namespace Core.Resolution
 {
-    // a pool is up to three dice - attribute, optional skill, optional gear
-    // untrained means a smaller pool, not a penalty
-    // each die carries the localization key of the trait that gave it
-    // never display text, so the tray can label the same die in any language
+    // each die carries its trait's localization key, never text, so the tray can label it in any language
     public readonly struct PoolDie
     {
         public readonly string LabelKey;
@@ -26,7 +23,7 @@ namespace Core.Resolution
         public IReadOnlyList<PoolDie> Dice => _dice;
         public int Count => _dice.Count;
 
-        // a None die is dropped without complaint - that is how the pool shrinks
+        // a None die is dropped silently - that's how an untrained pool shrinks
         public Pool Add(string labelKey, Die die)
         {
             if (die.IsReal()) _dice.Add(new PoolDie(labelKey, die));

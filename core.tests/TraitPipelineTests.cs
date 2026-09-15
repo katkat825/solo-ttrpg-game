@@ -6,12 +6,6 @@ using Xunit;
 
 namespace Core.Tests
 {
-    // the three properties F3 exists to buy, held from outside the class:
-    // order is irrelevant, saturation is visible, provenance is kept
-    //
-    // the pipeline is exercised directly here rather than through an Actor because the sources
-    // it is built for - feats, gear, Strain - do not exist yet. ConditionTests covers the one
-    // source the engine applies today
     public class TraitPipelineTests
     {
         static readonly ModifierSource Ring = ModifierSource.Gear("ring_of_might");
@@ -24,7 +18,6 @@ namespace Core.Tests
             return p;
         }
 
-        // ---- the ladder itself ----
 
         [Fact]
         public void StepBy_MovesAndReportsWhatItDelivered()
@@ -56,7 +49,6 @@ namespace Core.Tests
             Assert.Equal(0, delivered);
         }
 
-        // ---- order is irrelevant ----
 
         [Fact]
         public void TwoDownwardModifiers_ComposeToTwoSteps()
@@ -87,8 +79,7 @@ namespace Core.Tests
             Assert.Equal(a.Current(Attr.Might), b.Current(Attr.Might));
         }
 
-        // this is the one a replaying pipeline gets wrong: -2 from a d6 hits the floor, and a
-        // later +1 would climb back off it to d6, so the answer would depend on arrival order
+        // a replaying pipeline gets this wrong: -2 floors a d6, then +1 climbs back, so order would matter
         [Fact]
         public void AStepDownThroughTheFloor_DoesNotBankAStepUp()
         {
@@ -105,7 +96,6 @@ namespace Core.Tests
             Assert.Equal(0, a.Refused(Attr.Might));
         }
 
-        // ---- saturation is visible ----
 
         [Fact]
         public void ThreeStepsDownFromD6_IsAD4WithTwoRefused()
@@ -151,7 +141,6 @@ namespace Core.Tests
             Assert.Equal(0, p.Refused(Attr.Might));
         }
 
-        // ---- provenance is kept ----
 
         [Fact]
         public void OneSourceComesOff_AndTheOtherStays()
@@ -217,7 +206,6 @@ namespace Core.Tests
             Assert.Throws<ArgumentException>(() => ModifierSource.Effect(null));
         }
 
-        // ---- the base, and attributes that are not on the ladder ----
 
         [Fact]
         public void SettingTheBaseLater_KeepsTheModifiersOnIt()

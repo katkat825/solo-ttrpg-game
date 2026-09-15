@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Content.Audio;
+using Content.Classes;
 using Content.Encounters;
 using Content.Items;
+using Content.Kits;
 using Content.Minis;
 using Content.Models;
 using Content.Monsters;
@@ -13,38 +15,6 @@ using Core.Space;
 
 namespace Content.Campaigns
 {
-    // A CAMPAIGN FOLDER, READ WHOLE (CONTENT_PIPELINE.md P4).
-    //
-    //     ashfall/
-    //       pack.json         who this is, what KIND, what version, which chapters   (A4)
-    //         or campaign.json - the same file under the name every folder written
-    //         before Phase A uses, and it keeps working
-    //       maps/             the rooms                        (P2)
-    //       encounters/       who is in them, and what happens (P4)
-    //       monsters/         statblocks                       (P0)
-    //       items/            gear                             (P1)
-    //       minis/            what its monsters stand as       (Phase A)
-    //       models/           the figures those minis point at (Phase A)
-    //       audio/            and what they sound like         (Phase A)
-    //       locale/           this pack's strings              (P0/P5)
-    //
-    // THE ISOLATION BOUNDARY IS THIS CLASS, and it is a boundary because reading a folder is a
-    // VALUE and never an exception. `Read` cannot throw: a folder with a corrupt manifest, a
-    // monster that will not parse, a map with a wall in the wrong place or an encounter naming a
-    // ghoul nobody ships comes back as a `Package` whose `Problems` say so, and `Failed` says
-    // whether anything in it is playable. One bad campaign on a shelf of eight is one bad entry on
-    // the shelf - `ARCHITECTURE.md` section 9: "a broken third-party campaign is the normal case,
-    // not a bug".
-    //
-    // AND IT IS THE VALIDATOR. P4 asks for "a content validator the loader runs over a campaign,
-    // reporting every schema problem at once with the file and line". That is not a second program:
-    // it is this read, with nothing thrown away. The loader runs it and plays what loaded; the
-    // check script runs it and prints the list. One code path, so the validator cannot pass
-    // something the loader then refuses.
-    //
-    // IN `content/` AND NOT IN `game/`, which is what makes it testable headlessly - a campaign
-    // folder is ordinary files on an ordinary disk (`System.IO`, not `res://`), and the Godot side
-    // adds exactly one thing on top: registering the locale CSVs, which needs a translation server.
     public sealed class Package
     {
         public const string MonstersFolder = "monsters";
@@ -54,10 +24,10 @@ namespace Content.Campaigns
         public const string LocaleFolder = "locale";
         public const string AssetsFolder = "assets";
 
-        // THE ART FOLDERS (MINIS_AND_ART.md, MODDING.md section 2). `minis/` is a folder of JSON
-        // manifests exactly as `monsters/` is; `models/` and `audio/` are what those manifests
-        // point AT, and neither is enumerated - a file nobody names is a file nobody loads, which
-        // is what keeps a pack's spare exports from being parsed on the off chance
+        public const string ClassesFolder = "classes";
+
+        public const string KitsFolder = "kits";
+
         public const string MinisFolder = "minis";
         public const string ModelsFolder = "models";
         public const string AudioFolder = "audio";
@@ -67,7 +37,7 @@ namespace Content.Campaigns
         Package(string folder, string id, Manifest manifest, JsonArchetypeSource monsters,
                 ItemCatalogue items, EncounterBook encounters,
                 IReadOnlyDictionary<string, MapLayout> maps, MiniCatalogue minis,
-                List<ContentProblem> problems)
+                ClassRoster classes, KitBook kit, List<ContentProblem> problems)
         {
             Folder = folder;
             Id = id;
@@ -77,20 +47,20 @@ namespace Content.Campaigns
             Encounters = encounters;
             Maps = maps;
             Minis = minis ?? MiniCatalogue.Of(null);
+            Classes = classes ?? ClassRoster.Of(id);
+            Kit = kit ?? KitBook.Of(id);
             Problems = problems;
         }
 
         public string Folder { get; }
 
-        // WHICH OF THE TWO NAMES THIS FOLDER USED, so a problem points at the file the author
-        // actually has rather than at the one they might have had
+        // which of the two names this folder used, so a problem points at the file the author has
         public string ManifestFile { get; private set; } = ManifestReader.FileName;
 
-        // THE FOLDER'S NAME, always - even when the manifest is the thing that failed. A shelf
-        // entry that cannot say which folder it is would be no better than the folder being absent
+        // the folder name, always, even when the manifest is the thing that failed
         public string Id { get; }
 
-        // null when `campaign.json` could not be read, which is the one failure that stops the rest
+        // null when the manifest could not be read; the one failure that stops the rest
         public Manifest Manifest { get; }
 
         public JsonArchetypeSource Monsters { get; }
@@ -99,27 +69,22 @@ namespace Content.Campaigns
 
         public EncounterBook Encounters { get; }
 
-        // by file name without the extension, which is how an encounter names one
+        // keyed by file name without the extension, which is how an encounter names one
         public IReadOnlyDictionary<string, MapLayout> Maps { get; }
 
-        // WHAT ITS MONSTERS STAND AS (Phase A). Empty for every campaign written before this
-        // phase and for most written after it - a campaign with no minis of its own stands its
-        // monsters on the shared roster's figures, which is what `greyhollow` does
+        public ClassRoster Classes { get; }
+
+        public KitBook Kit { get; }
+
         public MiniCatalogue Minis { get; }
 
-        // EVERY PROBLEM IN THE FOLDER, AT ONCE. Not the first one - authoring against a loader
-        // that stops at the first mistake is a load-fix-load loop, and against one that reports
-        // all of them it is a list to work through (`ContentProblem`)
         public IReadOnlyList<ContentProblem> Problems { get; }
 
-        // A FAILED PACKAGE CONTRIBUTES NOTHING - no monsters in the roster, no items in the
-        // catalogue, no strings in the table. Anything less than all-or-nothing is a campaign
-        // half-installed, which is the state that produces a bug report nobody can reproduce
+        // a failed package contributes nothing; all-or-nothing avoids a half-installed campaign
         public bool Failed => Manifest == null;
 
         public bool Clean => Problems.Count == 0;
 
-        // ---- reading one ----
 
         public static Package Read(string folder)
         {
@@ -131,7 +96,8 @@ namespace Content.Campaigns
 
             if (manifest == null)
                 return new Package(folder, name, null, null, null, null,
-                                   new Dictionary<string, MapLayout>(), null, problems);
+                                   new Dictionary<string, MapLayout>(), null, null, null,
+                                   problems);
 
             string id = manifest.Id;
 
@@ -140,17 +106,33 @@ namespace Content.Campaigns
             EncounterBook encounters = EncounterBook.Read(In(folder, EncountersFolder));
             IReadOnlyDictionary<string, MapLayout> maps = ReadMaps(folder, problems);
             MiniCatalogue minis = MiniCatalogue.Read(In(folder, MinisFolder), id);
+            ClassRoster classes = ClassRoster.Read(In(folder, ClassesFolder), id);
+            KitBook kit = KitBook.Read(In(folder, KitsFolder), id);
+
+            // pack items plus shared gear; the pack's own wins where both have the id
+            var equipment = new ItemCatalogue();
+            equipment.Absorb(items);
+            equipment.Absorb(SharedGear.Catalogue);
+            classes.Equips(equipment);
 
             problems.AddRange(monsters.Problems);
             problems.AddRange(items.Problems);
             problems.AddRange(encounters.Problems);
+
+            foreach (ContentProblem problem in classes.Problems)
+                problems.Add(new ContentProblem(ClassesFolder + "/" + problem.File, problem.Where,
+                                                problem.What, problem.Line));
+
+            foreach (ContentProblem problem in kit.Problems)
+                problems.Add(new ContentProblem(KitsFolder + "/" + problem.File, problem.Where,
+                                                problem.What, problem.Line));
 
             foreach (ContentProblem problem in minis.Problems)
                 problems.Add(new ContentProblem(MinisFolder + "/" + problem.File, problem.Where,
                                                 problem.What, problem.Line));
 
             var package = new Package(folder, id, manifest, monsters, items, encounters, maps,
-                                      minis, problems)
+                                      minis, classes, kit, problems)
             {
                 ManifestFile = ManifestFileIn(folder),
             };
@@ -178,10 +160,7 @@ namespace Content.Campaigns
                 return null;
             }
 
-            // EITHER NAME, PREFERRING THE NEW ONE (A4). A folder with BOTH is a fork somebody
-            // half-finished, and picking one quietly would mean the game and the author disagree
-            // about which file is being read - which is the worst kind of authoring bug, because
-            // edits appear to do nothing
+            // a folder with both files is refused; picking one quietly would make edits appear to do nothing
             string file = null;
 
             foreach (string candidate in ManifestReader.FileNames)
@@ -203,8 +182,6 @@ namespace Content.Campaigns
 
             if (file == null)
             {
-                // WORTH ITS OWN SENTENCE, because it is what every folder looked like before P4
-                // and what a half-copied one looks like now
                 problems.Add(new ContentProblem(
                     ManifestReader.FileName, "",
                     $"'{name}' has no {ManifestReader.PackFileName} or {ManifestReader.FileName}, " +
@@ -261,8 +238,7 @@ namespace Content.Campaigns
                     continue;
                 }
 
-                // THE SAME READER THE BOARD USES, which is what makes this a validator rather than
-                // a second opinion - it passes for exactly the maps the board can load
+                // the same reader the board uses, so this validates exactly what the board can load
                 if (!MapReader.TryRead(text, out MapLayout map, out string problem))
                 {
                     problems.Add(new ContentProblem(file, "", problem));
@@ -275,16 +251,8 @@ namespace Content.Campaigns
             return maps;
         }
 
-        // ---- and the questions no single file can answer ----
 
-        // EVERY REFERENCE ONE FILE MAKES TO ANOTHER, FOLLOWED. This is the half of validation that
-        // `EncounterReader` explicitly cannot do: a reader sees one file, and "does this campaign
-        // ship a ghoul" is a question about the folder. Done here, once, with everything open.
-        //
-        // The failures below are the ones that actually happen while authoring - a renamed map, a
-        // monster that moved to another campaign, a chapter pointing at an encounter that was
-        // deleted. Every one of them would otherwise be a fight that musters nobody, and every one
-        // of them is one sentence here
+        // every cross-file reference, followed here where the whole folder is open
         void CrossCheck(List<ContentProblem> problems)
         {
             string book = EncountersFolder + "/";
@@ -323,6 +291,20 @@ namespace Content.Campaigns
 
                 at = 0;
 
+                foreach (Cue cue in plan.Cues)
+                {
+                    string cueWhere = $"cues[{at++}].at";
+
+                    if (cue.Slot > 0 && map != null && map.SpawnAt(cue.Slot) == null)
+                        problems.Add(new ContentProblem(
+                            file, cueWhere,
+                            $"{plan.Map} has no spawn {cue.Slot} drawn on it for the DM to " +
+                            $"{cue.Does.Word()} at - it has " +
+                            $"{Offered(map.Spawns.Keys.OrderBy(s => s).Select(s => s.ToString()))}"));
+                }
+
+                at = 0;
+
                 foreach (Trigger trigger in plan.Triggers)
                 {
                     string where = $"triggers[{at++}].encounter";
@@ -335,8 +317,7 @@ namespace Content.Campaigns
                 }
             }
 
-            // AND THE CHAPTERS, which is the reference that decides whether anything is reachable
-            // at all: an encounter no chapter names is a file that will never be played
+            // an encounter no chapter names can never be played
             var named = new HashSet<string>(StringComparer.Ordinal);
             int chapter = 0;
 
@@ -368,10 +349,7 @@ namespace Content.Campaigns
                         "no chapter names this encounter, so nothing can ever play it - put it in " +
                         "a chapter, or delete the file"));
 
-            // WHAT A MONSTER DROPS HAS TO BE SOMETHING THE CAMPAIGN SHIPS. Gear ids are a shared
-            // namespace with the engine's (ItemReader), so a drop naming `axe` would quietly
-            // resolve to the engine's - which works on this machine and stops working on one where
-            // the campaign that shipped it is not installed. Self-contained means self-contained
+            // a drop must be the campaign's own item; a shared-namespace axe breaks where the campaign isn't installed
             foreach (string id in Monsters.Ids.OrderBy(i => i, StringComparer.Ordinal))
             {
                 Statblock block = Monsters.Of(id);
@@ -380,7 +358,7 @@ namespace Content.Campaigns
 
                 string file = MonstersFolder + "/" + ContentId.LocalOf(id) + ".json";
 
-                // a null item is "nothing this time", which is most of a loot table (LootTable)
+                // a null item is "nothing this time", which is most of a loot table
                 foreach (string item in block.Loot.Entries.Select(e => e.Item).Where(i => i != null))
                     if (!Items.Has(item))
                         problems.Add(new ContentProblem(
@@ -389,10 +367,10 @@ namespace Content.Campaigns
                             $"ship what it drops. It has {Offered(Items.Ids)}"));
             }
 
+            CrossCheckClasses(problems);
+
             CrossCheckArt(problems);
 
-            // AND THE PICTURE ON THE BOX, if it named one. Workshop requires a preview image, and
-            // a manifest naming a file that is not there is a shelf entry with a hole in it
             if (Manifest.Preview.Length > 0 &&
                 !File.Exists(Path.Combine(Folder, Manifest.Preview)))
                 problems.Add(new ContentProblem(
@@ -400,27 +378,68 @@ namespace Content.Campaigns
                     $"there is no '{Manifest.Preview}' in this campaign's folder"));
         }
 
-        // EVERY FILE THE ART SIDE NAMES, OPENED AND MEASURED (MINIS_AND_ART.md A2, A3).
-        //
-        // This is the model half of "the validator extends to models: run it over a pack and every
-        // over-cap texture, missing clip and unresolved id is reported at once, before load, with
-        // the file named". It runs at LOAD as well as from the check script, because they are the
-        // same code path - which is the property that keeps a validator from passing something the
-        // game then refuses.
-        //
-        // NOTHING HERE IS FATAL TO THE PACK. A mini whose model is over a cap is one placeholder
-        // box with a sentence beside it; the pack's other minis, its monsters, its rooms and its
-        // encounters all load. That is the isolation boundary drawn one level finer than a folder
-        // (`MINIS_AND_ART.md`: "the placeholder box is a feature, not a stopgap")
+        // shared gear counts here, unlike a monster's loot: the engine's axe is as portable as the class itself
+        void CrossCheckClasses(List<ContentProblem> problems)
+        {
+            foreach (ClassCard card in Classes.All)
+            {
+                string file = ClassesFolder + "/" + ContentId.LocalOf(card.Id) + ClassRoster.Extension;
+
+                CheckGear(card.Wields, "wields", file, problems);
+                CheckGear(card.Wears, "wears", file, problems);
+
+                if (card.MiniId.Length > 0 && !Names(card.MiniId))
+                    problems.Add(new ContentProblem(
+                        file, "mini",
+                        $"'{card.MiniId}' is not a mini this pack ships and not one the game " +
+                        $"ships ({Offered(SharedMinis.Catalogue.Ids)}) - if it belongs to " +
+                        "another pack, write it as '<pack>.<mini>' and name that pack in " +
+                        "dependencies"));
+
+                int at = 0;
+
+                foreach (string ability in card.Kit)
+                {
+                    if (Kit.Find(ability) != null) { at++; continue; }
+
+                    problems.Add(new ContentProblem(
+                        file, $"kit[{at++}]",
+                        $"'{ability}' is not an ability this pack's {KitsFolder}/ folder ships " +
+                        $"and not one the game ships ({Offered(SharedKit.All.Select(a => a.Id))})"));
+                }
+
+                foreach (Content.Classes.Growth step in card.Growth)
+                {
+                    if (step.Ability == null || Kit.Find(step.Ability) != null) continue;
+
+                    problems.Add(new ContentProblem(
+                        file, $"growth[{step.Id}].ability",
+                        $"'{step.Ability}' is not an ability this pack's {KitsFolder}/ folder " +
+                        $"ships and not one the game ships - a growth step that unlocks nothing " +
+                        "is a reward with nothing in it"));
+                }
+            }
+        }
+
+        void CheckGear(string id, string where, string file, List<ContentProblem> problems)
+        {
+            if (id == null || Items.Has(id) || SharedGear.Has(id)) return;
+
+            problems.Add(new ContentProblem(
+                file, where,
+                $"'{id}' is not an item this pack ships and not one the game ships " +
+                $"({Offered(SharedGear.Catalogue.Ids)}) - a class has to start you with " +
+                "something that exists"));
+        }
+
+        // runs at load too, same code path; nothing here is fatal, a bad model is a placeholder box
         void CrossCheckArt(List<ContentProblem> problems)
         {
             foreach (MiniManifest mini in Minis.All)
             {
                 string file = MinisFolder + "/" + ContentId.LocalOf(mini.Id) + MiniReader.Extension;
 
-                // A VARIANT OF A MINI IN THIS PACK is the one link a single folder can follow;
-                // a bare name is one of the shared roster's, and a dotted one belongs to another
-                // pack and is the shelf's question (`Shelf`)
+                // a variant in this pack is the one link a folder can follow; a dotted id is the shelf's question
                 if (mini.IsVariant) CheckVariant(mini, file, problems);
 
                 if (mini.HasModel) CheckModel(mini, file, problems);
@@ -429,9 +448,6 @@ namespace Content.Campaigns
                     CheckFoley(set, file, problems);
             }
 
-            // AND WHAT THE MONSTERS ASKED TO STAND AS. A statblock naming a mini nobody ships is
-            // the commonest way this phase breaks, and it breaks into a box rather than a crash -
-            // so it has to be SAID, here, where the author can still fix it
             foreach (string id in Monsters.Ids.OrderBy(i => i, StringComparer.Ordinal))
             {
                 Statblock block = Monsters.Of(id);
@@ -448,9 +464,7 @@ namespace Content.Campaigns
             }
         }
 
-        // does THIS pack, or the base game, have a mini by that name? A dotted id naming another
-        // pack is deliberately allowed through - the shelf resolves it and reports it if missing,
-        // because a folder on its own cannot know what else is installed
+        // a dotted id naming another pack is deliberately allowed through; the shelf resolves it
         bool Names(string mini) =>
             ContentId.IsScoped(mini)
                 ? Minis.Has(mini) || ContentId.CampaignOf(mini) != Id
@@ -478,10 +492,6 @@ namespace Content.Campaigns
                 return;
             }
 
-            // THE CLIP THAT IS NOT THERE, NAMED ALONGSIDE THE ONES THAT ARE. This is A1's "rename
-            // a clip wrong and confirm it degrades to the procedural motion with a named warning,
-            // not an exception" - and the list of what the file DOES have is what turns the
-            // warning from a complaint into an answer
             foreach (KeyValuePair<Motion, string> clip in mini.Clips)
             {
                 if (read.Value.Has(clip.Value)) continue;
@@ -520,7 +530,6 @@ namespace Content.Campaigns
             return list.Length == 0 ? "none at all" : Vocabulary.Offer(list);
         }
 
-        // DEVELOPER ONLY - not localized, never reaches a player
         public override string ToString()
         {
             if (Failed) return $"{Id}: FAILED, {Problems.Count} problems";
@@ -528,6 +537,8 @@ namespace Content.Campaigns
             return $"{Id}: {Monsters.Ids.Count} monsters, {Items.Ids.Count} items, " +
                    $"{Maps.Count} maps, {Encounters.Ids.Count} encounters" +
                    (Minis.Ids.Count > 0 ? $", {Minis.Ids.Count} minis" : "") +
+                   (Classes.Ids.Count > 0 ? $", {Classes.Ids.Count} classes" : "") +
+                   (Kit.Ids.Count > 0 ? $", {Kit.Ids.Count} abilities" : "") +
                    (Problems.Count > 0 ? $", {Problems.Count} problems" : "");
         }
     }

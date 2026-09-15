@@ -3,10 +3,7 @@ using Core.Dice;
 
 namespace Game.Dice
 {
-    // which number is showing, given a die's orientation
-    // split out of DieBody because the table is the piece that varies per shape
-    // it must match the numerals painted on the die - a mismatch makes the die lie silently
-    // every factory here reads DieSolid, so there is no second copy to keep in step
+    // must match the numerals painted on the die, or the die lies silently
     public sealed class DieFaceTable
     {
         public readonly struct Face
@@ -23,10 +20,7 @@ namespace Game.Dice
             }
         }
 
-        // which face carries the result
-        // a d4 rests with a corner up and no face at all
-        // so its number is on the face against the table, read DOWNWARD
-        // get this wrong and it returns the wrong number forever without looking broken
+        // a d4 rests corner-up, so its value is on the downward face against the table
         public enum ReadFrom
         {
             UpwardFace,
@@ -48,7 +42,6 @@ namespace Game.Dice
         public int Sides => _faces.Length;
 
         // alignment is a dot product - 1.0 is dead flat, low means cocked
-        // live, not cached - valid mid-tumble, it just won't mean much until the die stops
         public (int Value, float Alignment) Read(Basis orientation)
         {
             int best = 0;
@@ -68,7 +61,6 @@ namespace Game.Dice
             return (best, bestDot);
         }
 
-        // a tetrahedron, read from the face against the felt
         public static DieFaceTable D4() => For(Die.D4);
 
         public static DieFaceTable D6() => For(Die.D6);

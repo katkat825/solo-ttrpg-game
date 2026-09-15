@@ -6,22 +6,7 @@ using Core.Resolution;
 
 namespace Sim
 {
-    // WHAT GIVING TROUBLE TEETH COSTS (COMBAT_LOOP.md C4, CONVENTIONS.md 8).
-    //
-    // Two or more 1s is about 6% of throws with the starting pool and it has been reported by
-    // `PoolResult.Trouble` since the resolver was written, with nothing acting on it. C4 made it
-    // real: the gear takes a Condition, and when there is no gear left to take one the hero does
-    // (Core.Combat.Trouble). That is a balance change, and a balance change gets simulated.
-    //
-    // `CombatEngine.Run` does not apply it and must not - every number in SIMULATION.md was
-    // measured with Run and moving it would make that document wrong until somebody re-verified
-    // all of it. So this measures the change the way the TABLE experiences it: the same
-    // player-driven path, with an auto-player that takes every Trouble on the chin.
-    //
-    // TAKING EVERY ONE IS THE PESSIMISTIC READ, deliberately. A player can shrug one off for a
-    // Nerve or bank one for later (CORE_RULES.md section 7), and this auto-player does neither -
-    // it never spends a Nerve at all. So the difference below is the most Trouble can cost, and
-    // what it costs in play sits somewhere above it.
+    // taking every trouble is the pessimistic read: this auto-player never shrugs, so the cost is an upper bound
     static class TroubleReport
     {
         static readonly IArchetypeSource Archetypes = new BuiltInArchetypes();
@@ -91,10 +76,7 @@ namespace Sim
                 wins > 0 ? (double)vigor / wins : 0);
         }
 
-        // the same auto-player as everywhere else, plus one line: when the hero's own throw came
-        // up two 1s, the complication lands on him. The foes' Troubles are not applied, because
-        // nothing has decided yet what a Trouble costs a monster - that is a campaign's answer
-        // and it is Phase P's
+        // only the hero's troubles are applied; what one costs a monster is undecided
         static EncounterResult Fight(CombatEngine engine, Actor hero, IList<Actor> foes, bool bites)
         {
             var fight = new Encounter(engine, hero, foes);

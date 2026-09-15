@@ -1,0 +1,15 @@
+{
+  "id": "warden",
+  "vigor": 20,
+  "defense": 11,
+  "attributes": { "might": "d8", "grace": "d6", "wits": "d6", "heart": "d6" },
+  "skills": { "blades": "d6", "brawl": "d6" },
+  "wields": "warden_glaive",
+  "kit": [ "steady_guard", "hearth_ward", "force_door" ],
+  "mini": "barbarian",
+  "growth": [
+    { "id": "shield_wall", "attribute": "might" },
+    { "id": "watchful", "skill": "insight" },
+    { "id": "spear_drill", "ability": "hearth_ward" }
+  ]
+}

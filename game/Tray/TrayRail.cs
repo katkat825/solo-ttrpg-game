@@ -2,32 +2,8 @@ using Godot;
 
 namespace Game.Tray
 {
-    // the render mesh for one tray wall: a bevelled, mitred rail
-    //
-    // RENDER ONLY. Nothing here touches a CollisionShape3D, so the physics the fairness sweep
-    // measured is untouched - dice still bounce off the same box faces they always did, and no
-    // re-sweep is owed for the three cosmetic changes this makes. DiceTray builds one of these per
-    // wall from the wall's own collision box and hangs it on the existing MeshInstance3D, so the
-    // skin's material still lands on it (DiceTray.Meshes walks it) and TrayBounds is unaffected.
-    //
-    // Three changes, all above the felt, none of them moving an inner face:
-    //   - 45 degree mitred ends, so the corners read as a joined frame rather than four
-    //     overlapping boxes. the outer edge of each rail runs the full length and the inner edge
-    //     is a wall-thickness shorter at each end, the way a real mitre is cut
-    //   - a noticeable chamfer on the OUTER top edge - the polished bevel a wooden tray has, and
-    //     the safest change there is: that edge faces away from the dice and is never touched
-    //   - a barely-there chamfer on the INNER top edge, because planed wood is never a true 90
-    //
-    // The rim height and the wall angle are deliberately NOT changed: those are physical and would
-    // owe a sweep. See DICE_TRAY.md.
-    //
-    // Every triangle's normal AND winding are forced to point away from the rail's own centre, so
-    // a mistake in the profile order cannot leave a face dark or culled - "outward" is computed,
-    // not trusted. Generated at runtime, deliberately not a [Tool] script: baking geometry into
-    // the scene is how a stale mesh and the real dimensions drift apart, the reason DieSolid
-    // generates too.
-    //
-    // The two bevel sizes are constants, meant to be tuned by eye.
+    // render only: nothing here touches a CollisionShape3D, so the swept physics is untouched and no re-sweep is owed
+    // every triangle's normal and winding are forced outward from the rail's own centre, so a mis-wound profile can't leave a face dark or culled
     public static class TrayRail
     {
         // the polished outer bevel - a chamfer on the top outer edge. noticeable on purpose
@@ -36,10 +12,7 @@ namespace Game.Tray
         // the inner top edge - just off square, so it catches the light like planed wood
         public const float InnerBevel = 0.0015f;
 
-        // thickness, height and length are the wall's own dimensions, read off its collision box.
-        // across/up/along place this rail into the wall's local frame: across is the outward
-        // horizontal (+ = away from the tray centre), up is +Y, along is the wall's length. one
-        // generator serves all four walls whichever way they run and whichever way they face.
+        // thickness/height/length are the wall's own dimensions; across/up/along place the rail into the wall's frame (across points away from the tray centre), so one generator serves all four walls
         public static ArrayMesh Build(
             float thickness, float height, float length,
             Vector3 across, Vector3 up, Vector3 along)
@@ -64,8 +37,7 @@ namespace Game.Tray
                 new(-a, top - bevIn),     // inner top, past it
             };
 
-            // the mitre: the outer edge (+x) runs the full length, the inner edge (-x) is one wall
-            // thickness shorter at each end, so two perpendicular rails meet on a 45 degree line
+            // the mitre: the outer edge runs the full length, the inner edge is a wall-thickness shorter at each end, so perpendicular rails meet on a 45 line
             float EndHi(float x) => (half - a) + x;
             float EndLo(float x) => -(half - a) - x;
 
@@ -112,10 +84,7 @@ namespace Game.Tray
         static Vector3 Map(Vector3 across, Vector3 up, Vector3 along, Vector3 c) =>
             across * c.X + up * c.Y + along * c.Z;
 
-        // one triangle, oriented so its front face and its normal both point away from the rail's
-        // centre. the rail is built around its own origin, so "away from the centre" is just the
-        // triangle centroid's own direction - which removes any dependence on getting the profile
-        // wound correctly by hand, the one thing that cannot be checked without opening the editor
+        // orient each triangle so its face and normal point away from the rail's centre (the centroid direction), so a hand-wound profile can't be checked wrong
         static void Tri(SurfaceTool st, Vector3 across, Vector3 up, Vector3 along,
                         Vector3 ca, Vector3 cb, Vector3 cc)
         {

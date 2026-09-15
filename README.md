@@ -96,7 +96,7 @@ The dice tray works. Three dice of mixed shapes thrown together, real collisions
 
 Next is the Snag cue, then the grid and tiles, one mini moving, and the combat loop. After that comes the part I actually care about, which is writing a short campaign entirely in data with no new code. If that doesn't work then neither does the rest of the plan, so it's better to find out now than in year three.
 
-That "campaign is a folder, no new code" goal is also why I'm building this to sell: a commercial release on Steam with Steam Workshop support, so other people can build and share campaigns the same way I add them. The architecture doesn't change for that — the same engine/content boundary that lets me add campaigns for a decade is the one that lets players make their own — so the ambition grew and the plan didn't. The design docs carry the specifics: `ARCHITECTURE.md` §8–§9 for the framing, `CONTENT_PIPELINE.md` for the Workshop-ready campaign format and the Steam integration, and `LEGAL_NOTES.md` for what selling and hosting other people's content adds.
+That "campaign is a folder, no new code" goal is also why I'm building this to sell: a commercial release on Steam with Steam Workshop support, so other people can build and share campaigns the same way I add them. The architecture doesn't change for that — the same engine/content boundary that lets me add campaigns for a decade is the one that lets players make their own — so the ambition grew and the plan didn't.
 
 ## Still undecided
 

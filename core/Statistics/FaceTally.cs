@@ -4,11 +4,6 @@ using System.Linq;
 
 namespace Core.Statistics
 {
-    // counts how a die's faces land, and says whether that looks fair
-    // a physics die is not fair by construction
-    // mass, spawn orientation, tray shape and throw all bias it, invisibly
-    // chi-squared against uniform asks whether a fair die could have done this
-    // headless and Godot-free, so it lives in core/ and has its own tests
     public sealed class FaceTally
     {
         // chi-squared critical values by degrees of freedom (faces - 1)
@@ -53,9 +48,6 @@ namespace Core.Statistics
 
         public int DegreesOfFreedom => Sides - 1;
 
-        // sum of (observed - expected)^2 / expected
-        // accounts for sample size, unlike eyeballing percentages
-        // so it neither panics at a short run nor shrugs at a long one
         public double ChiSquare
         {
             get
@@ -75,7 +67,6 @@ namespace Core.Statistics
             }
         }
 
-        // percentage points off an even share, not percent
         public double WorstDeviationPoints
         {
             get
@@ -89,10 +80,6 @@ namespace Core.Statistics
 
         public double Percent(int face) => Total == 0 ? 0 : 100.0 * _counts[face] / Total;
 
-        // Suspicious is not a failure
-        // a fair die crosses the 5% line one run in twenty - failing there cries wolf
-        // only the 0.1% line counts as real bias, about one false alarm in a thousand
-        // Suspicious means throw more at it, not rebuild the die
         public Fairness Verdict
         {
             get
@@ -109,26 +96,10 @@ namespace Core.Statistics
         }
 
         // chi-squared wants five expected observations per face
-        // below this the test says Inconclusive rather than a comforting pass
         public int MinimumUsefulThrows => Sides * 5;
 
-        // ---- mean drift ----
-        //
-        // chi-squared discards the ORDER of the faces. it treats "6 is heavy" exactly like
-        // "3 is heavy", and it spreads its power across every degree of freedom, so a small
-        // push spread evenly along the ladder barely moves it. a d6 tray once scored
-        // chi-squared 8.00 and verdict UNIFORM while its average pip sat 2.7 standard errors
-        // high - which is the exact shape of "the gambler's tray rolls high".
-        //
-        // so this is the second test, aimed straight at the ordered alternative: one degree of
-        // freedom, on the mean. it is also the right statistic for the stakes, because every
-        // table in SIMULATION.md is driven by the mean of a die - a tray that shifts the mean
-        // shifts the balance.
-        //
-        // lived in game/Diagnostics/DiceFairness until 2026-08-20, where nothing could test it.
-        // it only ever touched this class's public surface
+        // chi-squared ignores face order, so this second test watches the mean for a tray that rolls high
 
-        // the average face value actually thrown
         public double MeanPip
         {
             get
@@ -141,10 +112,8 @@ namespace Core.Statistics
             }
         }
 
-        // what a fair die of this size averages - 3.5 for a d6
         public double ExpectedMeanPip => (Sides + 1) / 2.0;
 
-        // how far MeanPip sits from ExpectedMeanPip, in standard errors
         // the variance of one uniform roll over n faces is (n^2 - 1) / 12
         public double MeanDriftZ
         {
@@ -160,8 +129,6 @@ namespace Core.Statistics
         }
 
         // two-sided: 2.58 is the 1% line, 3.0 is about one run in 370
-        // same vocabulary as Verdict on purpose - "biased" meant two things measured two ways
-        // until these were one class, and a reader had to know which one they were holding
         public Fairness DriftVerdict => Math.Abs(MeanDriftZ) switch
         {
             >= DriftBiased => Fairness.Biased,
@@ -169,14 +136,13 @@ namespace Core.Statistics
             _ => Fairness.Uniform,
         };
 
-        // true when the drift runs high rather than low - only meaningful if DriftVerdict is not Uniform
         public bool DriftsHigh => MeanDriftZ > 0;
 
         const double DriftSuspicious = 2.58;
 
         const double DriftBiased = 3.0;
 
-        // DEVELOPER ONLY - not localized, must never reach the screen
+        // debug only, never localized - keep it off the screen
         public IEnumerable<string> DebugLines()
         {
             double share = 100.0 / Sides;
@@ -191,9 +157,7 @@ namespace Core.Statistics
                 double deviation = pct - share;
                 int bar = widest == 0 ? 0 : (int)Math.Round(40.0 * _counts[f] / widest);
 
-                // sign written by hand
-                // .NET's "+0.0;-0.0" section format looks right and is not
-                // a small negative that rounds to zero comes out as "-+0.0"
+                // sign by hand - .NET's "+0.0;-0.0" format turns a rounded-to-zero negative into "-+0.0"
                 string signed = (deviation < 0 ? "-" : "+") + Math.Abs(deviation).ToString("0.0");
 
                 yield return $"  {f}  {_counts[f],6}  {pct,5:0.0}%  {signed,6}pt  " +
@@ -215,12 +179,11 @@ namespace Core.Statistics
             };
         }
 
-        // DEVELOPER ONLY - not localized, must never reach the screen
+        // debug only, never localized - keep it off the screen
         public override string ToString() =>
             string.Join(" ", Enumerable.Range(1, Sides).Select(f => $"{f}:{_counts[f]}"));
     }
 
-    // what the chi-squared test can conclude, worst answer last
     public enum Fairness
     {
         Inconclusive,

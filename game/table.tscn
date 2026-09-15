@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=12 format=3]
 
 ; THE TABLE. The game's main scene from B0 onward, and the shipped view of it.
 ;
@@ -22,6 +22,7 @@
 [ext_resource type="PackedScene" path="res://Board/rabble.tscn" id="8_rabble"]
 [ext_resource type="PackedScene" path="res://Board/dread.tscn" id="9_dread"]
 [ext_resource type="Script" path="res://Fight/Fight.cs" id="7_fight"]
+[ext_resource type="Script" path="res://Dm/Dm.cs" id="10_dm"]
 [ext_resource type="Texture2D" path="res://textures/tray_wood/color.jpg" id="3_color"]
 [ext_resource type="Texture2D" path="res://textures/tray_wood/roughness.jpg" id="4_rough"]
 [ext_resource type="Texture2D" path="res://textures/tray_wood/normalgl.jpg" id="5_normal"]
@@ -84,6 +85,18 @@ TrayPath = NodePath("../DiceTray")
 [node name="DiceTray" parent="." instance=ExtResource("2_tray")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.38, 0, 0.09)
 
+; THE DM, ACROSS THE TABLE (DM_PRESENCE.md D0). The screen stands at the far edge, art facing the
+; player, and the hands come from behind it - which is the loading boundary D0 establishes:
+; everything the DM produces comes from somewhere you cannot see.
+;
+; PLACED HERE IN WORLD SPACE like everything else on this table, and nothing inside it knows where
+; it stands. Rotated to face the camera, and far enough back that the hands have table to reach
+; ACROSS - the reach is most of what makes a gesture read.
+[node name="Dm" type="Node3D" parent="."]
+script = ExtResource("10_dm")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.02, -0.041, -0.46)
+BoardPath = NodePath("../Board")
+
 ; THE FIGHT (COMBAT_LOOP.md C0). It needs the board and the tray both, and the table is the one
 ; place that knows both are standing on it - the same reason the board's TrayPath is set here and
 ; not inside board.tscn. Last child, so the board has finished loading its map and made its hero
@@ -92,6 +105,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.38, 0, 0.09)
 script = ExtResource("7_fight")
 BoardPath = NodePath("../Board")
 TrayPath = NodePath("../DiceTray")
+DmPath = NodePath("../Dm")
 RivalPiece = ExtResource("6_rival")
 RabblePiece = ExtResource("8_rabble")
 DreadPiece = ExtResource("9_dread")

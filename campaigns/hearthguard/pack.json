@@ -1,0 +1,9 @@
+{
+  "id": "hearthguard",
+  "kind": "classes",
+  "format": 1,
+  "engine": "0.4",
+  "author": "the house",
+  "tags": [ "classes", "melee" ],
+  "dependencies": []
+}

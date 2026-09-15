@@ -5,38 +5,17 @@ using Content.Schema;
 
 namespace Content.Campaigns
 {
-    // `campaign.json`, READ AND REFUSED BY NAME (CONTENT_PIPELINE.md P4).
-    //
-    // THE FIRST FILE READ AND THE ONE THAT DECIDES WHETHER THE REST IS READ AT ALL. Everything
-    // else in a campaign folder is scoped by the id declared here, and the two version fields
-    // decide whether this build can make sense of any of it - so a manifest that will not parse
-    // stops the folder, and `Library` shows it on the shelf as failed with this reason attached.
-    // That is the isolation boundary, and it is one `if` because the failure is a value.
-    //
-    // THE SAME HAND-ROLLED READER AS THE OTHERS, and for the same reason `StatblockReader` states:
-    // deserializing into a class gives you `null` fields and a stack trace, and what an author
-    // needs is the file, the field and a sentence. Every problem is collected, never thrown, and
-    // the read comes back with all of them at once.
     public static class ManifestReader
     {
-        // TWO NAMES FOR ONE FILE, AND BOTH ARE READ (MINIS_AND_ART.md A4, MODDING.md section 2).
-        //
-        // `pack.json` is what a folder that is not a campaign should be calling this, and it is
-        // the one that asks the new question - a pack declares its `kind`. `campaign.json` is
-        // every folder written before this milestone, and it keeps working forever, defaulting to
-        // the kind it obviously is. That is the "prefer adding a new key and deprecating the old"
-        // rule applied to a file name: renaming would break every campaign in the wild to buy
-        // tidiness, which is the trade this project refuses everywhere else.
+        // both file names are read; every campaign.json already written keeps working
         public const string PackFileName = "pack.json";
 
         public const string FileName = "campaign.json";
 
-        // the names a folder may declare itself with, best first - `Package` looks for them in
-        // this order and complains if a folder has both
+        // best first; Package looks in this order and complains if a folder has both
         public static readonly string[] FileNames = { PackFileName, FileName };
 
-        // <paramref name="folder"/> is the campaign's folder name, which the id has to match -
-        // pass null to skip that check (a validator run against a loose file has no folder)
+        // folder null skips the folder-matches-id check (a loose file has no folder)
         public static Read<Manifest> Parse(string json, string file, string folder = null)
         {
             var problems = new List<ContentProblem>();
@@ -99,9 +78,7 @@ namespace Content.Campaigns
             {
                 if (Array.IndexOf(Fields, property.Name) >= 0) continue;
 
-                // THE ONE THAT DESERVES ITS OWN SENTENCE. A title in a manifest is the mistake
-                // every author coming from every other moddable game will make, and "a campaign
-                // has no 'title'" is a true answer that teaches nothing
+                // title/name/description get their own sentence; it's the mistake every modder makes
                 if (property.Name == "title" || property.Name == "name" ||
                     property.Name == "description")
                 {
@@ -111,8 +88,7 @@ namespace Content.Campaigns
                         file, property.Name,
                         $"a campaign's {property.Name} is not written here - it is a localized " +
                         "string, so it lives in this campaign's locale/ CSV under " +
-                        $"'campaign.<id>.{aspect}' and is derived from the id rather than listed. " +
-                        "See CONVENTIONS.md on keys"));
+                        $"'campaign.<id>.{aspect}' and is derived from the id rather than listed."));
                     continue;
                 }
 
@@ -145,11 +121,7 @@ namespace Content.Campaigns
                 return null;
             }
 
-            // THE FOLDER NAME AND THE ID ARE ONE FACT SAID TWICE, and two places to say it is two
-            // places to disagree. Held together rather than picking a winner, because either
-            // choice surprises somebody: a folder renamed on disk would silently re-scope every
-            // key, and an id that outvotes the folder makes `campaigns/ashfall` load as something
-            // else. A sentence at load costs one rename and settles it
+            // folder and id must match; picking a winner would silently re-scope every key
             if (folder != null && !string.Equals(folder, id, StringComparison.Ordinal))
                 problems.Add(new ContentProblem(
                     file, "id",
@@ -160,13 +132,7 @@ namespace Content.Campaigns
             return id;
         }
 
-        // WHICH KIND OF FOLDER THIS IS, and the default is the one it has always been.
-        //
-        // OPTIONAL IN `campaign.json` AND REQUIRED IN `pack.json`, which is the whole of the
-        // compatibility story in one rule: nothing already written has to change, and a folder
-        // that adopts the new file name is asked the new question rather than being silently
-        // assumed to be a campaign - which for a mini pack would produce "a campaign with no
-        // chapters in it has nothing to play", a true sentence about the wrong thing
+        // optional in campaign.json (defaults to campaign), required in pack.json
         static PackKind Kind(JsonElement root, string file, List<ContentProblem> problems)
         {
             bool isPackFile = string.Equals(file, PackFileName, StringComparison.Ordinal);
@@ -187,15 +153,6 @@ namespace Content.Campaigns
             if (value.ValueKind == JsonValueKind.String &&
                 Vocabulary.TryWord(value.GetString(), out PackKind kind))
             {
-                // A CLASS PACK IS SPECCED AND NOT BUILT, and saying so is better than either
-                // silently loading nothing out of it or calling the word a typo. `CLASSES_AND_KITS.md`
-                // is phase K and this is phase A
-                if (kind == PackKind.Classes)
-                    problems.Add(new ContentProblem(
-                        file, "kind",
-                        "this build does not load class packs yet - classes and kits are phase K " +
-                        "(CLASSES_AND_KITS.md). A pack of minis is \"minis\""));
-
                 return kind;
             }
 
@@ -240,8 +197,7 @@ namespace Content.Campaigns
                 return null;
             }
 
-            // REFUSED RATHER THAN HALF-PLAYED. A campaign built on a rule this build does not have
-            // would otherwise load, look right, and be wrong in the middle of a fight
+            // refused rather than half-played: a missing rule would look right and be wrong mid-fight
             if (!Core.EngineVersion.Satisfies(engine))
                 problems.Add(new ContentProblem(
                     file, "engine",
@@ -295,9 +251,6 @@ namespace Content.Campaigns
 
                 string tag = entry.GetString() ?? "";
 
-                // THE SAME GRAMMAR AS AN ID, because a tag is a machine word a storefront filters
-                // on rather than a phrase anybody reads. "Undead Horror!" is a title, and a title
-                // belongs in a locale file
                 if (!ContentId.IsLocal(tag))
                 {
                     problems.Add(new ContentProblem(
@@ -319,15 +272,7 @@ namespace Content.Campaigns
             return tags;
         }
 
-        // LIVE SINCE A4, HAVING BEEN RESERVED SINCE P4. What is in it are PACK IDS - the same
-        // grammar as this pack's own, because that is what they are - and what they are NOT is
-        // versions, urls or Workshop numbers. A dependency is "this folder needs that folder to be
-        // installed", resolved across every root by the loader (`Shelf`), and a missing one is
-        // named rather than half-loaded.
-        //
-        // NOTHING HERE ASKS WHETHER THE PACK EXISTS, for the same reason `EncounterReader` does
-        // not ask whether a monster does: a reader sees one file, and "is that installed" is a
-        // question about the shelf
+        // pack ids only; whether they're installed is the shelf's question, not this reader's
         static IReadOnlyList<string> Dependencies(JsonElement root, string id, string file,
                                                   List<ContentProblem> problems)
         {
@@ -364,8 +309,7 @@ namespace Content.Campaigns
 
                 string needed = entry.GetString();
 
-                // A PACK THAT DEPENDS ON ITSELF resolves forever or not at all depending on how
-                // carefully the resolver was written, and the honest answer is that it is a typo
+                // self-dependency would loop the resolver; it's a typo
                 if (string.Equals(needed, id, StringComparison.Ordinal))
                 {
                     problems.Add(new ContentProblem(
@@ -385,10 +329,6 @@ namespace Content.Campaigns
             return needs;
         }
 
-        // A MINI PACK HAS NO CHAPTERS AND IS NOT MISSING ANY (A4). Which absences are worth a
-        // sentence is exactly what a `kind` decides, and this is the first place it decides one:
-        // demanding chapters of a folder full of skeletons would be the loader describing a
-        // different kind of thing than the one it was handed
         static IReadOnlyList<Chapter> Chapters(JsonElement root, PackKind kind, string file,
                                                List<ContentProblem> problems)
         {
@@ -512,8 +452,6 @@ namespace Content.Campaigns
             return new Chapter(id, encounters);
         }
 
-        // THE STARTING STATE, which today is which chapter you are in. Optional, because the
-        // obvious answer is the first one and a campaign should not have to say the obvious
         static string Start(JsonElement root, IReadOnlyList<Chapter> chapters, string file,
                             List<ContentProblem> problems)
         {
@@ -532,9 +470,6 @@ namespace Content.Campaigns
 
             string start = value.GetString() ?? "";
 
-            // A CAMPAIGN THAT STARTS NOWHERE is the failure this catches, and it is the easiest
-            // one in the file to make: rename a chapter, forget this line, and the shelf has an
-            // entry that opens onto nothing
             if (chapters.Count > 0 && !HasChapter(chapters, start))
             {
                 problems.Add(new ContentProblem(

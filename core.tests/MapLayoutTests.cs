@@ -4,9 +4,6 @@ using Xunit;
 
 namespace Core.Tests
 {
-    // What a map answers - about its squares, and since EDGE_WALLS.md about the lines between them.
-    // Small, but three of these are load-bearing for everything Route and Sight do: off the map is
-    // Void rather than an exception, a line has ONE name from both sides, and a map never changes.
     public class MapLayoutTests
     {
         static MapLayout Read(params string[] lines)
@@ -17,8 +14,6 @@ namespace Core.Tests
             return map;
         }
 
-        //  a room of six squares: floor along the top, and below it floor, rock and rough walled
-        //  apart, with a shut door under the middle
         static MapLayout Room() => Read(
             "+-+-+-+",
             "|@ . .|",
@@ -26,7 +21,6 @@ namespace Core.Tests
             "|.|#|~|",
             "+-+-+-+");
 
-        // ---- the squares ----
 
         [Fact]
         public void ItKnowsWhichSquaresItHas()
@@ -39,8 +33,7 @@ namespace Core.Tests
             Assert.False(map.Contains(new Cell(-1, 0)));
         }
 
-        // the property Route and Sight are both built on: they walk cells that step outside, and
-        // neither wants a bounds check of its own
+        // off-map is void not an exception, so route and sight can step outside without a bounds check
         [Fact]
         public void OffTheMapIsVoid_NotAnExceptionAndNotAWall()
         {
@@ -66,8 +59,6 @@ namespace Core.Tests
             Assert.Equal(new Cell(0, 1), cells[3]);
         }
 
-        // a map and a grid are two structures over one extent, and the caller that read the file
-        // builds both from the same numbers - so they agree by construction
         [Fact]
         public void AGridBuiltFromAMapCoversExactlyTheSameSquares()
         {
@@ -79,11 +70,8 @@ namespace Core.Tests
             Assert.Equal(map.Count, grid.Count);
         }
 
-        // ---- the lines ----
 
-        // THE PROPERTY THAT MAKES Border A TYPE. A line has two squares beside it and would
-        // otherwise have two names; a wall put up from one side and looked for from the other would
-        // not be found, and nothing about that failure would look like anything
+        // a line has one name from both sides; two names would hide a wall put up from one side
         [Fact]
         public void ALineHasOneNameFromBothSides()
         {
@@ -109,7 +97,6 @@ namespace Core.Tests
             Assert.Equal(new Cell(4, 2), along.Across);
         }
 
-        // squares that touch at a corner share no line, and nothing can stand on a corner
         [Fact]
         public void DiagonalNeighboursHaveNoLineBetweenThem()
         {
@@ -121,9 +108,8 @@ namespace Core.Tests
         [Fact]
         public void AMapKnowsWhichLinesItHas()
         {
-            MapLayout map = Room();   // 3 x 2
+            MapLayout map = Room();
 
-            // the outer boundary is a line like any other, one past the last column and row
             Assert.True(map.Contains(Border.East(new Cell(2, 0))));
             Assert.True(map.Contains(Border.South(new Cell(0, 1))));
 
@@ -134,7 +120,7 @@ namespace Core.Tests
         [Fact]
         public void Borders_AreEveryLineOnce()
         {
-            MapLayout map = Room();   // 3 x 2: (3+1)*2 vertical and 3*(2+1) horizontal
+            MapLayout map = Room();
 
             var borders = map.Borders.ToList();
 
@@ -143,14 +129,12 @@ namespace Core.Tests
             Assert.All(borders, b => Assert.True(map.Contains(b)));
         }
 
-        // ---- crossing them ----
 
         [Fact]
         public void AWallStopsAPieceCrossingAndALineOfSight()
         {
             MapLayout map = Room();
 
-            // the wall between the floor and the rock on the bottom row
             Assert.False(map.CanCross(new Cell(0, 1), new Cell(1, 1)));
             Assert.False(map.CanSee(new Cell(0, 1), new Cell(1, 1)));
         }
@@ -175,9 +159,6 @@ namespace Core.Tests
             Assert.True(map.CanSee(new Cell(0, 0), new Cell(1, 0)));
         }
 
-        // crossing asks about the square as well - you cannot step into rock even with nothing on
-        // the line. SEEING does not: "neither end blocks" is Sight's rule and only Sight knows
-        // which squares are its ends
         [Fact]
         public void CrossingAsksAboutTheSquareToo_AndSeeingDoesNot()
         {
@@ -201,8 +182,6 @@ namespace Core.Tests
             Assert.False(map.CanSee(new Cell(0, 0), new Cell(1, 1)));
         }
 
-        // a line out beyond the map is open, and the VOID past it is what stops anything going that
-        // way. inventing a wall out there would be a second reason for the same refusal
         [Fact]
         public void ALineTheMapDoesNotHaveIsOpen()
         {
@@ -212,10 +191,8 @@ namespace Core.Tests
             Assert.False(map.CanCross(new Cell(0, 0), new Cell(-1, 0)));
         }
 
-        // ---- one thing changed ----
 
-        // B4 opens a door. the map it opens is a NEW map, because the one that was loaded is
-        // content and content does not change - what a session accumulates is the difference
+        // opening a door yields a new map; the loaded one is content and never changes
         [Fact]
         public void OpeningADoorLeavesTheMapItWasLoadedFrom_Alone()
         {
@@ -263,7 +240,6 @@ namespace Core.Tests
             Assert.Equal(Tile.Rough, rubble.At(wrecked));
             Assert.Equal(Tile.Floor, floor.At(wrecked));
 
-            // and the lines came with it
             foreach (Border border in floor.Borders) Assert.Equal(floor.At(border), rubble.At(border));
         }
 
@@ -272,13 +248,12 @@ namespace Core.Tests
         {
             MapLayout room = Room();
 
-            Assert.Same(room, room.With(new Cell(0, 0), Tile.Floor));         // already floor
-            Assert.Same(room, room.With(new Cell(99, 0), Tile.Floor));        // not a square it has
-            Assert.Same(room, room.With(Border.West(new Cell(0, 0)), Edge.Wall));   // already a wall
+            Assert.Same(room, room.With(new Cell(0, 0), Tile.Floor));
+            Assert.Same(room, room.With(new Cell(99, 0), Tile.Floor));
+            Assert.Same(room, room.With(Border.West(new Cell(0, 0)), Edge.Wall));
             Assert.Same(room, room.With(new Border(new Cell(9, 9), true), Edge.Wall));
         }
 
-        // ---- what a tile means ----
 
         [Fact]
         public void RockStopsAPieceAndALine()
@@ -304,7 +279,7 @@ namespace Core.Tests
             Assert.Equal(2, Tile.Rough.MoveCost());
         }
 
-        // A* is only correct while nothing costs less than the heuristic assumes
+        // a* is only correct while nothing costs less than the heuristic assumes
         [Fact]
         public void NothingCostsLessThanTheMinimum()
         {
@@ -312,7 +287,6 @@ namespace Core.Tests
                 Assert.True(tile.MoveCost() >= Tiles.MinimumCost);
         }
 
-        // ---- what an edge means ----
 
         [Fact]
         public void AWallAndAShutDoorAreClosedAndOpaque()
@@ -324,8 +298,7 @@ namespace Core.Tests
             Assert.False(Edge.Door.IsTransparent());
         }
 
-        // an OPEN door is not a value - it is nothing on the line, because a doorway you can walk
-        // and see through is a gap in the wall and the frame round it is the view's business
+        // an open door is nothing on the line, a gap in the wall, not a value
         [Fact]
         public void NothingOnTheLineIsOpenAndSeeThrough()
         {

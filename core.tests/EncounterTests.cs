@@ -8,12 +8,6 @@ using Xunit;
 
 namespace Core.Tests
 {
-    // the player-driven path: rounds, whose turn it is, and how many actions they get
-    //
-    // the property that matters most is the last one in this file - that driving the encounter
-    // the way `Run` plays it produces the same fight. `Run` is what SIMULATION.md's numbers were
-    // measured with, and a player path that quietly disagreed with it would mean the balance
-    // work describes a game nobody is playing
     public class EncounterTests
     {
         static CombatEngine Engine(IRng rng, CombatOptions opts = null, ICombatObserver observer = null) =>
@@ -23,7 +17,6 @@ namespace Core.Tests
                                ICombatObserver observer = null) =>
             new Encounter(Engine(rng, opts, observer), Fixtures.Hero(), Fixtures.StandardEncounter(rabble));
 
-        // ---- the shape of a round ----
 
         [Fact]
         public void BeforeItBegins_NobodyIsActing()
@@ -46,9 +39,6 @@ namespace Core.Tests
             Assert.Equal(new CombatOptions().HeroActionsPerRound, fight.ActionsLeft);
         }
 
-        // A TURN ENDS ITSELF WHEN THERE IS NOTHING LEFT TO DECIDE, and the hero out of actions
-        // still has a Nerve, which buys a third one (CORE_RULES.md section 7). Ending his turn for
-        // him would spend that decision by taking away the chance to make it
         [Fact]
         public void TheHeroOutOfActions_KeepsTheTurn_WhileHeHasANerve()
         {
@@ -75,7 +65,6 @@ namespace Core.Tests
             Assert.Contains(fight.Acting, fight.Foes);
         }
 
-        // with no Nerve there is nothing to wait for, and the turn ends itself like anybody's
         [Fact]
         public void WithNoNerveLeft_TheTurnEndsItself()
         {
@@ -89,7 +78,6 @@ namespace Core.Tests
             Assert.False(fight.AwaitingHero);
         }
 
-        // and a foe never waits: it has no Nerve and nothing else it could be about to do
         [Fact]
         public void AFoeOutOfActions_PassesItOnAtOnce()
         {
@@ -125,8 +113,6 @@ namespace Core.Tests
             Assert.False(fight.AwaitingHero);
         }
 
-        // ordinary enemies get one action - the whole of the action-economy fix seen from the
-        // other side (CORE_RULES.md section 8)
         [Fact]
         public void OrdinaryFoesGetOneAction()
         {
@@ -138,8 +124,7 @@ namespace Core.Tests
             Assert.Equal(1, fight.Acting.ActionsPerRound);
         }
 
-        // and a Dread gets two, because Encounter reads Actor.ActionsPerRound rather than
-        // assuming. that field was set and never read anywhere in the repo before Phase C
+        // a dread gets two because encounter reads actor.actionsperround rather than assuming
         [Fact]
         public void ADreadGetsTwo_BecauseTheActorSaysSo()
         {
@@ -160,7 +145,6 @@ namespace Core.Tests
             var fight = Fight(new SeededRng(1), rabble: 2);
             fight.Begin();
 
-            // hero, then three foes (two Rabble and a Rival), then round two
             fight.EndTurn();
             for (int i = 0; i < fight.Foes.Count; i++) fight.EndTurn();
 
@@ -168,7 +152,6 @@ namespace Core.Tests
             Assert.True(fight.AwaitingHero);
         }
 
-        // ---- the downed are skipped, and the fight ends ----
 
         [Fact]
         public void ADownedFoe_DoesNotGetATurn()
@@ -229,7 +212,6 @@ namespace Core.Tests
             Assert.Same(was, fight.Result);
         }
 
-        // ---- striking ----
 
         [Fact]
         public void AStrikeCostsAnAction()
@@ -246,7 +228,7 @@ namespace Core.Tests
         [Fact]
         public void AStrikeOffTheFelt_UsesTheDieItWasHanded()
         {
-            var rival = Fixtures.Rival();   // defense 11, 8 vigor
+            var rival = Fixtures.Rival();
             var fight = new Encounter(Engine(new ScriptedRng(1)), Fixtures.Hero(), new[] { rival });
             fight.Begin();
 
@@ -275,8 +257,6 @@ namespace Core.Tests
             Assert.Null(fight.Strike(fight.Foes[0], Attr.Might, Skill.Blades));
         }
 
-        // and never at something already lying down. it would spend a real action on a corpse,
-        // which is the kind of thing a mis-click does at speed
         [Fact]
         public void ThereIsNoStrikingSomethingAlreadyDown()
         {
@@ -292,7 +272,6 @@ namespace Core.Tests
             Assert.Equal(had, fight.ActionsLeft);
         }
 
-        // ---- foe behaviour is injectable, per foe (the seam C6 needs) ----
 
         sealed class NeverSelector : ITargetSelector
         {
@@ -323,20 +302,8 @@ namespace Core.Tests
             Assert.Same(fight.Hero, fight.TargetFor(foe));
         }
 
-        // ---- and the property the whole path rests on ----
 
-        // DRIVEN THE WAY `Run` PLAYS IT, IT IS THE SAME FIGHT. Same seed, same statblocks, same
-        // choices - the hero takes his actions against the engine's own targeting, then every foe
-        // takes one - so the two paths make the same calls on the same RNG in the same order and
-        // must land on the same result. If this ever fails, SIMULATION.md is describing one game
-        // and the table is playing another.
-        //
-        // INITIATIVE IS OFF FOR THIS ONE, and that is the honest comparison rather than a dodge.
-        // `Run` has no initiative in it - hero, then every foe, every round - so a path that rolled
-        // for the order would be a different game before the first blow, and this test would be
-        // measuring the difference between two rules rather than between two implementations of
-        // one. What initiative COSTS is a separate question with a separate answer, and the sim
-        // prints it (PlayerPathReport)
+        // initiative is off so this compares two implementations of one fight, not two different rules
         [Theory]
         [InlineData(1)]
         [InlineData(4242)]
@@ -353,7 +320,6 @@ namespace Core.Tests
             Assert.Equal(scripted.HeroVigorRemaining, played.HeroVigorRemaining);
         }
 
-        // the auto-player: exactly the choices CombatEngine.Run makes, made from outside
         static EncounterResult AutoPlay(int seed)
         {
             var engine = new CombatEngine(
@@ -371,9 +337,6 @@ namespace Core.Tests
                 {
                     Actor target = engine.HeroTargeting.Choose(acting, fight.Foes);
 
-                    // out of actions and holding the turn open for a Nerve he is never going to
-                    // spend. `Run` takes exactly its actions and moves on, so this says so out
-                    // loud - see Encounter.Done for why the hero's turn waits to be told
                     if (target == null || fight.ActionsLeft <= 0) { fight.EndTurn(); continue; }
 
                     fight.Strike(target, engine.Options.HeroAttackAttr, engine.Options.HeroAttackSkill);

@@ -4,47 +4,17 @@ using System.IO;
 using System.Linq;
 using Godot;
 
-// System.IO and Godot both have a FileAccess and this file needs Directory and Path from one and
-// the CSV reader from the other - see LocaleAudit for the same two lines and the same reason
+// System.IO and Godot both define FileAccess; this aliases Godot's
 using GodotFile = Godot.FileAccess;
 
 namespace Game.Campaigns
 {
-    // A CAMPAIGN'S OWN STRINGS, LOADED WITH IT AND UNLOADED WITH IT (ARCHITECTURE.md section 4,
-    // CONTENT_PIPELINE.md P5).
-    //
-    // "A campaign ships its own `locale/` because it names its own monsters, quests and speakers.
-    // Those strings have to travel with the folder or the campaign isn't self-contained." So a
-    // ghoul's name is in the ghoul's campaign, and `game/locale/game.csv` never grows a key that
-    // belongs to somebody's campaign.
-    //
-    // ONE CSV PER LANGUAGE SET, same format as the engine's: a `keys` column and one column per
-    // locale. A campaign may ship several - `monsters.csv` and `quests.csv` beside each other is a
-    // perfectly good way to keep a big one readable - and every one of them is read. Each is handed
-    // to `TranslationServer` as an ordinary `Translation`, so `GodotLocalizer` keeps being the ONE
-    // place a key becomes text and nothing downstream learns that some strings came from a folder.
-    //
-    // WHY THIS IS NOT IMPORTED THE WAY game.csv IS. Godot imports `res://locale/game.csv` at build
-    // time into a `.translation` binary. A campaign is not in `res://` - it is a folder on a disk
-    // that may have arrived from Steam ten minutes ago - so there is nothing to import it and it is
-    // read at runtime instead. That is also why it must be read with Godot's own CSV reader: the
-    // format has to stay identical to the engine's, or an author would have two CSV dialects to
-    // learn.
-    //
-    // REGISTERED BY CAMPAIGN, NOT BY FILE, and that is what makes an unload possible (P5). The
-    // `TranslationServer` is a global and adding the same file twice would double every string in
-    // it, so something has to remember what has already been handed over. Remembering it per
-    // CAMPAIGN means the note can also be used in reverse: unsubscribe from a Workshop item and
-    // its strings go with it, rather than sitting in the table naming monsters nobody can fight.
-    // This is not state the game reasons with - it is a note about what has been said to Godot.
     public static class CampaignLocale
     {
         public const string Folder = "locale";
 
         public const string KeyColumn = "keys";
 
-        // what a campaign handed over, so it can be taken back. Keyed by the campaign's folder,
-        // normalised, because that is the one name both `Library` and a check have in hand
         sealed class Shelf
         {
             public readonly List<Translation> Translations = new List<Translation>();
@@ -57,12 +27,7 @@ namespace Game.Campaigns
         static readonly Dictionary<string, Shelf> Registered =
             new Dictionary<string, Shelf>(StringComparer.OrdinalIgnoreCase);
 
-        // how many strings a campaign brought, or 0 for one that brought none. Not an error:
-        // a campaign that names nothing of its own needs no locale.
-        //
-        // IDEMPOTENT. Several composition roots call `Library.Load`, and each of them would
-        // otherwise add the same CSV again - so a campaign already on the shelf reports what it
-        // brought the first time and hands over nothing
+        // idempotent: several roots call Load, so re-registering would add the same csv twice
         public static int Register(string campaignFolder)
         {
             string key = Key(campaignFolder);
@@ -86,8 +51,7 @@ namespace Game.Campaigns
                 shelf.Files.Add(file);
             }
 
-            // a locale/ folder with no CSV in it leaves nothing to take back later, and a shelf
-            // entry for it would make `Unregister` claim to have done something
+            // no shelf entry for an empty locale/, or Unregister would falsely report a removal
             if (shelf.Translations.Count == 0) return 0;
 
             Registered[key] = shelf;
@@ -95,13 +59,6 @@ namespace Game.Campaigns
             return shelf.Strings;
         }
 
-        // AND THE WAY BACK. `CONTENT_PIPELINE.md` P5: "the loader registers a campaign's locale/
-        // CSVs when the campaign loads, and unregisters them when it unloads". Unsubscribing from
-        // a Workshop item, switching campaigns, or a validator wanting to prove a string really
-        // did come from the folder it says it did - all the same call.
-        //
-        // False when the campaign was never registered, which is not an error: a campaign that
-        // brought no strings has none to take away
         public static bool Unregister(string campaignFolder)
         {
             string key = Key(campaignFolder);
@@ -123,8 +80,7 @@ namespace Game.Campaigns
             return key != null && Registered.ContainsKey(key);
         }
 
-        // one folder, one name, however it was spelled on the way in - a trailing slash or a
-        // relative path would otherwise register the same campaign twice
+        // normalise so a trailing slash or relative path can't register the same campaign twice
         static string Key(string campaignFolder)
         {
             if (string.IsNullOrWhiteSpace(campaignFolder)) return null;
@@ -136,13 +92,10 @@ namespace Game.Campaigns
             }
             catch (Exception)
             {
-                // a path the OS will not even normalise is not a campaign folder
                 return null;
             }
         }
 
-        // one CSV, every locale column in it. A campaign translated into four languages is one
-        // file with four columns, exactly as the engine's is
         static int Read(string file, Shelf shelf)
         {
             using GodotFile csv = GodotFile.Open(file, GodotFile.ModeFlags.Read);
@@ -193,7 +146,6 @@ namespace Game.Campaigns
             return added;
         }
 
-        // what has been handed over, for a report and for a check that wants to know
         public static IReadOnlyCollection<string> Files =>
             Registered.Values.SelectMany(s => s.Files).ToArray();
     }

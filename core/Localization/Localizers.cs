@@ -3,12 +3,7 @@ using System.Globalization;
 
 namespace Core.Localization
 {
-    // the two ILocalizer implementations that need no engine behind them
-    // one echoes the key, one reads an in-memory table
-    // between them the tests and the sim never touch a translation server
-    //
-    // echoing is also how a missing key gets spotted in a running game
-    // hardcoded text still reads as English, a key shows up as actor.barbarian.name
+    // echoing a key is how a missing string shows up - hardcoded text reads as English, a key shows raw
     public sealed class KeyEchoLocalizer : ILocalizer
     {
         public static readonly KeyEchoLocalizer Instance = new KeyEchoLocalizer();
@@ -25,8 +20,6 @@ namespace Core.Localization
         public bool Has(string key) => true;
     }
 
-    // for tests that need real text, and the shape a campaign locale file loads into
-    // an unknown key falls through to the fallback rather than throwing
     public sealed class DictionaryLocalizer : ILocalizer
     {
         readonly IReadOnlyDictionary<string, string> _strings;

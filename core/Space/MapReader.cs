@@ -3,78 +3,23 @@ using System.Text;
 
 namespace Core.Space
 {
-    // a map, read from text - and since EDGE_WALLS.md the text is drawn at DOUBLE RESOLUTION, so
-    // the walls can be on the lines where they belong.
-    //
-    //     +-+-+-+
-    //     |. . .|
-    //     + +x+ +
-    //     |.|#|~|
-    //     +-+-+-+
-    //
-    // A W x H map is (2H+1) lines of (2W+1) characters, and where a character sits is what it
-    // means: odd line and odd column is a SQUARE, even line and odd column is the line ACROSS the
-    // top of that square, odd line and even column is the line UP its left side, and both even is a
-    // corner - scaffolding for the eye, parsed for nothing. Three floor cells open to each other,
-    // a shut door under the middle one, a rock pillar and a patch of difficult ground below.
-    //
-    // WHY NOT JSON. ARCHITECTURE.md 7 says hand-write the data files until it hurts, and then
-    // predicts exactly where it will hurt first: "grid maps in hand-written JSON are genuinely
-    // miserable within about an hour". They are - a JSON grid is a wall of quoted numbers where a
-    // typo is invisible and a room cannot be seen at all. That prediction is an argument against
-    // JSON FOR MAPS, not an argument for building the editor sooner, so this takes the other way
-    // out: the oldest map format there is, where the room is drawn in the file. Moving a wall is
-    // one character, the diff shows the room, and the editor stays a Phase P luxury instead of a
-    // Phase B blocker. Everything else - monsters, items, encounters - stays JSON as planned.
-    //
-    // TEXT IN, NOT A PATH IN. core/ never opens a file: in an exported game a map lives inside a
-    // .pck and only Godot's FileAccess can reach it, so the caller reads the bytes and this parses
-    // them. That is what keeps the parser testable headless, and it is the same seam the whole
-    // engine already runs on.
-    //
-    // Every failure is REPORTED AND NAMED, with the line and column in the file the author is
-    // looking at. A map that half-loads is a room with a wall missing and no way to know it - the
-    // failure this exists to make impossible, and the reason check-maps.ps1 runs every shipped map
-    // through here. The problem string is a developer diagnostic: a broken map is a content bug
-    // found at load, never something a player reads.
+    // double resolution: odd line + odd column is a square, an even coordinate is the line beside it, both even a corner
     public static class MapReader
     {
-        // a line starting with this is a note to whoever is editing the map. ';' rather than '#'
-        // because '#' is rock, and a comment character that is also a glyph is a trap waiting for
-        // the first map with rock in column zero. Godot's own .tscn and .cfg use ';' too
+        // ';' not '#' - '#' is rock, and a comment char that's also a glyph is a trap
         public const char Comment = ';';
 
-        // where the hero's piece starts. the square underneath is floor - a start you can see in
-        // the map is a start that cannot drift into a wall
         public const char StartGlyph = '@';
 
-        // AND WHERE EVERYBODY ELSE STANDS (P2). `1` through `9` are numbered spawn slots, and the
-        // square underneath one is floor for the same reason `@`'s is: a spawn you can see in the
-        // picture cannot drift into a wall.
-        //
-        // THE MAP SAYS WHERE AND THE ENCOUNTER SAYS WHO (CONTENT_PIPELINE.md P2/P4). A room is
-        // drawn once and fought in several ways - four Rabble one chapter, a Dread the next - and
-        // the alternative, a map that names its monsters, is a map that cannot be reused and a
-        // format that has to grow a monster id into a picture made of single characters.
-        //
-        // DIGITS BECAUSE THERE ARE TEN OF THEM AND THEY SORT. Nine slots is a room of eight and a
-        // boss, which is more than CORE_RULES.md section 8 puts in one fight; a tenth would need a
-        // second character and the format's whole argument is that one character is one square
         public const char FirstSpawnGlyph = '1';
 
         public const char LastSpawnGlyph = '9';
 
         public static bool IsSpawn(char glyph) => glyph >= FirstSpawnGlyph && glyph <= LastSpawnGlyph;
 
-        // a junction, drawn so the grid reads as a grid. it carries no meaning, and a space is
-        // equally fine there - but nothing ELSE is, because a '-' or a '|' landing on a corner is
-        // an off-by-one in a hand-drawn map and that is exactly the mistake worth catching
+        // a corner means nothing - but a '-' or '|' landing here is an off-by-one worth catching
         public const char CornerGlyph = '+';
 
-        // THE LEGEND, AND THE ONLY STATEMENT OF IT. The map file describes it in a comment for
-        // whoever is reading the file, and a glyph in the wrong place prints this - so the copy in
-        // the file is a courtesy that cannot silently become wrong, because the error message is
-        // derived from here and the file's comment is not what anything parses
         static readonly (char Glyph, Tile Tile, string Name)[] Squares =
         {
             ('.', Tile.Floor, "floor"),
@@ -82,8 +27,7 @@ namespace Core.Space
             ('#', Tile.Void, "rock - not part of the map"),
         };
 
-        // an edge glyph says which way its line runs, which is how a '|' typed on a horizontal line
-        // gets caught. 'x' is a door either way round: the position already said which way it faces
+        // an edge glyph says which way its line runs, so a '|' on a horizontal line gets caught
         static readonly (char Glyph, Edge Edge, bool Vertical, bool Horizontal, string Name)[] Lines =
         {
             (' ', Edge.None, true, true, "open"),
@@ -92,7 +36,6 @@ namespace Core.Space
             ('x', Edge.Door, true, true, "door, shut"),
         };
 
-        // derived, never listed - the same rule EngineKeys and GameKeys run on
         public static string Legend
         {
             get
@@ -119,7 +62,6 @@ namespace Core.Space
             map = null;
             problem = null;
 
-            // the line number in the FILE, not in the grid - the author is looking at the file
             List<(int Line, string Text)> rows = Rows(text ?? "");
 
             if (rows.Count == 0)
@@ -169,10 +111,7 @@ namespace Core.Space
 
                 for (int j = 0; j < width; j++)
                 {
-                    // SHORT LINES ARE PADDED WITH OPEN, NOT REFUSED. a space is a real glyph here -
-                    // "no wall" - so a map whose east edge is open ends in trailing spaces, and
-                    // every editor in the world eats those. refusing would make the format depend
-                    // on a setting; padding makes the file mean the same thing either way
+                    // pad short lines with open - editors eat trailing spaces, and a space here means no wall
                     char glyph = j < row.Length ? row[j] : ' ';
 
                     bool oddLine = i % 2 == 1;
@@ -186,14 +125,12 @@ namespace Core.Space
                     }
                     else if (oddLine)
                     {
-                        // a line up the west side of the square to its right
                         var border = new Border(new Cell(j / 2, (i - 1) / 2), true);
 
                         if (!Line(glyph, line, j, border, vertical, columns, ref problem)) return false;
                     }
                     else if (oddColumn)
                     {
-                        // a line along the top of the square below it
                         var border = new Border(new Cell((j - 1) / 2, i / 2), false);
 
                         if (!Line(glyph, line, j, border, horizontal, columns, ref problem)) return false;
@@ -239,10 +176,6 @@ namespace Core.Space
             {
                 int slot = glyph - '0';
 
-                // TWO THINGS CANNOT STAND ON ONE SLOT. An encounter places one creature per slot,
-                // so a map with two `3`s in it is a map where one of them is never used and the
-                // author has no way to tell which - exactly the silent half-load this format
-                // refuses everywhere else
                 if (spawns.TryGetValue(slot, out Cell already))
                 {
                     problem = $"line {line} column {column + 1} is a second '{glyph}' - spawn {slot} " +
@@ -295,14 +228,6 @@ namespace Core.Space
             return false;
         }
 
-        // the lines that are map, carrying the line number they came from
-        //
-        // TRAILING WHITESPACE IS KEPT, unlike the cell format this replaced: a space is now a real
-        // glyph meaning "no wall", so a trailing one at the east edge is data. What protects the
-        // format from an editor that strips it is the padding above, not trimming here.
-        //
-        // LEADING whitespace is kept too, and is an error: it is inside the grid, where the first
-        // column is a wall position, so an indented row gets named rather than quietly shifting.
         static List<(int Line, string Text)> Rows(string text)
         {
             var rows = new List<(int, string)>();
@@ -312,13 +237,10 @@ namespace Core.Space
             {
                 string line = lines[i];
 
-                // a line of nothing but whitespace is a blank line, however many spaces it holds -
-                // a real map line always has a corner or a wall in it
                 if (line.Trim().Length == 0) continue;
 
                 if (line.TrimStart().StartsWith(Comment.ToString())) continue;
 
-                // kept exactly as written, trailing spaces and all
                 rows.Add((i + 1, line));
             }
 

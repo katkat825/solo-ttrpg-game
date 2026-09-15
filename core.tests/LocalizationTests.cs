@@ -9,17 +9,8 @@ using Xunit;
 
 namespace Core.Tests
 {
-    // guards that core/ emits keys and never player-visible text
-    // and that every key obeys the one grammar
-    // a failure means English has leaked into the engine, or the scheme has started to drift
-    // drift is expensive - keys are stable identifiers and renaming one breaks every locale file
     public class LocalizationTests
     {
-        // every key the engine can currently produce
-        // plus a few campaign-shaped ones it never emits but the grammar still has to accept
-        // the engine half comes from EngineKeys rather than being listed again here
-        // check-locale.ps1 holds the locale file to that same list
-        // two copies would be free to disagree, this one passing while coverage quietly lapsed
         static IEnumerable<string> AllEmittedKeys()
         {
             var hero = Fixtures.Hero();
@@ -34,15 +25,12 @@ namespace Core.Tests
             foreach (string key in EngineKeys.All(Fixtures.Archetypes))
                 yield return key;
 
-            // not engine output - these ship with a campaign, or do not exist yet
-            // here because the grammar has to hold for them too
             yield return KeyConventions.Bark("wolf", "snag", 17);
             yield return KeyConventions.Line("dm", "narration", "chapter_01", 4);
             yield return KeyConventions.Key(KeyConventions.UiNs, "character_sheet", "title");
             yield return KeyConventions.Key(KeyConventions.CombatNs, "log", "hit");
         }
 
-        // ---- the grammar ----
 
         [Fact]
         public void EveryKeyTheEngineEmits_ObeysTheGrammar()
@@ -84,16 +72,12 @@ namespace Core.Tests
             Assert.Contains("indices go last", KeyConventions.Explain("dialogue.wolf.017.bark"));
         }
 
-        // IsWellFormed delegates to Explain, so today they cannot disagree by construction.
-        // this exists so that if anyone ever splits them back into two implementations, the
-        // split fails here rather than shipping a key that one accepts and the other rejects.
-        // the corpus deliberately straddles every rule in the grammar, in both directions
+        // iswellformed delegates to explain today; this catches a future split into two implementations
         [Fact]
         public void IsWellFormed_AndExplain_NeverDisagree()
         {
             string[] corpus =
             {
-                // well formed
                 "actor.barbarian.name",
                 "actor.rabble.name_numbered",
                 "attr.might.description",
@@ -103,7 +87,6 @@ namespace Core.Tests
                 "ui.character_sheet.title",
                 "campaign.ashfall.title",
 
-                // malformed, one per rule
                 "",
                 "   ",
                 null,
@@ -129,7 +112,6 @@ namespace Core.Tests
             }
         }
 
-        // ---- shape of specific keys ----
 
         [Fact]
         public void TraitKeys_FollowTheConvention()
@@ -152,8 +134,7 @@ namespace Core.Tests
         [Fact]
         public void NumberedActors_UseAFormatKey_NotConcatenation()
         {
-            // "Rabble 3" must come from one key with {0}
-            // never from gluing a number onto a translated word - word order differs by language
+            // "rabble 3" must come from one key with {0}, never a number glued onto a word (word order varies)
             var mook = Fixtures.Mook(3);
 
             Assert.Equal("actor.rabble.name_numbered", mook.NameKey);
@@ -175,9 +156,6 @@ namespace Core.Tests
         [Fact]
         public void SpokenLines_GroupBySpeaker_UnderOneNamespace()
         {
-            // dialogue.wolf.* stays one contiguous block
-            // so a translator can still do one voice in one pass
-            // without speakers occupying the top level
             Assert.Equal("dialogue.wolf.bark.snag.017", KeyConventions.Bark("wolf", "snag", 17));
             Assert.Equal("dialogue.imp.bark.trouble.003", KeyConventions.Bark("imp", "trouble", 3));
             Assert.StartsWith("dialogue.wolf.", KeyConventions.Bark("wolf", "camp", 1));
@@ -190,7 +168,6 @@ namespace Core.Tests
             Assert.Equal("dialogue.wolf.bark.snag.100", KeyConventions.Bark("wolf", "snag", 100));
         }
 
-        // ---- the localizers ----
 
         [Fact]
         public void DictionaryLocalizer_ResolvesAndFallsBack()
@@ -204,7 +181,6 @@ namespace Core.Tests
             Assert.Equal("Barbarian", loc.Get("actor.barbarian.name"));
             Assert.Equal("Bandit 3", loc.Format("actor.rabble.name_numbered", 3));
 
-            // missing keys echo, so gaps are loud rather than silent
             Assert.Equal("gear.axe.name", loc.Get("gear.axe.name"));
             Assert.False(loc.Has("gear.axe.name"));
         }
@@ -215,15 +191,12 @@ namespace Core.Tests
             Assert.Equal("ui.anything.title", KeyEchoLocalizer.Instance.Get("ui.anything.title"));
         }
 
-        // ---- the locale checklist ----
 
         [Fact]
         public void EngineKeys_CoverEveryTraitAndCondition_SoAddingOneAddsItToTheChecklist()
         {
             var keys = new HashSet<string>(EngineKeys.All(Fixtures.Archetypes));
 
-            // derived from the enums, so a new skill lands here with nobody remembering to add it
-            // check-locale.ps1 then fails until it has English
             foreach (Skill s in Enum.GetValues<Skill>())
                 Assert.Contains(s.Key(), keys);
 
@@ -244,20 +217,15 @@ namespace Core.Tests
                 Assert.Contains(KeyConventions.ActorNameNumbered(id), keys);
             }
 
-            // gear comes off the archetypes that carry it, not from a list beside them
             Assert.Contains("gear.axe.name", keys);
             Assert.Contains("gear.club.name", keys);
 
-            // Actor's own default, for anyone who reaches a fight empty-handed
             Assert.Contains("gear.unarmed.name", keys);
         }
 
         [Fact]
         public void EngineKeys_StopAtTheEngine_SoCampaignsCarryTheirOwnText()
         {
-            // a campaign ships its own strings
-            // if dialogue ever leaked into the engine checklist
-            // game/locale/ would be asked to cover every bark in every campaign ever written
             foreach (string key in EngineKeys.All(Fixtures.Archetypes))
                 Assert.Contains(key.Split('.')[0], EngineKeys.Namespaces);
 
@@ -273,9 +241,7 @@ namespace Core.Tests
             Assert.Equal(all.Count, all.Distinct().Count());
         }
 
-        // F4. this used to be `archetypes ?? new BuiltInArchetypes()`, so a caller that never said
-        // which roster was loaded got the placeholder three back and check-locale.ps1 passed while
-        // the campaign that actually loaded had no strings at all
+        // guards a past bug: a null-defaulted roster gave the placeholder three, passing while the real campaign had no strings
         [Fact]
         public void EngineKeys_RefuseToGuessARoster_RatherThanSubstituteThePlaceholder()
         {
@@ -284,11 +250,10 @@ namespace Core.Tests
             Assert.Equal("archetypes", thrown.ParamName);
         }
 
-        // the iterator is split out so this lands at the call site and not on some later foreach
         [Fact]
         public void EngineKeys_RefuseImmediately_NotOnFirstEnumeration()
         {
-            // no ToList(), no foreach - if the throw were deferred, nothing would happen here
+            // no tolist/foreach: a deferred throw would not surface here, so the throw must be eager
             Assert.Throws<ArgumentNullException>(() => EngineKeys.All(null));
         }
 
@@ -301,16 +266,12 @@ namespace Core.Tests
             Assert.Contains(KeyConventions.ActorNameNumbered("ashfall_knight"), keys);
             Assert.Contains("gear.halberd.name", keys);
 
-            // the placeholder roster must not leak in beside it, in either direction
             foreach (string id in Fixtures.Archetypes.Ids)
                 Assert.DoesNotContain(KeyConventions.ActorName(id), keys);
 
             Assert.DoesNotContain("gear.axe.name", keys);
         }
 
-        // a stand-in for the data-backed source Phase P brings, substituted from outside core/
-        // exactly as SeamTests does it - the point being that the checklist follows it and not
-        // a roster living in the engine
         sealed class OneFighterSource : IArchetypeSource
         {
             const string Id = "ashfall_knight";

@@ -6,72 +6,37 @@ using Game.Audio;
 
 namespace Game.Board
 {
-    // one piece on the board: where it is standing, and how it gets to the next square.
-    //
-    // Thin on purpose, the way DiceTray is thin. It owns the clock and the mesh and nothing else -
-    // MiniStep owns the shape of the move, MiniVoice owns what the set-down sounds like, and
-    // Core.Space.Grid owns which square it is on. THE MODEL SAYS WHICH CELL, THE VIEW ANIMATES
-    // GETTING THERE (THE_BOARD.md B1): by the time this is told to slide, the grid already has
-    // the piece on the destination, so an interrupted move can never leave the two disagreeing.
-    //
-    // EVERYTHING HERE IS IN THE BOARD'S OWN SPACE. A mini is a child of the board node, so its
-    // Position is board-local and BoardMetrics.Centre hands over exactly the number to use. Same
-    // discipline as the tray since F2: nothing measures from the world origin, so the board can
-    // stand anywhere on the table.
+    // grid holds the destination before the slide starts, so an interrupted move never leaves model and view disagreeing
     public partial class Mini : Node3D
     {
         [Export] public NodePath VoicePath { get; set; } = "Voice";
 
-        // THE FIGURE (B5). A model out of an asset pack, sized and painted here rather than baked
-        // into the scene at a scale somebody worked out once - swap the model in mini.tscn and the
-        // piece is still the right height, because the height is what is stated and the scale is
-        // what is derived
+        // height is stated, scale is derived, so swapping the model keeps the piece the right height
         [Export] public NodePath FigurePath { get; set; } = "Figure";
 
-        // 75 mm of miniature on a 60 mm square. taller than the walls on purpose: a piece that can
-        // hide behind terrain is a piece you have to hunt for, and cover is Phase C's decision
+        // 75 mm on a 60 mm square, taller than walls so a piece is never hidden
         [Export] public float FigureHeight { get; set; } = 0.075f;
 
-        // the painted-miniature shader, wearing this hero's atlas
         [Export] public Material Paint { get; set; }
 
-        // what a piece sounds like set down. settable rather than looked up, so a heavier or
-        // lighter piece is an assignment - the arrangement DieAudio.Voice already uses
-        //
-        // NOT an interface yet, and deliberately: IDieVoice earned one because a brass die and a
-        // stone die are a real difference an ear can hear and BrassVoice is a file away. There is
-        // one kind of piece on the board and no second implementation waiting to happen, so a
-        // seam here would be abstracting past the point (CONVENTIONS.md 5). When pieces start
-        // differing by material, this is where the interface goes
         public MiniVoice Voice { get; set; } = MiniVoice.Shared;
 
-        // WHAT A SUPPLIED MODEL DOES INSTEAD OF THE ENGINE'S OWN MOTION (MINIS_AND_ART.md A1).
-        //
-        // Null for every piece the base game ships and for every supplied one that named no
-        // clips, which is what "the clip contract degrades" means in code: each of the five
-        // moments below asks this first and does it procedurally if the answer is no. There is no
-        // branch anywhere on whether a mini came out of a pack
+        // null for base-game and clip-less pieces; each motion asks this and falls back to procedural, no pack branch anywhere
         public MiniClips Clips { get; set; }
 
-        // and what it sounds like doing it (A3). Null means the shared pool, which is what every
-        // piece on this board used before a pack could supply its own
         public PackVoice Foley { get; set; }
 
         AudioStreamPlayer3D _player;
 
         MiniStep _step;
 
-        // seconds into the current move
         float _elapsed;
 
         public bool IsMoving => _step != null;
 
-        // the piece finished a MOVE - not a refusal, which ends where it began and has nothing to
-        // announce. B4 listens to this: the hero walks up to the door and only then do the dice
-        // come out, because that is the order it happens at a table
+        // fires on a real move, not a refusal; the door check waits on this
         public event Action Arrived;
 
-        // true while the current step is a refusal
         bool _refusing;
 
         public override void _Ready()
@@ -84,9 +49,7 @@ namespace Game.Board
             Stand(GetNodeOrNull<Node3D>(FigurePath));
         }
 
-        // the figure, painted and cut down to size. its own feet stay on the base, whatever the
-        // model's origin happens to be - a pack that models its characters standing in a hole is
-        // a pack, not a bug to find at the table
+        // feet stay on the base whatever the model's origin, so a model built in a hole still stands right
         void Stand(Node3D figure)
         {
             if (figure == null)
@@ -105,10 +68,7 @@ namespace Game.Board
 
             figure.Scale = Vector3.One * scale;
 
-            // ONLY the height is corrected. A model is centred on its own origin by whoever made
-            // it, and a figure holding an axe out to one side has a bounding box that is not: put
-            // the BOX in the middle of the square and the FEET end up off it, which is the one
-            // thing a based miniature must never look like
+            // only the height is corrected: centring the bounding box would push an off-centre figure's feet off the square
             figure.Position = new Vector3(
                 figure.Position.X,
                 figure.Position.Y - bounds.Position.Y * scale,
@@ -117,8 +77,6 @@ namespace Game.Board
             GD.Print($"mini    {figure.Name} {bounds.Size} units -> {FigureHeight * 1000f:0} mm tall");
         }
 
-        // straight there, no choreography - how a piece ARRIVES on the board, as opposed to how
-        // it moves once it is there. B0's placement and, later, a campaign's spawn points
         public void PlaceAt(Vector3 boardLocal)
         {
             _step = null;
@@ -128,13 +86,7 @@ namespace Game.Board
             Clips?.Play(Motion.Placed);
         }
 
-        // the way round, square by square, as ONE movement - lifted once, traced round the wall,
-        // set down at the far end.
-        //
-        // FROM WHERE IT IS NOW, not from the square it was told to leave. a second click during a
-        // move retargets rather than being swallowed: a piece that ignores you mid-slide feels
-        // broken, and one that snaps back to re-start feels worse. the route the board hands over
-        // starts at the square being left, so the first waypoint is replaced rather than prepended
+        // the whole route as one movement, starting from where it is now, so a mid-move click retargets and the first waypoint is replaced
         public void Follow(IReadOnlyList<Vector3> route)
         {
             if (route == null || route.Count == 0) return;
@@ -148,18 +100,10 @@ namespace Game.Board
             Clips?.Play(Motion.Move);
         }
 
-        // a square it cannot have: lean at it, think better of it, settle back.
-        //
-        // the board decides WHETHER a move is refused; this is only what that looks like. the piece
-        // ends exactly where it started, which MiniStep.Refusing guarantees by building a path that
-        // returns to its own beginning rather than by being careful
+        // view only; the board decides whether to refuse, and the piece ends exactly where it started
         public void Refuse(Vector3 toward) => Lean(toward);
 
-        // a swing: reach at the thing and come back. THE SAME MOVEMENT AS A REFUSAL, and that is
-        // not a shortcut - both are a piece reaching at a square it does not end up standing on,
-        // which is exactly what a hand does at a table for either. The two words are kept apart
-        // because the call sites mean different things and reading `Refuse` at a swing would send
-        // the next reader looking for a rule that refused it
+        // same motion as a refusal, but named apart so a swing does not read as a refused move
         public void Strike(Vector3 toward)
         {
             Clips?.Play(Motion.Strike);
@@ -167,14 +111,7 @@ namespace Game.Board
             Lean(toward);
         }
 
-        // TOOK A CONDITION: a shudder where it stands, and nothing else moves. The one motion of
-        // the five the engine did not already have a gesture for - `ART_DIRECTION.md` section 5
-        // lists it, `ConditionMarks` writes the word on the mat beside the piece, and until now
-        // the piece itself did not react at all.
-        //
-        // IT IS DELIBERATELY SMALL AND IT IS DELIBERATELY IGNORED MID-MOVE. A piece being carried
-        // to a square is a hand's gesture and interrupting it to shudder would read as a glitch;
-        // a piece already lying on its side has nothing left to react with
+        // ignored mid-move and when toppled: interrupting a carry or reacting on a corpse reads as a glitch
         public void Wobble()
         {
             if (_toppled) return;
@@ -183,9 +120,6 @@ namespace Game.Board
 
             if (IsMoving) return;
 
-            // a lean and a return, which is the same shape as a refusal and ends exactly where it
-            // began (MiniStep.Refusing) - a quarter of a figure's height toward the near edge of
-            // the table, so it reads from the one fixed camera
             Lean(Position + new Vector3(0f, 0f, FigureHeight * 0.22f));
         }
 
@@ -196,10 +130,7 @@ namespace Game.Board
             _refusing = true;
         }
 
-        // OFF ITS FEET. A downed piece is laid on its side and left there, the way one is at a
-        // table - taken off the board is a separate act, and seeing where somebody fell is worth
-        // more than a tidy map. It stops being a piece that can be clicked because the grid no
-        // longer has it (Board.Lift does that); this is only what it looks like
+        // view only, laid on its side and left; the grid already removed it (Board.Lift)
         public void Topple()
         {
             if (_toppled) return;
@@ -207,10 +138,7 @@ namespace Game.Board
             _toppled = true;
             _step = null;
 
-            // A SUPPLIED MODEL WITH A DEATH ANIMATION FALLS ITS OWN WAY, and one without tips over
-            // with the engine's procedural fall - which is A1's clip contract at the one moment
-            // where the two are most visibly different. The procedural fall is not a fallback in
-            // the apologetic sense: it is how every piece on this board has gone down since C1
+            // a death clip if the model has one, else the procedural tip-over every piece has used since
             if (Clips != null && Clips.Play(Motion.Topple))
             {
                 Foley?.Play(_player, Motion.Topple);
@@ -219,10 +147,7 @@ namespace Game.Board
 
             Foley?.Play(_player, Motion.Topple);
 
-            // laid out away from the near edge of the table, so it reads as fallen from the one
-            // fixed camera rather than as a piece standing at a strange angle. lifted by about
-            // half a figure's thickness at the same time: the rotation is about the feet, and
-            // without this the piece lies half inside the mat
+            // lifted as it rotates about the feet, or the toppled piece lies half inside the mat
             RotateX(-Mathf.Pi * 0.5f);
             Position += new Vector3(0f, FigureHeight * 0.16f, 0f);
         }
@@ -240,11 +165,7 @@ namespace Game.Board
 
             Position = _step.At(_elapsed);
 
-            // the click goes with the placement, not with the arrival at the square - the piece
-            // has been over its destination for the whole hover
-            // THE PACK'S OWN SET FIRST, THE SHARED POOL OTHERWISE - one line, no branch on where
-            // the piece came from (A3). A mini with no foley of its own sounds exactly as it did
-            // before packs could supply any
+            // the pack's own foley first, else the shared pool, no branch on where the piece came from
             if (_step.SetsDownBetween(was, _elapsed) &&
                 !(Foley?.Play(_player, Motion.Placed) ?? false))
                 Voice?.SetDown(_player);
@@ -253,8 +174,7 @@ namespace Game.Board
 
             _step = null;
 
-            // cleared BEFORE the announcement, because a listener is entitled to start the next
-            // move inside it and would otherwise have its flag stamped on afterwards
+            // cleared before Arrived fires: a listener may start the next move inside it
             bool refusal = _refusing;
             _refusing = false;
 

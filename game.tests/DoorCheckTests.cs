@@ -7,25 +7,13 @@ using Game.Tray;
 
 namespace Game.Tests
 {
-    // B4's one check, and the only hardcoded content in the phase. What is worth holding here is
-    // not the dice - StandardResolver is tested to death in core.tests - but the two things this
-    // file decides on top of them:
-    //
-    //   the pool is the HERO'S, built by Actor.BuildPool and no other way
-    //   failure is CONTENT, not a wall: both outcomes get the hero through, and they differ
-    //
-    // The second is the one to protect. "The door stays shut, try again" is the repeated scene
-    // CORE_RULES 0 pillar 4 forbids, and it is exactly what this would quietly decay into the
-    // first time somebody made a failed check cheaper to write.
     public class DoorCheckTests
     {
         static Actor Hero() => new BuiltInArchetypes().Create(EngineIds.Barbarian);
 
-        // the hero's own pool, thrown on the felt, showing these faces in throw order
         static TrayThrow Throw(params int[] faces) =>
             new TrayResolution(DoorCheck.PoolFor(Hero())).Resolve(faces);
 
-        // ---- the pool ----
 
         [Fact]
         public void ThePoolIsTheHerosOwn()
@@ -34,7 +22,6 @@ namespace Game.Tests
 
             Assert.Equal(3, pool.Count);
 
-            // attribute, skill, gear - in that order, as keys and never as words
             Assert.Equal("attr.might.name", pool.Dice[0].LabelKey);
             Assert.Equal("skill.blades.name", pool.Dice[1].LabelKey);
             Assert.Equal("gear.axe.name", pool.Dice[2].LabelKey);
@@ -42,31 +29,27 @@ namespace Game.Tests
             Assert.Equal(Die.D8, pool.Dice[0].Die);
         }
 
-        // the whole reason the check is Might and Blades rather than Grace and Larceny: the tray
-        // has three dice and cannot sit one out yet, and the barbarian is trained in exactly one
-        // thing. an untrained check is a real thing the rules handle and the TRAY cannot draw
         [Fact]
         public void ItFillsTheTray()
         {
             Assert.Equal(3, DoorCheck.PoolFor(Hero()).Count);
         }
 
+        // an empty pool, not null: both hero actions degrade the same way instead of one returning null
         [Fact]
-        public void NoHeroMeansNoPool()
+        public void NoHeroMeansAnEmptyPool()
         {
-            Assert.Null(DoorCheck.PoolFor(null));
+            Assert.Equal(0, DoorCheck.PoolFor(null).Count);
         }
 
-        // ---- what the felt decides ----
 
         [Fact]
         public void BeatingItTakesTheDoorCleanly()
         {
-            // 5 + 4 = 9, exactly Standard, and the leftover d6 shows 2
             DoorOutcome outcome = DoorCheck.Read(Throw(5, 4, 2));
 
             Assert.True(outcome.Forced);
-            Assert.Equal(Tile.Floor, outcome.Leaves);   // nothing left behind
+            Assert.Equal(Tile.Floor, outcome.Leaves);
             Assert.Equal(9, outcome.Total);
             Assert.Equal(0, outcome.Cost);
         }
@@ -74,19 +57,13 @@ namespace Game.Tests
         [Fact]
         public void OneShortOfItDoesNot()
         {
-            // 4 + 4 = 8 against Standard 9
             DoorOutcome outcome = DoorCheck.Read(Throw(4, 4, 3));
 
             Assert.False(outcome.Forced);
             Assert.Equal(8, outcome.Total);
         }
 
-        // FAILURE IS CONTENT, NOT A WALL. a failed check does not leave the door shut for another
-        // click - it gets the hero through the hard way, and the board keeps the difference.
-        //
-        // since EDGE_WALLS.md the wreckage lands in the room BEYOND, because a door is a line and
-        // both squares beside it are floor. it is difficult ground, and difficult ground is not a
-        // wall: the way through is open either way, and one way costs more to use
+        // failure is content not a wall: a failed check gets the hero through the hard way, leaving difficult ground
         [Fact]
         public void FailingGetsThroughAnyway_AndLeavesAMess()
         {
@@ -99,8 +76,7 @@ namespace Game.Tests
             Assert.Equal(2, outcome.Leaves.MoveCost());
         }
 
-        // the door comes back at you, and how hard is the die already lying on the felt - never a
-        // second, invisible roll
+        // the comeback's strength is the die already on the felt, never a second hidden roll
         [Fact]
         public void ItCostsTheImpactDieThatIsShowing()
         {
@@ -126,17 +102,13 @@ namespace Game.Tests
             Assert.Equal(0, outcome.Cost);
         }
 
-        // ---- what it costs the hero ----
 
-        // the consequence turns up on the FELT next time: a Winded hero throws a smaller Might
-        // die, which is CORE_RULES 9 doing the work rather than this file inventing a penalty
         [Fact]
         public void EnoughOfACostStepsTheHerosDiceDown()
         {
             Actor hero = Hero();
             Die before = DoorCheck.PoolFor(hero).Dice[0].Die;
 
-            // straight past the two-thirds mark, which is where Winded lands
             hero.Damage(hero.MaxVigor);
 
             Assert.True(hero.HasCondition(Condition.Winded));

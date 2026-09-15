@@ -6,22 +6,6 @@ using Content.Schema;
 
 namespace Content.Audio
 {
-    // A WAV FILE, PARSED AND METERED (MINIS_AND_ART.md A3).
-    //
-    // The same posture as `ModelReader`: a supplied file is a stranger's bytes, every length in it
-    // is a claim rather than a fact, and nothing is sliced until it has been held against what
-    // actually arrived. RIFF is a far smaller surface than glTF - a header and a walk of chunks -
-    // but the arithmetic is the same arithmetic and gets the same care.
-    //
-    // IT METERS AS WELL AS PARSES, and that is the half a header cannot answer. `FoleyCaps`
-    // explains why the loudness cap is the one that matters: a supplied set mixes into the same
-    // pool as the dice, at gains chosen against samples maximised to about -18 dB RMS, so a
-    // brickwalled sample is not a bit loud - it is the loudest thing in the room every time a
-    // piece is set down. A pack author cannot check that without a meter, so this is the meter.
-    //
-    // ONE PASS FOR BOTH NUMBERS. Peak and RMS come out of the same walk of the samples, because
-    // walking a few hundred kilobytes twice to answer two questions about the same data is the
-    // kind of thing that is free to write and annoying to have written.
     public static class WaveReader
     {
         public static Read<WaveFacts> Inspect(string folder, string file)
@@ -42,8 +26,7 @@ namespace Content.Audio
                 return Bad(file, "could not be read - " + could.Message);
             }
 
-            // checked off the filesystem before the file is opened, for the same reason a model's
-            // size is: everything below reads it into memory
+            // checked off the filesystem before the file is read into memory
             if (bytes > FoleyCaps.Bytes)
                 return Bad(file,
                            $"this sample is {bytes / 1024} KB and one may be " +
@@ -64,9 +47,6 @@ namespace Content.Audio
             return Parse(raw, file);
         }
 
-        // SPLIT OUT FROM THE FILE SO IT CAN BE TESTED WITHOUT ONE. Every interesting case here -
-        // a truncated chunk, a depth nothing can play, a wall of noise - is a handful of bytes,
-        // and building those in a test is clearer than shipping fixture files nobody can read
         public static Read<WaveFacts> Parse(byte[] raw, string file)
         {
             if (raw == null || raw.Length < 12)
@@ -92,9 +72,7 @@ namespace Content.Audio
 
                 if (size < 0 || size > raw.Length - at)
                 {
-                    // TRUNCATION, NAMED. A wav cut short by a failed copy is the single most
-                    // common broken audio file there is, and "the data chunk says it is longer
-                    // than the file" is a sentence that tells an author exactly what happened
+                    // a truncated data chunk is clamped, not rejected; a cut-short copy is the common case
                     if (kind != "data")
                         return Bad(file, $"has a '{kind}' chunk claiming {size} bytes with only " +
                                          $"{raw.Length - at} left in the file");
@@ -119,7 +97,7 @@ namespace Content.Audio
 
                 at += (int)size;
 
-                // RIFF chunks are word-aligned and an odd-length one is followed by a pad byte
+                // riff chunks are word-aligned; an odd-length one is followed by a pad byte
                 if (size % 2 != 0) at++;
             }
 
@@ -129,9 +107,7 @@ namespace Content.Audio
             if (data < 0)
                 return Bad(file, "has no data chunk, so it is a header with no sound in it");
 
-            // 1 is PCM. `AudioStreamWav` plays PCM, and a compressed wav would have to be decoded
-            // by something - which is a decoder running over a stranger's bytes, the exact thing
-            // the caps exist to avoid
+            // 1 is PCM; anything else would mean decoding a stranger's bytes
             if (format != 1)
                 return Bad(file,
                            $"is a wav but not an uncompressed one (format {format}) - export it " +
@@ -163,8 +139,6 @@ namespace Content.Audio
                           $"{FoleyCaps.Seconds:0} - the pool picks one per event, so a long " +
                           "sample is a sound that is still playing when the next thing happens"));
 
-            // THE TWO LOUDNESS CAPS, and the sentences carry the measured number because "too
-            // loud" is not actionable and "-6.2 dB where -12 is the ceiling" is
             if (facts.Peak > FoleyCaps.Peak)
                 problems.Add(Problem(
                     file, $"peaks at {facts.Peak:0.0} dBFS and a sample may reach " +
@@ -183,11 +157,7 @@ namespace Content.Audio
             return Read<WaveFacts>.Good(facts);
         }
 
-        // ---- the meter ----
 
-        // PEAK AND RMS IN ONE WALK. Normalised to full scale, so both are dBFS and both are
-        // comparable against a cap written in dBFS - the units a person mastering audio is
-        // already thinking in
         static WaveFacts Meter(byte[] raw, int data, int length, int depth, int channels, int rate,
                                int frames, string file)
         {
@@ -208,8 +178,7 @@ namespace Content.Audio
             }
             else
             {
-                // 8-bit wav is UNSIGNED, with 128 as silence - the one place in the format where
-                // the obvious reading is the wrong one
+                // 8-bit wav is unsigned, with 128 as silence
                 for (int at = data; at < data + length; at++)
                 {
                     double sample = (raw[at] - 128) / 128.0;
@@ -234,7 +203,6 @@ namespace Content.Audio
             amplitude <= 0 ? WaveFacts.Silent
                            : (float)Math.Max(WaveFacts.Silent, 20.0 * Math.Log10(amplitude));
 
-        // ---- reading the container ----
 
         static string Tag(byte[] raw, int at) =>
             at + 4 <= raw.Length ? Encoding.ASCII.GetString(raw, at, 4) : "";

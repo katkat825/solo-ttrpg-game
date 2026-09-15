@@ -11,19 +11,12 @@ using Xunit;
 
 namespace Content.Tests
 {
-    // gear and what it was carrying (CONTENT_PIPELINE.md P1)
-    //
-    // "Getting better means bigger rocks" (CORE_RULES.md pillar 3) becomes a content statement
-    // here, and the two things worth pinning are the two that would be silent if they were wrong:
-    // that a bigger die in a file really is a bigger die on the felt, and that a seeded run drops
-    // the same thing twice.
     public class ItemTests
     {
         const string File = "axe.json";
 
         static Read<Gear> Parse(string json) => ItemReader.Parse(json, File);
 
-        // ---- a piece of gear ----
 
         [Fact]
         public void AWeaponIsADieAndTheChecksItIsFor()
@@ -42,8 +35,6 @@ namespace Content.Tests
             Assert.Equal("gear.cold_iron_axe.name", axe.NameKey);
         }
 
-        // ONE SCHEMA FOR EVERY KIND OF GEAR. A thing with a Defense number is armour, and nobody
-        // had to declare a category for it to be one
         [Fact]
         public void AndArmourIsANumberOnDefense()
         {
@@ -64,8 +55,6 @@ namespace Content.Tests
             Assert.Equal(1, read.Value.Defense);
         }
 
-        // gear with no skill named is for any check - a lantern, a rope, and everything the engine
-        // ships, which is why nothing in the built-in roster moved when Supports was read
         [Fact]
         public void GearThatNamesNoSkillIsForEveryCheck()
         {
@@ -85,10 +74,7 @@ namespace Content.Tests
             Assert.False(axe.Helps(Skill.Stealth));
         }
 
-        // ---- and what it does to an actor ----
 
-        // PILLAR 3, MADE MECHANICAL: a bigger die in a file is a bigger die on the felt, and that
-        // is the whole of what a better weapon is
         [Fact]
         public void ABiggerDieInAFileIsABiggerDieInThePool()
         {
@@ -112,14 +98,10 @@ namespace Content.Tests
 
             hero.Wielding(Parse(@"{ ""id"": ""axe"", ""die"": ""d6"", ""supports"": ""blades"" }").Value);
 
-            // Might + Blades + the axe, against Might + Brawl and no axe. The Barbarian is trained
-            // in both, so the only thing that moved is whether the weapon is for the check
             Assert.Equal(3, hero.BuildPool(Attr.Might, Skill.Blades).Count);
             Assert.Equal(2, hero.BuildPool(Attr.Might, Skill.Brawl).Count);
         }
 
-        // Defense is the scalpel (SIMULATION.md section 3), so armour is one number and taking it
-        // off gives the statblock's own back exactly
         [Fact]
         public void ArmourMovesDefense_AndTakingItOffGivesItBack()
         {
@@ -136,7 +118,6 @@ namespace Content.Tests
             Assert.Equal(bare, hero.Defense);
         }
 
-        // ---- every way an item can be wrong ----
 
         [Fact]
         public void AnItemThatDoesNothingIsRefused()
@@ -147,8 +128,6 @@ namespace Content.Tests
             Assert.Contains("changes nothing", read.Problems.Single().What);
         }
 
-        // ARMOUR IS THE STRONGEST THING A CAMPAIGN CAN HAND OUT and a schema that let somebody
-        // turn the game off silently would be a schema that helped them do it
         [Fact]
         public void ArmourBeyondWhatDefenseCanTakeIsRefused()
         {
@@ -187,7 +166,6 @@ namespace Content.Tests
             Assert.Equal("damage", read.Problems.Single().Where);
         }
 
-        // ---- what it was carrying ----
 
         static LootTable Loot(string json)
         {
@@ -214,8 +192,7 @@ namespace Content.Tests
             Assert.Equal(0.3, table.ChanceOf("coat"), 3);
         }
 
-        // an entry with no item is "nothing this time", which is how a table says one-in-ten
-        // without a second concept for drop chance
+        // an entry with no item is a no-drop, the table's way of saying one-in-ten
         [Fact]
         public void AnEntryWithNoItemIsNothingThisTime()
         {
@@ -229,9 +206,6 @@ namespace Content.Tests
             Assert.Contains("axe", drawn);
         }
 
-        // THE WHOLE POINT: a seeded run drops the same thing. Every source of chance in this game
-        // goes through IRng, and a drop rolled off anything else would be the first thing to break
-        // "seeded runs are reproducible" (CONVENTIONS.md 6)
         [Fact]
         public void AReseededRunDropsTheSameThing()
         {
@@ -289,7 +263,6 @@ namespace Content.Tests
             Assert.Equal("loot[0].weight", problems.Single().Where);
         }
 
-        // and a monster carries one, read out of its own file
         [Fact]
         public void AMonsterCarriesItsOwnTable()
         {
@@ -302,7 +275,6 @@ namespace Content.Tests
             Assert.Equal(0.2, read.Value.Loot.ChanceOf("claw_necklace"), 3);
         }
 
-        // ---- a folder of items ----
 
         [Fact]
         public void TwoCataloguesFoldTogether_AndASharedIdIsNamed()

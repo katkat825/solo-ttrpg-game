@@ -8,15 +8,9 @@ using Game.Localization;
 
 namespace Game
 {
-    // smoke test for the core library, kept on its own scene (main.tscn)
-    // not in the normal run path - the game's main scene is table.tscn
-    // the fastest way to confirm Godot can still see and use core/ after a refactor
-    // open main.tscn, press F6, read the output
+    // smoke test for the core library on its own scene; the real game scene is table.tscn
     public partial class Main : Node
     {
-        // the one place this scene names a concrete roster, and since P0 that is the engine's own
-        // plus every campaign on disk. Nothing below reaches past IArchetypeSource, which is what
-        // made the swap one line
         readonly IArchetypeSource _archetypes = Game.Campaigns.Library.Load();
 
         public override void _Ready()
@@ -24,7 +18,7 @@ namespace Game
             var loc = new GodotLocalizer();
             var rng = new SeededRng((int)Time.GetTicksMsec());
 
-            // the label is a KEY, resolved here at the edge and never inside the rules
+            // the label is a key, resolved here at the edge, never inside the rules
             var hero = _archetypes.Create(EngineIds.Barbarian);
             var result = new StandardResolver(rng).Resolve(hero.BuildPool(Attr.Might, Skill.Blades));
 
@@ -36,7 +30,6 @@ namespace Game
             GD.Print($"  total {result.Total} vs Standard {Difficulty.Standard}: " +
                      (result.Beats(Difficulty.Standard) ? "success" : "failure"));
 
-            // a whole fight, narrated through the observer seam into Godot's output
             GD.Print("");
             new CombatEngine(new StandardResolver(rng), observer: new RecordingCombatObserver(GD.Print))
                 .Run(hero, _archetypes.Standard());

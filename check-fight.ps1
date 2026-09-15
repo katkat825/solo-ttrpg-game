@@ -38,6 +38,18 @@
 .PARAMETER Encounter
     Which encounter in it. Defaults to FightCheck's own.
 
+.PARAMETER Hero
+    Which hero to play it as - an archetype id. Defaults to whatever the scene names, which is the
+    Barbarian. Pass a class id to play a class authored in a folder (CLASSES_AND_KITS.md K0), e.g.
+    hearthguard.warden. The caster's fight and the boss's ignore it, the same way they ignore
+    -Campaign, because the check names its own hero for those.
+
+.PARAMETER Grown
+    Which growth steps the hero has been given - a comma-separated list of step ids off its class's
+    own `growth` list (CLASSES_AND_KITS.md K3). Defaults to none. WHEN a hero earns one is a
+    campaign's business; this is the hatch that lets a grown hero be played and checked before
+    there is a chapter shell to grow him.
+
 .PARAMETER Godot
     Path to the Godot mono console binary. Falls back to $env:GODOT, then a search of
     $env:GODOT_ROOT or C:\Godot. Discovery lives in Find-Godot.ps1, which every check script
@@ -51,6 +63,9 @@
 
 .EXAMPLE
     .\check-fight.ps1 -Campaign greyhollow -Encounter the_cistern
+
+.EXAMPLE
+    .\check-fight.ps1 -Hero hearthguard.warden
 #>
 [CmdletBinding()]
 param(
@@ -58,6 +73,8 @@ param(
     [switch] $Plain,
     [string] $Campaign,
     [string] $Encounter,
+    [string] $Hero,
+    [string] $Grown,
     [string] $Godot
 )
 
@@ -76,6 +93,8 @@ if ($PSBoundParameters.ContainsKey('Fights')) { $userArgs += "--fights=$Fights" 
 if ($Plain) { $userArgs += '--plain' }
 if ($Campaign) { $userArgs += "--campaign=$Campaign" }
 if ($Encounter) { $userArgs += "--encounter=$Encounter" }
+if ($Hero) { $userArgs += "--hero=$Hero" }
+if ($Grown) { $userArgs += "--grown=$Grown" }
 
 Write-Host "godot   $Godot"
 Write-Host "project $project"

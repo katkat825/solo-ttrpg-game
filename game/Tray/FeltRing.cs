@@ -2,10 +2,7 @@ using Godot;
 
 namespace Game.Tray
 {
-    // builds the flat ring of light that gets drawn on the felt around a die
-    // a real annulus in the XZ plane, not a TorusMesh on its side
-    // a tube has thickness that catches the light wrong - a ring on a table is a mark, not an object
-    // pure geometry and material - knows nothing about dice, outcomes or rules
+    // a real annulus in the XZ plane, not a TorusMesh on its side: a tube catches the light wrong
     public static class FeltRing
     {
         const int Segments = 64;   // smooth at tray scale
@@ -52,10 +49,8 @@ namespace Game.Tray
         static Vector3 Point(float angle, float radius) =>
             new(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
 
-        // additive and unshaded, so it reads as light on the felt rather than paint
-        // and the dark green underneath never muddies the colour
-        // culling off - a flat ring has no inside to get wrong
-        // depth test left on, so a die rolling over its own mark occludes it
+        // additive and unshaded so it reads as light on the felt, not paint
+        // culling off (a flat ring has no inside), depth test on so a die rolling over its own mark occludes it
         public static StandardMaterial3D Ink(Color colour) => new()
         {
             AlbedoColor = colour,

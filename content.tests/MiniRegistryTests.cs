@@ -4,16 +4,6 @@ using Xunit;
 
 namespace Content.Tests
 {
-    // A MINI ID, FOLLOWED TO SOMETHING THAT CAN STAND ON A SQUARE (MINIS_AND_ART.md A0, A1).
-    //
-    // `MiniRegistry` is where A0's variants actually become a feature: a mini defined in terms of
-    // another mini, resolved by walking the chain and collecting overrides. Every rule about what
-    // a variant inherits, what it overrides, and what happens when the chain is broken or circular
-    // lives here rather than in Godot - which is the whole point of putting it in `content/`.
-    //
-    // THE CYCLE TEST IS THE ONE THAT MATTERS MOST. Two packs varying each other is a thing two
-    // strangers will do by accident, and an unbounded walk would be a game that stops responding
-    // on a subscribed folder somebody else wrote. It has to come back as a value, by name.
     public sealed class MiniRegistryTests
     {
         const string Pack = "grimdark";
@@ -43,7 +33,6 @@ namespace Content.Tests
             }
         }
 
-        // ---- the shared roster is always there ----
 
         [Fact]
         public void TheSharedRosterIsInAnEmptyRegistry()
@@ -57,7 +46,6 @@ namespace Content.Tests
             Assert.Equal(SharedMinis.Rabble, mounted.Source);
         }
 
-        // ---- A0: a variant of a shipped mini ----
 
         [Fact]
         public void AVariantResolvesToTheFigureItIsAVariantOf()
@@ -74,9 +62,7 @@ namespace Content.Tests
             Assert.True(mounted.Tint.IsSomething);
         }
 
-        // WHAT IT DID NOT SAY, IT INHERITS. The rabble is 50 mm; a variant that only recolours it
-        // is still 50 mm, and `Fit.Cell` being the enum's zero must not quietly turn it into
-        // something fitted to a square
+        // fit.cell is the enum's zero, so an inherited size must not silently become square-fitted
         [Fact]
         public void AVariantInheritsEverythingItDidNotSay()
         {
@@ -115,7 +101,6 @@ namespace Content.Tests
             Assert.Equal(0.08f, mounted.Height);
         }
 
-        // ---- clips and foley merge, per motion ----
 
         [Fact]
         public void AVariantOverridesOneClipAndInheritsTheRest()
@@ -135,9 +120,6 @@ namespace Content.Tests
             Assert.Equal("Death_A", mounted.ClipFor(Motion.Topple));
         }
 
-        // A CLIP NAME IS THE MODEL'S AND A FOLEY FOLDER IS THE PACK'S, which is the one asymmetry
-        // between the two maps - a folder means a different place in every pack, so it is made
-        // absolute at the link that wrote it
         [Fact]
         public void AFoleyFolderIsMadeAbsoluteAgainstThePackThatNamedIt()
         {
@@ -149,7 +131,6 @@ namespace Content.Tests
             Assert.EndsWith("bones", registry.Mount("grimdark.skeleton").FoleyFor(Motion.Placed));
         }
 
-        // ---- and the two ways a chain goes wrong ----
 
         [Fact]
         public void AVariantOfSomethingNobodyShipsIsNullAndSaysWhichPackIsMissing()
@@ -163,8 +144,6 @@ namespace Content.Tests
             Assert.Contains("dependencies", why);
         }
 
-        // THE ONE THAT WOULD OTHERWISE HANG. Named with the whole ring, because that is a sentence
-        // an author can act on
         [Fact]
         public void TwoMinisThatAreVariantsOfEachOtherAreRefusedRatherThanWalkedForever()
         {
@@ -188,7 +167,6 @@ namespace Content.Tests
             Assert.Null(registry.Mount("grimdark.self"));
         }
 
-        // a legal chain longer than anything honest still resolves in bounded time
         [Fact]
         public void AChainDeeperThanTheBoundIsRefusedByName()
         {
@@ -210,8 +188,6 @@ namespace Content.Tests
             Assert.Contains("may not be installed", why);
         }
 
-        // WITH SCOPED IDS THERE IS NEVER A SECOND, so a collision means the scoping was skipped
-        // somewhere - reported rather than resolved silently
         [Fact]
         public void AnIdClaimedTwiceIsReportedAsANamespacingFailure()
         {

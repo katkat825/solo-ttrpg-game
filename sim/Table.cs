@@ -2,9 +2,7 @@ using System;
 
 namespace Sim
 {
-    // fixed-width console table formatting
-    // keeps padding noise out of the reports
-    // console only - nothing here is player-facing, so none of it is localized
+    // console only, not player-facing, so nothing here is localized
     static class Table
     {
         const int LabelWidth = 26;

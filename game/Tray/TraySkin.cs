@@ -3,56 +3,25 @@ using Godot;
 
 namespace Game.Tray
 {
-    // a whole tray as the thing you own - a floor surface and a walls surface
-    // the unit of collection is the tray, not the surface, so the name key sits here
-    //
-    // EVERY SKIN NEEDS ITS OWN FAIRNESS SWEEP BEFORE IT SHIPS
-    // friction and bounce are allowed to differ, but bounce is what decides how a die settles,
-    // so a skin is only cosmetic while it still rolls uniform - and that is not automatic
-    // it is the COMBINATION that has to be swept: felt is fine and wood is fine,
-    // and felt floor with wooden walls is a third physical system neither result covers
-    //
-    //     .\check-fairness.ps1 -Tray gamblers -Dice 3
-    //
-    // a tray that quietly favours a face is a hidden mechanical difference and nothing throws
-    // the alternative is one shared PhysicsMaterial for every skin, which means felt bounces
-    // like a plank - let the physics vary, verify it
+    // every skin needs its own fairness sweep: bounce decides how a die settles, and a felt floor with wooden walls is a third system neither pure result covers
     [GlobalClass]
     public partial class TraySkin : Resource
     {
-        // where skins live, and where --tray= looks them up by bare name
-        // only skins - the surfaces they are built from sit in skins/surfaces/, one level down,
-        // so this folder can be listed and every answer is a whole tray, see All()
+        // where skins live, looked up by bare name; the surfaces they're built from sit one level down so this folder lists as whole trays
         public const string Folder = "res://Tray/skins/";
 
-        // a KEY - gear.tray_gamblers.name, never "Gambler's Tray"
-        //
-        // it IS in game/locale/game.csv, and it is the locale audit's business even though
-        // nothing displays it yet. until F4 the audit built its checklist out of core/ alone, so
-        // both skins' names read as orphans and check-locale.ps1 failed for a reason that had
-        // nothing to do with anything being missing - same shape as the trap M6 hit with
-        // ui.tray.impact, from the other side. Game.Localization.GameKeys lists this folder now,
-        // so a skin arrives on the checklist by being dropped in, exactly like its sweep
+        // a key (gear.tray_gamblers.name), not display text; it's in game.csv and the locale audit's business even though nothing shows it yet
         [Export] public string NameKey { get; set; } = "";
 
         [Export] public TraySurface Floor { get; set; }
 
         [Export] public TraySurface Walls { get; set; }
 
-        // wood loads res://Tray/skins/wood.tres
-        // null and loud if it isn't there - the tray falls back to whatever the scene was saved
-        // with, which is still playable, but silent would be worse: an untextured tray with the
-        // wrong physics looks like a rendering bug and measures like a real result
+        // null and loud if missing: a silent fallback would be an untextured tray with the wrong physics, which looks like a render bug and measures like a real result
         public static TraySkin Load(string name)
         {
-            // whitelist, not sanitisation: All() already knows every legitimate name, so ask it
-            // rather than trying to spot a bad one
-            //
-            // today the only caller is our own command line, so this is close to theatre - but
-            // ARCHITECTURE 4 has campaigns as droppable folders and modding as a deliberate
-            // outcome, and a .tres can carry script_class, which means loading an arbitrary one
-            // is running arbitrary code. the moment a campaign can name a skin, an unchecked
-            // path here stops being theatre. cheaper to close now than to remember later
+            // whitelist, not sanitisation: All() knows every legitimate name, so ask it rather than spot a bad one
+            // a .tres can carry script_class, so loading an arbitrary one runs arbitrary code - closed now before a campaign can name a skin
             if (name == null || !All().Contains(name))
             {
                 // developer diagnostic, not player-facing text
@@ -70,10 +39,8 @@ namespace Game.Tray
             return skin;
         }
 
-        // every skin there is, by bare name, sorted
-        // the folder is the list, exactly as for ImpactPool - adding a tray is dropping
-        // a .tres in and sweeping it, never editing an array
-        // two spellings, same as ImpactPool.Files: x.tres in source, x.tres.remap in an export
+        // every skin by bare name, sorted; the folder is the list, so adding a tray is dropping a .tres in
+        // two spellings, like ImpactPool: x.tres in source, x.tres.remap in an export
         public static SortedSet<string> All()
         {
             var names = new SortedSet<string>();

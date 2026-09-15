@@ -10,11 +10,6 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
-  <!--
-    This project must NEVER reference Godot.
-    This is the load-bearing constraint. Everything downstream - headless tests,
-    overnight balance simulations, surviving a future engine change -
-    depends on that single constraint holding.
-  -->
+  <!-- never references Godot: the headless tests and the balance sim depend on that -->
 
 </Project>

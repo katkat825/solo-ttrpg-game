@@ -8,14 +8,9 @@ using Xunit;
 
 namespace Core.Tests
 {
-    // proves the seams are real
-    // each test substitutes a piece of the engine from outside
-    // without editing anything in core/
-    // if one of these stops compiling, a seam has been welded shut
-    // that is a regression in the engine, not in the test
+    // swaps engine pieces from outside core; a compile break means a seam closed
     public class SeamTests
     {
-        // ---- a resolver that ignores the dice entirely ----
         sealed class AlwaysResolver : IResolver
         {
             readonly int _total;
@@ -31,7 +26,7 @@ namespace Core.Tests
         public void Resolver_CanBeReplacedEntirely()
         {
             var hero = Fixtures.Hero();
-            var rival = Fixtures.Rival(); // defense 11
+            var rival = Fixtures.Rival();
 
             var never = new CombatEngine(new AlwaysResolver(0));
             var always = new CombatEngine(new AlwaysResolver(99));
@@ -81,7 +76,6 @@ namespace Core.Tests
             Assert.NotEmpty(a.Lines);
         }
 
-        // ---- targeting policy, swapped from outside ----
         sealed class LastStandingSelector : ITargetSelector
         {
             public Actor Choose(Actor attacker, IReadOnlyList<Actor> candidates) =>

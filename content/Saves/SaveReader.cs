@@ -8,22 +8,6 @@ using Core.Dice;
 
 namespace Content.Saves
 {
-    // A SAVE, READ BACK (CONTENT_PIPELINE.md P6).
-    //
-    // IT DEGRADES; IT DOES NOT REFUSE. This is the one reader in the project that does not follow
-    // `MapReader`'s "refuse and name" discipline, and the difference is whose file it is. A
-    // campaign is somebody else's content and a broken one should not be played at all - half a
-    // stranger's campaign is a game that plays wrong. A save is the player's own afternoon, and
-    // the worst possible outcome is declining to open it. So every field that cannot be read is a
-    // sentence and a default, and the only thing that stops a load is a file that is not JSON.
-    //
-    // `SEAMS.md` section 9 is the whole of why this is possible at all: "state shaped for save/load
-    // degrades; it doesn't throw". Nothing in here computes a second field from a first, so there
-    // is no pair that can disagree and no case where the honest answer is an exception.
-    //
-    // A HAND-EDITED SAVE IS THE NORMAL CASE, not an attack. "In 2036 you will want to hand-edit a
-    // save" means somebody WILL open this file and change a number, and every message below is
-    // written to that person - the field, what was wrong with it, and what was used instead.
     public static class SaveReader
     {
         public static Read<SaveGame> Parse(string json, string file)
@@ -42,9 +26,7 @@ namespace Content.Saves
             }
             catch (JsonException bad)
             {
-                // THE ONE FATAL CASE. There is nothing to degrade to: a file that is not JSON has
-                // no fields to take defaults for, and a blank save presented as the player's would
-                // be worse than saying so
+                // the one fatal case: a non-JSON file has no fields to default, so there's nothing to degrade to
                 return Read<SaveGame>.Bad(new ContentProblem(
                     file, "", "this save is not JSON - " + bad.Message,
                     (int)(bad.LineNumber ?? 0) + 1));
@@ -71,9 +53,6 @@ namespace Content.Saves
                     ActionsLeft = Number(root, "actions", 0, file, problems),
                 };
 
-                // SAID, NOT REFUSED. A save from a later build may have fields this one has never
-                // heard of, and every one of them is reported by `Unknown` below - so "it is read
-                // as far as it can be" is a claim the file itself backs up
                 if (save.Format != SaveFormat.Current)
                     problems.Add(new ContentProblem(file, "format",
                                                     SaveFormat.Unfamiliar(save.Format)));
@@ -104,10 +83,7 @@ namespace Content.Saves
                 ReadFelt(root, save, file, problems);
                 Unknown(root, Fields, file, "", problems);
 
-                // ALWAYS A VALUE *AND* THE LIST. Every problem above is a field that took its
-                // default, so what comes back is a save the caller can load and a list the caller
-                // can show - `Read<T>.Partial`, the third state a save needs and a campaign does
-                // not. `Ok` is false and the save is right there
+                // always a value and the list: Read.Partial, the third state a save needs and a campaign doesn't
                 return problems.Count == 0
                     ? Read<SaveGame>.Good(save)
                     : Read<SaveGame>.Partial(save, problems);
@@ -123,7 +99,7 @@ namespace Content.Saves
         static readonly string[] ActorFields =
         {
             "id", "vigor", "nerve", "seat", "initiative", "slot", "ordinal", "notches", "strain",
-            "conditions", "wielded", "worn", "satchel", "at",
+            "conditions", "wielded", "worn", "satchel", "growth", "at",
         };
 
         static readonly string[] DieFields = { "trait", "die", "value" };
@@ -160,9 +136,7 @@ namespace Content.Saves
                 Die die = ADie(one, file, where, problems);
                 int value = Number(one, "value", 0, file, problems, where);
 
-                // A DIE SHOWING A FACE IT DOES NOT HAVE is the most likely hand-edit mistake there
-                // is, and the marks drawn from it would be a claim about the rules that the rules
-                // never made. Clamped rather than dropped, so the throw keeps its shape
+                // clamped, not dropped, so the throw keeps its shape; the likeliest hand-edit mistake
                 if (die.IsReal() && (value < 1 || value > die.Sides()))
                 {
                     int was = value;
@@ -198,9 +172,7 @@ namespace Content.Saves
 
             string id = Text(element, "id", file, problems, where);
 
-            // THE ONE FIELD WITH NOTHING TO DEGRADE TO. Everything else about an actor can take a
-            // default; who they are cannot, and an actor with no id is a line in the file that
-            // names nobody
+            // the one field with nothing to degrade to: an actor with no id names nobody
             if (id.Length == 0)
             {
                 problems.Add(new ContentProblem(
@@ -229,6 +201,10 @@ namespace Content.Saves
 
             foreach (string item in Strings(element, "satchel", file, where, problems))
                 actor.Satchel.Add(item);
+
+            // a step this build no longer offers is carried, not dropped; it returns if its pack comes back
+            foreach (string step in Strings(element, "growth", file, where, problems))
+                actor.Growth.Add(step);
 
             ReadSquare(element, actor, file, where, problems);
 
@@ -270,7 +246,6 @@ namespace Content.Saves
             actor.Y = square[1];
         }
 
-        // ---- fields ----
 
         static void Unknown(JsonElement element, string[] known, string file, string prefix,
                             List<ContentProblem> problems)
@@ -279,9 +254,7 @@ namespace Content.Saves
             {
                 if (Array.IndexOf(known, property.Name) >= 0) continue;
 
-                // NOT A FAILURE. A save written by a later build carries fields this one has never
-                // heard of, and the right thing to do with them is say so and carry on - which is
-                // also exactly what a typo in a hand-edited save looks like from in here
+                // not a failure: an unknown field is a later build's, or a typo, and either way it's said and skipped
                 problems.Add(new ContentProblem(
                     file, prefix + property.Name,
                     $"this build does not know what '{property.Name}' is, and ignored it"));
@@ -428,10 +401,8 @@ namespace Content.Saves
 
         static string Named(JsonValueKind kind) => kind.ToString().ToLowerInvariant();
 
-        // ---- and off a disk ----
 
-        // Never throws. A save that cannot be opened is a sentence, for exactly the reason the
-        // rest of this file exists
+        // never throws; a save that can't be opened is a sentence, for the reason this whole file exists
         public static Read<SaveGame> From(string path)
         {
             string file = Path.GetFileName(path) ?? "";

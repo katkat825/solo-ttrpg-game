@@ -8,13 +8,6 @@ using Xunit;
 
 namespace Content.Tests
 {
-    // a folder of monsters, and what happens when one of them is broken (CONTENT_PIPELINE.md P0)
-    //
-    // THE INTERESTING CASE IS THE MIXED FOLDER. Three good files and one bad one has to load three
-    // monsters and report one problem - not zero monsters and an exception - because that is the
-    // isolation boundary in miniature: one bad file fails alone and named, and everything else
-    // still works. A loader that refuses the whole folder is a loader that makes a stranger's typo
-    // into your crash.
     public sealed class JsonArchetypeSourceTests : IDisposable
     {
         readonly string _folder;
@@ -27,7 +20,7 @@ namespace Content.Tests
 
         public void Dispose()
         {
-            try { Directory.Delete(_folder, recursive: true); } catch { /* a temp folder */ }
+            try { Directory.Delete(_folder, recursive: true); } catch { }
         }
 
         void Write(string name, string json) => File.WriteAllText(Path.Combine(_folder, name), json);
@@ -44,7 +37,6 @@ namespace Content.Tests
         JsonArchetypeSource Read(string campaign = "ashfall") =>
             JsonArchetypeSource.Read(_folder, campaign);
 
-        // ---- a folder of them ----
 
         [Fact]
         public void EveryFileInTheFolderIsAMonster()
@@ -74,8 +66,6 @@ namespace Content.Tests
             Assert.Equal("gear.claw.name", ghoul.WeaponKey);
         }
 
-        // ONE BAD FILE FAILS ALONE. The whole argument for the isolation boundary, at the scale of
-        // a folder
         [Fact]
         public void ABrokenFileIsReported_AndTheRestStillLoad()
         {
@@ -102,8 +92,6 @@ namespace Content.Tests
             Assert.Contains(source.Problems, p => p.What.Contains("already the id"));
         }
 
-        // anything that is not a .json is somebody's notes, their editor's backup, or a folder -
-        // and none of those is a monster
         [Fact]
         public void NothingButJsonIsRead()
         {
@@ -117,8 +105,6 @@ namespace Content.Tests
             Assert.Empty(source.Problems);
         }
 
-        // A GAME WITH NO CAMPAIGNS INSTALLED HAS TO BOOT, and a campaign with no monsters of its
-        // own is a perfectly good campaign - it can use the engine's roster
         [Fact]
         public void AMissingFolderIsEmptyRatherThanAProblem()
         {
@@ -129,8 +115,7 @@ namespace Content.Tests
             Assert.Empty(source.Problems);
         }
 
-        // the filesystem's enumeration order is the filesystem's opinion, and a load order that
-        // differs between machines is a bug nobody can reproduce
+        // sort load order so it does not vary by filesystem between machines
         [Fact]
         public void TheOrderIsTheSameEveryTime()
         {
@@ -153,7 +138,6 @@ namespace Content.Tests
                 () => Read().Create("ashfall.dragon"));
         }
 
-        // ---- several rosters, one seam ----
 
         [Fact]
         public void TheEnginesRosterAndACampaignsStandSideBySide()
@@ -168,7 +152,6 @@ namespace Content.Tests
             Assert.Equal(Tier.Rabble, rosters.Create(EngineIds.Rabble).Tier);
         }
 
-        // TWO CAMPAIGNS CAN BOTH HAVE A GHOUL, which is the entire reason ids are scoped
         [Fact]
         public void AndTwoCampaignsCanBothHaveAGhoul()
         {
@@ -182,8 +165,6 @@ namespace Content.Tests
             Assert.True(rosters.Has("other.ghoul"));
         }
 
-        // and if two ever did claim one id, that is a namespacing failure upstream and is said out
-        // loud rather than resolved by whoever happened to load first
         [Fact]
         public void ACollisionIsNamedRatherThanResolvedQuietly()
         {

@@ -4,14 +4,11 @@ using Core.Resolution;
 
 namespace Sim
 {
-    // the three benchmark pools every report runs against
-    // starting, skilled and master
-    // built from real trait keys, so the sim walks the same path the game does
     static class SamplePools
     {
         public readonly struct Sample
         {
-            // DEVELOPER ONLY - a row label for the console table, never localized
+            // developer only, a console row label, never localized
             public readonly string DebugName;
 
             public readonly Die AttrDie;
