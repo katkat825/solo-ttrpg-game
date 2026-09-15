@@ -1,0 +1,9 @@
+{
+  // A background is what you DID before; a race is what you ARE. Same shape,
+  // different blank on the sheet - so this file lives in backgrounds/ and is
+  // otherwise identical. See sheet/races/example_race.json for the field guide.
+
+  "id": "example_background",
+
+  "skills": { "insight": "d4" }
+}

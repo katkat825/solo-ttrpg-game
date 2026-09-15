@@ -76,6 +76,10 @@ namespace Game.Tray
         // the companion's cue placeholder: which bark a Snag would fire, and how often the felt asks
         private SnagCue _cue;
 
+        // optional. The companion whose bark bank the Snag cue draws on (W2); left unset, the cue
+        // falls back to M9's placeholder keys and the tray behaves exactly as it did before W
+        [Export] public NodePath CompanionPath { get; set; }
+
         // held as the interface so this file cannot start reaching for TranslationServer
         private readonly ILocalizer _text = new GodotLocalizer();
 
@@ -399,8 +403,21 @@ namespace Game.Tray
             _resolution = new TrayResolution(_pool);
 
             // restart the snag tally with the pool: bigger dice snag less, so a count across a change of shapes measures a table that's gone
-            if (_cue == null) _cue = new SnagCue(sizes);
+            if (_cue == null) _cue = new SnagCue(sizes, bank: Bank());
             else _cue.Reset(sizes);
+        }
+
+        // whose barks the felt draws on. Read once, off the shelf, and null where no companion is
+        // installed - a tray with nobody at it still counts its Snags and still prints the key
+        private Content.Dialogue.BarkBank Bank()
+        {
+            if (CompanionPath == null || CompanionPath.IsEmpty) return null;
+
+            var friend = GetNodeOrNull<Game.Companion.Companion>(CompanionPath);
+
+            return friend == null || friend.Speaker.Length == 0
+                ? null
+                : Game.Campaigns.Library.Load(quiet: true).BarksFor(friend.Speaker);
         }
 
         // labels and sizes are tracked apart because they change apart: a board pool sets both, but D changes only the sizes
@@ -585,7 +602,10 @@ namespace Game.Tray
             // the key a companion would have spoken, not words: dialogue is campaign content and never enters game/locale
             string bark = _cue.Watch(_lastThrow);
 
-            if (bark != null) GD.Print($"cue    {bark} - nothing says it yet");
+            if (bark != null)
+                GD.Print(_cue.HasLines
+                    ? $"cue    {bark} - {_cue.Speaking} says it"
+                    : $"cue    {bark} - nothing says it yet");
 
             // logged every throw, not only snags, so the running count is exact when you stop
             GD.Print($"snags  {_cue.Tally}");

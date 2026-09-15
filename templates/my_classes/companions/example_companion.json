@@ -1,0 +1,42 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  //  companions/*.json  —  the creature that comes with a class. [OPTIONAL]
+  //
+  //  "Your class isn't a build, it's a relationship." A class names one of
+  //  these in its "companion" field, and the companion owns the voice.
+  //
+  //  NOTICE WHAT IS NOT ON THIS CARD: no vigor, no defense, no attributes, no
+  //  tier, no square. A companion is never in the fight - it sits on the
+  //  TABLE, not on the map, and it can never take a turn or be useless in a
+  //  battle because it is never in one. A field with a number on it is one
+  //  somebody would eventually give a turn to, so there are none.
+  //
+  //  Full guide: templates/README.md
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // [REQUIRED] id - lowercase a-z, 0-9, underscore. A class names it by this.
+  "id": "example_companion",
+
+  // [REQUIRED] perch - where on the table it lives. One of:
+  //   map_edge   lying alongside the map, chin on the edge
+  //   tray_rim   perched on the rim of the dice tray
+  //   rulebook   sitting on the closed rulebook, swinging its legs
+  //   upright    standing upright, glow shifting with its mood
+  //   unsettled  a small shape that never settles on one animal
+  // Every one of them is on the table and none is on the map. That is the point.
+  "perch": "map_edge",
+
+  // [OPTIONAL] voice - the CREATURE whose bark bank it speaks out of: 'wolf',
+  //            never 'barbarian'. Unscoped on purpose - a voice is shared
+  //            vocabulary and belongs to no pack. Defaults to this id.
+  "voice": "example_companion",
+
+  // [OPTIONAL] mini - a figure to paint it as. Leave it out for the
+  //            placeholder shape; a dozen good idles read as alive and a
+  //            beautiful statue does not.
+  // "mini": "example_mini",
+
+  // [OPTIONAL] idles - how many idle animations it has. 1 to 64; about a dozen
+  //            is what reads as a living creature. One is a statue that twitches.
+  "idles": 12
+}

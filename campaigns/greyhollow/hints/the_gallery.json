@@ -1,0 +1,18 @@
+{
+  // A ladder, three rungs, each naming a beat. The rungs escalate on repeat asks; a fourth ask
+  // gets the companion noticing it is being over-asked, in character, out of its own bark bank.
+  //
+  // Nothing in this campaign is reachable ONLY through a hint. That is a rule about authoring,
+  // not a thing the validator can check for you.
+
+  "hints": [
+    {
+      "id": "the_spore_gallery",
+      "rungs": [
+        "the_spores_are_breathing",
+        "they_move_when_you_move",
+        "hold_your_breath_and_walk"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  //  A HERO CLASS. name/description are locale keys (class.<pack>.<id>.name / .description).
+  //  A class is always the hero: fields 'tier', 'behaviour', 'loot' are refused (foe words).
+
+  // [REQUIRED]
+  "id": "example_class",
+  "vigor": 20,
+  "defense": 11,
+  // attributes REQUIRED — the hero throws no pool without them.
+  "attributes": { "might": "d8", "grace": "d6", "wits": "d6", "heart": "d6" },
+
+  // [OPTIONAL]
+  "skills": { "blades": "d6", "brawl": "d6" },
+  "wields": "example_weapon",   // an item id (this pack's items/ or the game's). Omit for empty hands.
+  "kit": [ "example_ability" ], // ability ids from this pack's kits/
+  "mini": "barbarian",          // a shipped or this-pack mini; omit for the default
+  "companion": "example_companion", // the creature that comes with this class, from companions/.
+                                //   Omit and the class plays alone, which is legal and is what
+                                //   every class did before there were companions.
+
+  // "wears": "some_armor",     // an item id
+  // "nerve": 3,                // heroic-effort cap; omit for the engine default
+
+  // [OPTIONAL] growth — "bigger rocks" a campaign can hand out. Each step raises EXACTLY ONE of
+  //            attribute / skill / ability, and has a stable id (a save records it).
+  "growth": [
+    { "id": "veteran",  "attribute": "might" },        // an attribute up a size
+    { "id": "watchful", "skill": "insight" },          // a skill
+    { "id": "drilled",  "ability": "example_ability" } // unlock an ability into the kit
+  ]
+}

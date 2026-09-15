@@ -21,3 +21,7 @@ Thumbs.db
 # Raw asset downloads - source material, never committed.
 # Processed maps live in game/textures/ and are committed.
 assets/
+
+# The player's shelf (Phase R). Every box on it is one of these, written at
+# runtime beside the executable - somebody else's saved game is not the project.
+saves/

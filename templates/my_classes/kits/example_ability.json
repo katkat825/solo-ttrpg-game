@@ -1,0 +1,33 @@
+{
+  //  AN ABILITY (kit). name/description are locale keys (ability.<pack>.<id>.name / .description).
+
+  // [REQUIRED]
+  "id": "example_ability",
+
+  // primitive — which of the engine's two hero actions:
+  //   check   = a skill test vs a difficulty; writes 'pass'/'fail'.
+  //   channel = a ranged/magical action; writes 'onHit'/'onMiss'; defaults to heart + channeling.
+  "primitive": "check",
+
+  // attribute — REQUIRED for a check (a channel defaults to heart). might | grace | wits | heart.
+  "attribute": "might",
+
+  // versus — REQUIRED. Difficulty: a whole number > 0, or "defense" for the target's own Defense.
+  "versus": 9,
+
+  // pass — REQUIRED. What success does (>= 1). A CHECK may do: open, rough, recoil, condition, shove, steady.
+  "pass": [ "steady" ],
+
+  // fail — REQUIRED for a check (a miss must change the scene, or the player just retries).
+  "fail": [ "condition" ],
+
+  // [OPTIONAL]
+  "skill": "blades",   // the skill rolled (check default: none)
+  "gear": true         // include the gear die in the pool? (check default false, channel default true)
+
+  // "cost": "none",    // none | strain | nerve   (channel defaults to strain)
+  // "target": "reach", // reach | sight | self    (channel defaults to sight)
+  // "power": "impact", // "impact" (the ringed die) or a fixed whole number > 0
+  // "condition": "rattled"  // a CHANNEL names the condition it lands; a check must NOT (it's derived).
+  //                         // A CHANNEL may do: damage, condition, rough, shove.
+}

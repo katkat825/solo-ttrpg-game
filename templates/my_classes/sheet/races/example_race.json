@@ -1,0 +1,29 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  //  sheet/races/*.json and sheet/backgrounds/*.json  —  what the blanks on
+  //  the character sheet offer. [OPTIONAL]
+  //
+  //  A race or a background NUDGES: it moves a die one step up or down the
+  //  ladder, and it never SETS one. That is the class's job. Steps, not sizes,
+  //  is what lets a race, a background, a growth step and a Condition all land
+  //  in any order and mean the same thing.
+  //
+  //  Named under the class namespace, because the sheet's blanks are all the
+  //  same kind of card:
+  //      class.<your_pack_id>.<id>.name
+  //      class.<your_pack_id>.<id>.description
+  //
+  //  An id shared with a class in this pack is refused - both would claim the
+  //  same key and one of the two names would never be seen.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // [REQUIRED] id - lowercase a-z, 0-9, underscore.
+  "id": "example_race",
+
+  // [OPTIONAL] nudges - attribute to STEPS, -2 to 2, never 0. Anything bigger
+  //            is a class, and a class is a different file.
+  "nudges": { "might": 1, "grace": -1 }
+
+  // [OPTIONAL] skills - name to die, e.g. { "survival": "d4" }. A card never
+  //            un-trains a better skill the class already had.
+}

@@ -1,0 +1,151 @@
+[gd_scene load_steps=8 format=3]
+
+; THE ROOM. The game's main scene from R3 onward, and the shell that makes the whole thing a table
+; you sit at rather than software you operate (ROOM_AND_SHEET.md R3, THE_TABLE.md section 6).
+;
+; THE ROOM IS THE ENTIRE UI. There are no menu screens anywhere in this game - no main menu, no save
+; menu, no character screen, no level-up modal, no inventory panel. Every place a normal RPG opens a
+; panel, this has an object:
+;
+;     the shelf      boxed campaigns          save files and campaign select
+;     the sheet      on the table             the character screen
+;     the corkboard  map and pinned notes     the quest log
+;     the dice case  what you have earned     the collection screen
+;     the box lid    loose minis in it        the bestiary
+;     the window     light, weather, hour     a time-of-day readout
+;     the door                                quit
+;
+; That deletion is the point. It is cheaper AND better, and check-room.ps1 holds the build to it by
+; looking for a menu scene and failing if it finds one.
+;
+; THE TABLE SITS INSIDE THE ROOM, instanced whole. The room was added AROUND a table that already
+; worked rather than the table being rebuilt inside a new scene, so nothing playable before R3
+; stopped being playable during it - and table.tscn stays openable on its own, which is what every
+; check script and every eye check since B0 has run against.
+;
+; Nothing in here is expensive: one room, one light source, static props, and a shelf that gains
+; objects (THE_TABLE.md section 6). The room's job is to accumulate, not to render.
+
+[ext_resource type="PackedScene" path="res://table.tscn" id="1_table"]
+[ext_resource type="Script" path="res://Room/Room.cs" id="2_room"]
+[ext_resource type="Script" path="res://Room/Furniture.cs" id="3_prop"]
+
+[sub_resource type="Environment" id="Environment_room"]
+background_mode = 1
+background_color = Color(0.03, 0.028, 0.026, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.42, 0.40, 0.44, 1)
+ambient_light_energy = 0.18
+
+; the walls: one box, inverted, so the room is the inside of it. Cheaper than four planes and it
+; cannot develop a gap at a corner
+[sub_resource type="StandardMaterial3D" id="Mat_wall"]
+albedo_color = Color(0.27, 0.24, 0.21, 1)
+roughness = 1.0
+cull_mode = 1
+
+[sub_resource type="BoxMesh" id="Mesh_walls"]
+size = Vector3(5.0, 2.7, 5.0)
+
+[sub_resource type="StandardMaterial3D" id="Mat_floor"]
+albedo_color = Color(0.19, 0.16, 0.13, 1)
+roughness = 1.0
+
+[node name="Room" type="Node3D"]
+script = ExtResource("2_room")
+TablePath = NodePath("Table")
+SheetPath = NodePath("Table/Sheet")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_room")
+
+; ONE LIGHT SOURCE (THE_TABLE.md section 6). A lamp over the table, warm and low, which is what
+; makes the room read as a room somebody is sitting in at night rather than a lit box.
+[node name="Lamp" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.08, 1.05, 0.1)
+light_color = Color(1, 0.85, 0.66, 1)
+light_energy = 3.2
+omni_range = 4.5
+shadow_enabled = true
+
+[node name="Walls" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.31, 0)
+mesh = SubResource("Mesh_walls")
+material_override = SubResource("Mat_wall")
+
+[node name="Floor" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.04, 0)
+mesh = SubResource("Mesh_walls")
+material_override = SubResource("Mat_floor")
+visible = false
+
+; THE TABLE, INSIDE THE ROOM. Everything built since B0 - the board, the tray, the DM, the
+; companion, the sheet - comes in with it, placed exactly as table.tscn places it. The room knows
+; where the table stands; the table has never known and still does not.
+[node name="Table" parent="." instance=ExtResource("1_table")]
+
+; ---- THE OBJECTS THAT REPLACE THE MENUS -------------------------------------------------------
+;
+; Each is interactive in place. None opens a menu; each IS the thing (R3). Where they stand is set
+; here, in the room's own space, and nothing inside Furniture.cs knows where it is.
+
+; BOXED CAMPAIGNS ON A SHELF - the save files and the campaign select. Every finished campaign adds
+; a box; boss trophies land on it; a box you take down IS the versioned JSON P6 writes (R4).
+[node name="Shelf" type="Node3D" parent="." groups=["furniture"]]
+script = ExtResource("3_prop")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 0.95, -1.9)
+Is = 0
+Size = Vector3(1.1, 0.06, 0.28)
+Wood = Color(0.33, 0.27, 0.19, 1)
+
+; THE CHARACTER SHEET. The paper itself lives on the table (table.tscn); this is the shelf-side
+; handle on it, so the room's own list of objects is complete and the "touch only objects" walk has
+; something to touch for it.
+[node name="Sheet" type="Node3D" parent="." groups=["furniture"]]
+script = ExtResource("3_prop")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.78, 0.0, 0.16)
+Is = 1
+Size = Vector3(0.3, 0.004, 0.4)
+Wood = Color(0.92, 0.9, 0.83, 1)
+
+; A CORKBOARD WITH MAP AND NOTES - the quest log. Old maps get pinned to it and layered over, so it
+; accumulates the same way the shelf does.
+[node name="Corkboard" type="Node3D" parent="." groups=["furniture"]]
+script = ExtResource("3_prop")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.3, 1.25, -2.4)
+Is = 2
+Size = Vector3(1.0, 0.7, 0.03)
+Wood = Color(0.45, 0.33, 0.2, 1)
+
+; A DICE CASE - the collection screen. Dice you have earned go in it.
+[node name="DiceCase" type="Node3D" parent="." groups=["furniture"]]
+script = ExtResource("3_prop")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.85, 0.02, 0.42)
+Is = 3
+Size = Vector3(0.22, 0.05, 0.14)
+Wood = Color(0.24, 0.2, 0.17, 1)
+
+; THE BOX LID HOLDING LOOSE MINIS - the bestiary. Everything you have met, lying in a lid.
+[node name="BoxLid" type="Node3D" parent="." groups=["furniture"]]
+script = ExtResource("3_prop")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.95, 0.01, -0.3)
+Is = 4
+Size = Vector3(0.34, 0.04, 0.24)
+Wood = Color(0.3, 0.26, 0.22, 1)
+
+; A WINDOW - time of day, weather, season. THE_TABLE.md section 9 leaves "does it reflect real-world
+; time" open, and it stays open: this is the object, not the answer.
+[node name="Window" type="Node3D" parent="." groups=["furniture"]]
+script = ExtResource("3_prop")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.4, 1.5, -0.6)
+Is = 5
+Size = Vector3(0.05, 0.9, 0.7)
+Wood = Color(0.18, 0.22, 0.3, 1)
+
+; THE DOOR - quit. The one irreversible object in the room, so it is the one that asks.
+[node name="Door" type="Node3D" parent="." groups=["furniture"]]
+script = ExtResource("3_prop")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.4, 1.0, 0.9)
+Is = 6
+Size = Vector3(0.06, 2.0, 0.85)
+Wood = Color(0.29, 0.22, 0.16, 1)

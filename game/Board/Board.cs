@@ -52,6 +52,11 @@ namespace Game.Board
 
         [Export] public string HeroId { get; set; } = EngineIds.Barbarian;
 
+        // THE SHEET, where there is one (R0). A finished sheet REPLACES HeroId - it is the
+        // character, and this board's hero is assembled from it rather than looked up by id.
+        // Unset, or blank, and the board recruits exactly as it has since B4.
+        [Export] public NodePath SheetPath { get; set; }
+
         // the board does not own a tray; empty means doors stay shut
         [Export] public NodePath TrayPath { get; set; }
 
@@ -166,6 +171,8 @@ namespace Game.Board
 
         Actor Recruit()
         {
+            if (FromTheSheet() is { } written) return written;
+
             if (!Fixed && Game.Campaigns.Requested.Hero.Length > 0)
                 HeroId = Game.Campaigns.Requested.Hero;
 
@@ -178,6 +185,54 @@ namespace Game.Board
                          $"({string.Join(", ", _archetypes.Ids)}) - using {EngineIds.Barbarian}");
 
             return _archetypes.Create(EngineIds.Barbarian);
+        }
+
+        // R0. "The hero Actor is assembled FROM THE SHEET, replacing the hardcoded hero used
+        // since B4." Null where there is no sheet or it has not been filled in, which is what a
+        // cold boot and every check script look like - and then nothing about this board changes.
+        Actor FromTheSheet()
+        {
+            if (SheetPath == null || SheetPath.IsEmpty) return null;
+
+            var paper = GetNodeOrNull<Game.Sheet.Sheet>(SheetPath);
+
+            if (paper == null || !paper.Finished) return null;
+
+            return Assemble(paper.Character);
+        }
+
+        // exposed so the room can put a character on this board after boot - taking a box off the
+        // shelf is loading a save, and what is in the box is a sheet
+        public Actor Assemble(Content.Sheet.CharacterSheet sheet)
+        {
+            if (sheet == null || sheet.IsBlank) return null;
+
+            foreach (Game.Campaigns.Loaded campaign in _archetypes.InPlay)
+            {
+                if (!campaign.Classes.Has(sheet.ClassId)) continue;
+
+                Actor hero = sheet.Assemble(campaign.Classes, _archetypes.Items,
+                                            SheetOptionsFor(sheet));
+
+                GD.Print($"hero    assembled from the sheet - {sheet}");
+
+                return hero;
+            }
+
+            GD.PushError($"board: the sheet says its class is '{sheet.ClassId}' and no such class " +
+                         $"is installed - recruiting '{HeroId}' instead");
+
+            return null;
+        }
+
+        // a race and a background may come from a different pack than the class
+        Content.Sheet.SheetOptions SheetOptionsFor(Content.Sheet.CharacterSheet sheet)
+        {
+            foreach (Game.Campaigns.Loaded campaign in _archetypes.InPlay)
+                if (campaign.Sheet.Has(sheet.RaceId) || campaign.Sheet.Has(sheet.BackgroundId))
+                    return campaign.Sheet;
+
+            return null;
         }
 
         public override void _ExitTree()

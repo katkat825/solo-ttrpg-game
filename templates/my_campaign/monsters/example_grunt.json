@@ -1,0 +1,43 @@
+{
+  //  A MONSTER (statblock). Referenced by an encounter's placements.
+  //  Display name is a locale key: actor.<campaign>.<id>.name (+ .name_numbered).
+
+  // [REQUIRED] id — local id (a-z 0-9 _).
+  "id": "example_grunt",
+
+  // [REQUIRED] vigor — hit points, whole number >= 1. (Ignored for a 'rabble'.)
+  "vigor": 10,
+
+  // [REQUIRED] defense — the number an attacker's pool must beat, >= 1.
+  //            The STRONGEST balance lever; tune fights here first.
+  "defense": 11,
+
+  // [RECOMMENDED] attributes — object of attribute -> die. A monster with none cannot attack.
+  //            attributes: might, grace, wits, heart.   dice: d4, d6, d8, d10, d12.
+  "attributes": { "might": "d8", "grace": "d6" },
+
+  // [OPTIONAL] tier — rabble | rival | dread.  Default: rival.
+  //            rabble = mook (any hit kills it) · rival = standard foe · dread = boss (phase change at half vigor).
+  "tier": "rival",
+
+  // [OPTIONAL] skills — object of skill -> die.
+  //            blades, marksman, brawl, stealth, larceny, lore, survival, insight, sway, channeling.
+  "skills": { "brawl": "d6" },
+
+  // [OPTIONAL] gear — the weapon it swings. id and die both required if present.
+  //            gear ids share ONE global namespace with items; name it gear.<id>.name in the CSV.
+  "gear": { "id": "claw", "die": "d6" },
+
+  // [OPTIONAL] behaviour — who it targets. rabble_first (default) | strongest_first.
+  "behaviour": "strongest_first",
+
+  // [OPTIONAL] loot — weighted drop table rolled on death. Each entry has a weight and an optional
+  //            item id (a file in items/). A bare { "weight": N } is a chance to drop nothing.
+  "loot": [
+    { "item": "example_blade", "weight": 1 },
+    { "weight": 3 }
+  ]
+
+  // [OPTIONAL] mini — the figure it stands as. Bare id = this pack's or the game's; "<pack>.<mini>"
+  //            reaches a dependency pack. Omit for the default tiered pawn.
+}

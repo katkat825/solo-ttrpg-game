@@ -1,0 +1,36 @@
+{
+  // THE SHARED SPINE (W5). A beat is an INTENT, written once - and every companion at the table
+  // has to have its own phrasing of it. That is what makes five companions affordable and what
+  // stops any one of them quietly withholding something the player needs.
+  //
+  // 'plot' and 'hint' beats must be delivered by every voice; 'colour' need not be.
+  // A beat nothing reaches - no cue names it, no hint rung uses it - is refused at load.
+
+  "beats": [
+    {
+      "id": "the_water_is_wrong",
+      "kind": "plot",
+      "note": "warn the player that the floor of the stair is over open water"
+    },
+    {
+      "id": "it_was_a_person",
+      "kind": "plot",
+      "note": "the thing in the cistern used to be somebody; say so without explaining it"
+    },
+    {
+      "id": "the_spores_are_breathing",
+      "kind": "hint",
+      "note": "rung 1 - an observation. The walls of the gallery move."
+    },
+    {
+      "id": "they_move_when_you_move",
+      "kind": "hint",
+      "note": "rung 2 - a nudge. It is reacting to the player, not to the air."
+    },
+    {
+      "id": "hold_your_breath_and_walk",
+      "kind": "hint",
+      "note": "rung 3 - close to the answer. Cross the gallery without disturbing it."
+    }
+  ]
+}

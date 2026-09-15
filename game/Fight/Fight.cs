@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
+using Content.Dialogue;
 using Content.Kits;
 using Core.Characters;
 using Core.Combat;
@@ -105,6 +106,16 @@ namespace Game.Fight
         [Export] public NodePath DmPath { get; set; }
 
         Game.Dm.Dm _dm;
+
+        // and optional in exactly the same way (W1/W2). The companion is never in the fight - it is
+        // told what the table did and has opinions about it. It has no turn, no square and no
+        // statblock, and there is nowhere in this file that could give it one.
+        [Export] public NodePath CompanionPath { get; set; }
+
+        Game.Companion.Companion _friend;
+
+        // the day watches the same fights the table does, so camp can be about them (W3)
+        public Content.Dialogue.Day Today { get; private set; }
 
         // reveal a foe's Defence once: a number you already know is not a reveal
         readonly HashSet<Actor> _guardsSeen = new HashSet<Actor>();
@@ -221,9 +232,13 @@ namespace Game.Fight
 
             _luck = new SeededRng(seed + 1);
 
-            // table and transcript both watch, so a mismatch between them is visible
+            Today = new Content.Dialogue.Day(_hero);
+
+            // table and transcript both watch, so a mismatch between them is visible; the day
+            // watches too, and learns what tonight's camp is about without a second source of truth
             _watching = new CompositeCombatObserver(
                 new TableObserver(_board, _pieces) { Loot = Drops },
+                Today,
                 new RecordingCombatObserver(GD.Print));
 
             _engine = new CombatEngine(new StandardResolver(rng), observer: _watching);
@@ -246,6 +261,10 @@ namespace Game.Fight
             if (_boss != null) _fight.Phases(_boss);
 
             _dm = DmPath != null && !DmPath.IsEmpty ? GetNodeOrNull<Game.Dm.Dm>(DmPath) : null;
+
+            _friend = CompanionPath != null && !CompanionPath.IsEmpty
+                ? GetNodeOrNull<Game.Companion.Companion>(CompanionPath)
+                : null;
 
             _board.Claims = OnClick;
             _tray.Resolved += OnThrown;
@@ -342,6 +361,8 @@ namespace Game.Fight
 
             // no campaign means no plan and the DM does nothing, which is correct not a gap
             _dm?.Perform(_board.Plan, Content.Encounters.When.Entered, _board.Campaign);
+
+            Prompt(Content.Encounters.When.Entered);
 
             GD.Print("");
             GD.Print("order   " + string.Join(", ", _fight.Order.Select(
@@ -631,6 +652,7 @@ namespace Game.Fight
                 if (!_fight.SpendNerve(_hero)) return;
 
                 _shrugged = true;
+                _friend?.SeesNerveSpent();
                 GD.Print($"        {_hero.DebugName} shrugs the Trouble off");
                 return;
             }
@@ -905,6 +927,8 @@ namespace Game.Fight
             _tray.TargetDifficulty = target.Defense;
 
             GD.Print("");
+            _friend?.Watches();
+
             GD.Print($"swing   {_hero.DebugName} at {target.DebugName} - " +
                      $"{_engine.Options.HeroAttackAttr} + {_engine.Options.HeroAttackSkill} + {_hero.WeaponId}, " +
                      $"{pool.Count} dice vs defense {target.Defense}");
@@ -1042,8 +1066,11 @@ namespace Game.Fight
 
             ReadItBack(target, damage);
 
-            // a Snag (a single 1) has no mechanical effect; it is just the DM reacting
+            // a Snag (a single 1) has no mechanical effect; it is just the DM reacting -
+            // and, since W2, the companion having an opinion about it out loud
             if (_roll is { Snag: true }) _dm?.Reacts();
+
+            _friend?.Sees(_roll);
 
             // the interrupted mover gets its turn back, or loses it if the strike downed it
             if (_interrupted != null)
@@ -1125,26 +1152,82 @@ namespace Game.Fight
             _beat = Beat;
         }
 
+        // THE THROW, READ BACK IN A VOICE AT THE TABLE (W2, DM_PRESENCE.md D5).
+        //
+        // "Either the DM or the companion delivers these - whichever, they are lines like any other
+        // bark." Which one is content: a companion whose bark bank says reads_the_throw takes it,
+        // and otherwise the DM does exactly what it did before W. The one thing that must never
+        // happen is that these numbers reach the player as a HUD panel (THE_TABLE.md section 6).
         void ReadItBack(Actor target, int impact)
         {
-            if (_dm == null || target == null || _roll == null) return;
+            if (target == null || _roll == null) return;
 
             int against = target.Defense;
             bool beat = _roll.Beats(against);
-
-            _dm.Says(beat ? Game.Dm.DmLines.Hit : Game.Dm.DmLines.Miss,
-                     beat ? new object[] { _roll.Total, against, impact }
-                          : new object[] { _roll.Total, against });
-
-            // the first time it is cleared, and never again
-            if (!beat || !_guardsSeen.Add(target)) return;
 
             // numbered names carry their own {0}; use Format not Get, or the braces show
             string named = target.Ordinal > 0
                 ? _text.Format(target.NameKey, target.Ordinal)
                 : _text.Get(target.NameKey);
 
-            _dm.Says(Game.Dm.DmLines.Guard, named, against);
+            // the first time its guard is cleared, and never again: a number you already know is
+            // not a reveal
+            bool reveal = beat && _guardsSeen.Add(target);
+
+            if (Reader() is { } voice)
+            {
+                voice.Line(Content.Dialogue.DialogueKeys.Readout(
+                               _friend.Speaker, beat ? Readout.Hit : Readout.Miss),
+                           beat ? new object[] { _roll.Total, against, impact }
+                                : new object[] { _roll.Total, against });
+
+                if (reveal)
+                    voice.Line(Content.Dialogue.DialogueKeys.Readout(_friend.Speaker, Readout.Guard),
+                               named, against);
+
+                return;
+            }
+
+            if (_dm == null) return;
+
+            _dm.Says(beat ? Game.Dm.DmLines.Hit : Game.Dm.DmLines.Miss,
+                     beat ? new object[] { _roll.Total, against, impact }
+                          : new object[] { _roll.Total, against });
+
+            if (reveal) _dm.Says(Game.Dm.DmLines.Guard, named, against);
+        }
+
+        // the companion, but only where its own bank says it does this job
+        Game.Companion.Companion Reader()
+        {
+            if (_friend == null || _friend.Speaker.Length == 0) return null;
+
+            return _archetypes.BarksFor(_friend.Speaker) is { ReadsTheThrow: true } ? _friend : null;
+        }
+
+        // The cues at this moment that name a beat of the shared spine (W5). Which companion is at
+        // the table changes the PHRASING and nothing else - and where this one has no phrasing,
+        // the DM says it, so the information reaches the player either way.
+        void Prompt(Content.Encounters.When moment)
+        {
+            if (_board?.Plan == null || _board.Campaign.Length == 0) return;
+
+            foreach (Content.Encounters.Cue cue in _board.Plan.CuesFor(moment))
+            {
+                if (!cue.Prompts) continue;
+
+                string voice = _friend == null ? "" : _friend.Speaker;
+
+                if (voice.Length > 0 && _text.Has(cue.BeatKey(voice, _board.Campaign)))
+                {
+                    _friend.Line(cue.BeatKey(voice, _board.Campaign));
+                    continue;
+                }
+
+                string dm = cue.BeatKey(Content.Dialogue.Beat.TheDm, _board.Campaign);
+
+                if (_text.Has(dm)) _dm?.Says(dm);
+            }
         }
 
         public override void _Process(double delta)
@@ -1158,6 +1241,12 @@ namespace Game.Fight
             {
                 _cleared = true;
                 _dm?.Perform(_board.Plan, Content.Encounters.When.Cleared, _board.Campaign);
+
+                if (_hero.IsDown) _friend?.SeesTheHeroDown();
+                else _friend?.SeesTheRoomCleared();
+
+                // the beat every companion at this table has its own phrasing of (W5)
+                Prompt(Content.Encounters.When.Cleared);
             }
 
             // only at an idle table: a rattle on top of a swing is a sound effect, not a tell
@@ -1205,6 +1294,7 @@ namespace Game.Fight
             if (Reaches(from.Value, to.Value))
             {
                 _dm?.RollsForSomething();
+                _friend?.HearsASecretRoll();
 
                 _fight.Strike(prey, foe.Tier.AttackAttr(), foe.Tier.AttackSkill());
                 Refresh();

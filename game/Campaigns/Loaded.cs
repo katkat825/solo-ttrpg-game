@@ -39,6 +39,18 @@ namespace Game.Campaigns
 
         public ItemCatalogue Items => Package.Items;
 
+        public Content.Dialogue.DialogueBook Dialogue => Package.Dialogue;
+
+        public Content.Dialogue.BarkBook Barks => Package.Barks;
+
+        public Content.Dialogue.BeatBook Beats => Package.Beats;
+
+        public Content.Dialogue.HintBook Hints => Package.Hints;
+
+        public Content.Companions.CompanionBook Companions => Package.Companions;
+
+        public Content.Sheet.SheetOptions Sheet => Package.Sheet;
+
         public EncounterBook Encounters => Package.Encounters;
 
         public IReadOnlyDictionary<string, MapLayout> Maps => Package.Maps;
@@ -53,7 +65,10 @@ namespace Game.Campaigns
 
         public int Strings { get; }
 
-        public IEnumerable<string> Keys()
+        // voices: every creature the whole shelf can speak as, because a beat must be deliverable
+        // by any companion the player might have. Null falls back to this pack's own, which is what
+        // a single-pack test wants and is never what the game wants.
+        public IEnumerable<string> Keys(IEnumerable<string> voices = null)
         {
             if (Failed || Waiting) yield break;
 
@@ -78,6 +93,28 @@ namespace Game.Campaigns
                     yield return key;
 
             foreach (MiniManifest mini in Package.Minis.All) yield return mini.NameKey;
+
+            // Phase W. Every word a voice at this table can be asked for: the conversations, the
+            // bark banks, and one phrasing of every beat for every voice - which is the shared
+            // spine's whole claim, checked rather than promised (W5).
+            foreach (string key in Dialogue.Keys()) yield return key;
+
+            foreach (string key in Barks.Keys()) yield return key;
+
+            // Phase R. The names on the blanks of a character sheet
+            foreach (string key in Sheet.Keys()) yield return key;
+        }
+
+        // Keys a campaign MAY carry without being asked for them, and which are not orphans when
+        // it does. The shared spine is the whole of this category: a beat has a phrasing per voice
+        // and one for the DM, and a campaign is only ever expected to write SOME of them - it
+        // cannot write for a companion published after it. Which ones it must write is a question
+        // about delivery rather than about coverage, and check-dialogue.ps1 is where it is asked.
+        public IEnumerable<string> Spare(IEnumerable<string> voices = null)
+        {
+            if (Failed || Waiting) yield break;
+
+            foreach (string key in Beats.KeysFor(voices ?? Companions.Voices)) yield return key;
         }
 
         public override string ToString() =>

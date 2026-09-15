@@ -17,6 +17,10 @@ namespace Game.Localization
             foreach (string key in AbilityKeys()) yield return key;
 
             foreach (string key in Game.Dm.DmLines.All()) yield return key;
+
+            // Phase R. The words printed on the sheet and the names of the objects in the room -
+            // the engine's, because every campaign is played on the same sheet in the same room
+            foreach (string key in Game.Sheet.SheetKeys.All()) yield return key;
         }
 
         // the base game's shared abilities only; a pack's abilities are named in the pack's own locale

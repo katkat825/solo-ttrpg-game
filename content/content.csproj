@@ -14,6 +14,14 @@
     <ProjectReference Include="../core/core.csproj" />
   </ItemGroup>
 
+  <!-- the branching-dialogue runtime, and deliberately not ours: ARCHITECTURE.md section 6, Phase W
+       W0. The compiler is here rather than a build step because a campaign ships .yarn source and
+       the loader compiles it - which is what lets a Workshop author write dialogue with a text
+       editor and no tooling. MIT; recorded in THIRD_PARTY.md. -->
+  <ItemGroup>
+    <PackageReference Include="YarnSpinner.Compiler" Version="3.2.2" />
+  </ItemGroup>
+
   <!-- campaign content read off disk; never references Godot, so it stays testable headless and runnable from the sim -->
 
 </Project>

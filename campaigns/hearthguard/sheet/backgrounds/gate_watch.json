@@ -1,0 +1,7 @@
+{
+  // A background trains rather than nudges, mostly - it is what you did before, not what you are.
+  // A skill here never un-trains a better one the class already had.
+
+  "id": "gate_watch",
+  "skills": { "insight": "d4" }
+}

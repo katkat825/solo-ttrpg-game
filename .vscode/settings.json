@@ -1,0 +1,10 @@
+{
+  // The game's content JSON may contain // comments and trailing commas: every loader parses with
+  // JsonCommentHandling.Skip + AllowTrailingCommas, so they never reach the game as data. Treat these
+  // files as "JSON with Comments" (jsonc) in the editor so VS Code stops flagging the comments.
+  // Covers the authoring templates and every campaign/pack folder (including dialogue/, companions/, etc.).
+  "files.associations": {
+    "**/templates/**/*.json": "jsonc",
+    "**/campaigns/**/*.json": "jsonc"
+  }
+}

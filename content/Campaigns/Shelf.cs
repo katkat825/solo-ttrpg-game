@@ -95,14 +95,42 @@ namespace Content.Campaigns
         }
 
 
+        // every creature anything on this shelf can speak as. A voice is shelf-wide by design: a
+        // class pack can ship the wolf and a campaign can ship the wolf's lines, and neither pack
+        // knows the other exists (Phase W).
+        public IEnumerable<string> Voices =>
+            Loaded.SelectMany(p => p.Voices)
+                  .Distinct(StringComparer.Ordinal)
+                  .OrderBy(v => v, StringComparer.Ordinal);
+
         // cross-pack mini ids a single package couldn't resolve; unresolved is a placeholder box, not fatal
         void CrossCheck()
         {
+            var voices = new HashSet<string>(Voices, StringComparer.Ordinal);
+
             foreach (Entry entry in _entries)
             {
                 if (!entry.InPlay) continue;
 
                 Package package = entry.Package;
+
+                // a conversation keyed under a creature nothing on this shelf can be: the lines
+                // exist, the voice does not, and the words end up filed under a companion with no
+                // bark bank and nowhere to sit
+                foreach (string node in package.Dialogue.Nodes.OrderBy(n => n, StringComparer.Ordinal))
+                {
+                    string speaker = package.Dialogue.SpeakerOf(node);
+
+                    if (speaker == null || voices.Contains(speaker)) continue;
+
+                    _problems.Add(new ContentProblem(
+                        package.Id + "/" + Package.DialogueFolder + "/",
+                        node + "." + Content.Dialogue.DialogueBook.SpeakerHeader,
+                        $"'{speaker}' is not a voice anything installed can be - this shelf speaks " +
+                        $"as {(voices.Count == 0 ? "nobody at all" : string.Join(", ", voices))}. " +
+                        "Ship a companion or a bark bank for it, or name the pack that does in " +
+                        "dependencies"));
+                }
 
                 foreach (string id in package.Monsters.Ids.OrderBy(i => i, StringComparer.Ordinal))
                 {

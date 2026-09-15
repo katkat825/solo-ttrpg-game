@@ -279,7 +279,7 @@ namespace Content.Encounters
             return triggers;
         }
 
-        static readonly string[] CueFields = { "when", "cue", "gesture", "hesitant", "at" };
+        static readonly string[] CueFields = { "when", "cue", "gesture", "hesitant", "at", "beat" };
 
         static IReadOnlyList<Cue> Cues(JsonElement root, string file, List<ContentProblem> problems)
         {
@@ -335,7 +335,9 @@ namespace Content.Encounters
 
                 int slot = At(entry, gesture, file, where, problems);
 
-                cues.Add(new Cue(when, id.GetString(), gesture, hesitant, slot));
+                string beat = Beat(entry, file, where, problems);
+
+                cues.Add(new Cue(when, id.GetString(), gesture, hesitant, slot, beat));
             }
 
             return cues;
@@ -415,6 +417,26 @@ namespace Content.Encounters
             }
 
             return slot;
+        }
+
+        // the moment a companion is asked for its own phrasing of an intent every companion shares
+        static string Beat(JsonElement entry, string file, string where,
+                           List<ContentProblem> problems)
+        {
+            if (!entry.TryGetProperty("beat", out JsonElement value)) return "";
+
+            if (value.ValueKind == JsonValueKind.Null) return "";
+
+            if (value.ValueKind != JsonValueKind.String || !ContentId.IsLocal(value.GetString()))
+            {
+                problems.Add(new ContentProblem(
+                    file, $"{where}.beat",
+                    $"'{Shown(value)}' is not a beat id - it names a beat in this campaign's " +
+                    "beats/ folder, and every companion at the table has its own phrasing of it"));
+                return "";
+            }
+
+            return value.GetString();
         }
 
         static bool Word<TEnum>(JsonElement entry, string field, string file, string where,

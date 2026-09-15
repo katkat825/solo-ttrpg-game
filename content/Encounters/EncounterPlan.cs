@@ -112,13 +112,14 @@ namespace Content.Encounters
     public sealed class Cue
     {
         public Cue(When when, string id, Gesture gesture = Gesture.Push, bool hesitant = false,
-                   int slot = 0)
+                   int slot = 0, string beat = null)
         {
             WhenIt = when;
             Id = id;
             Does = gesture;
             Hesitant = hesitant;
             Slot = slot;
+            Beat = beat ?? "";
         }
 
         public When WhenIt { get; }
@@ -135,6 +136,11 @@ namespace Content.Encounters
 
         public bool Tells => Does.Tells();
 
+        // a beat of the shared spine the companion answers this moment with (W5); empty for most cues
+        public string Beat { get; }
+
+        public bool Prompts => Beat.Length > 0;
+
         // derived from the id, scoped to the campaign; DM narration is campaign content, never game/locale
         public string LineKey(string campaign) =>
             !Tells ? null
@@ -142,8 +148,13 @@ namespace Content.Encounters
                          Core.Localization.KeyConventions.DialogueNs, "dm", "narration",
                          campaign, Id);
 
+        // whichever companion is at this table says it; the beat exists once and every voice has one
+        public string BeatKey(string speaker, string campaign) =>
+            !Prompts ? null : Dialogue.DialogueKeys.Beat(speaker, campaign, Beat);
+
         public override string ToString() =>
             $"{WhenIt}: {Id} - {(Hesitant ? "hesitant " : "")}{Does.Word()}" +
-            (Slot > 0 ? $" at slot {Slot}" : "");
+            (Slot > 0 ? $" at slot {Slot}" : "") +
+            (Prompts ? $", prompts '{Beat}'" : "");
     }
 }

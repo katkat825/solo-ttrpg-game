@@ -1,0 +1,13 @@
+{
+  //  A PACK ships content but nothing to play. Uses pack.json (NOT campaign.json) and has NO chapters.
+
+  "id": "my_classes",   // [REQUIRED] matches the folder name
+  "kind": "classes",    // [REQUIRED in a pack] campaign | minis | classes | mixed
+  "format": 1,          // [REQUIRED]
+  "engine": "0.4",      // [REQUIRED]
+
+  "author": "your name",   // [OPTIONAL]
+  "tags": [ "classes" ],   // [OPTIONAL]
+  "dependencies": []       // [OPTIONAL]
+  // name/description are locale keys (campaign.my_classes.name / .description).
+}

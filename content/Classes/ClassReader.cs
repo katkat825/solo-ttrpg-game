@@ -64,6 +64,7 @@ namespace Content.Classes
                 string mini = Mini(root, file, problems);
                 int nerve = Nerve(root, file, problems);
                 IReadOnlyList<Growth> growth = Steps(root, file, problems);
+                string companion = Companion(root, file, problems);
 
                 Refused(root, file, problems);
                 Unknown(root, file, problems);
@@ -72,7 +73,7 @@ namespace Content.Classes
 
                 return Read<ClassCard>.Good(new ClassCard(
                     id, vigor, defense, attributes, skills, wields, wears, kit, mini, nerve,
-                    growth));
+                    growth, companion));
             }
         }
 
@@ -80,7 +81,7 @@ namespace Content.Classes
         static readonly string[] Fields =
         {
             "id", "vigor", "defense", "attributes", "skills", "wields", "wears", "kit", "mini",
-            "nerve", "growth",
+            "nerve", "growth", "companion",
         };
 
         // caught here, not as typos: writing "tier" on a class is an assumption, not a misspelling
@@ -269,6 +270,29 @@ namespace Content.Classes
                 file, "mini",
                 $"'{Shown(value)}' is not a mini id - either one this pack's minis/ folder " +
                 "declares, one of the ones the game ships, or another pack's as '<pack>.<mini>'"));
+
+            return "";
+        }
+
+        // the creature that comes with this class; same id rules as a mini, for the same reason
+        static string Companion(JsonElement root, string file, List<ContentProblem> problems)
+        {
+            if (!root.TryGetProperty("companion", out JsonElement value)) return "";
+
+            if (value.ValueKind == JsonValueKind.Null) return "";
+
+            if (value.ValueKind == JsonValueKind.String)
+            {
+                string id = value.GetString() ?? "";
+
+                if (ContentId.IsLocal(id) || ContentId.IsScoped(id)) return id;
+            }
+
+            problems.Add(new ContentProblem(
+                file, "companion",
+                $"'{Shown(value)}' is not a companion id - either one this pack's companions/ " +
+                "folder declares, or another pack's as '<pack>.<companion>'. Leave it out and the " +
+                "class plays alone"));
 
             return "";
         }

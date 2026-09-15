@@ -1,0 +1,16 @@
+{
+  "speaker": "wolf",
+
+  "banks": {
+    "snag": 40,
+    "trouble": 10,
+    "nerve": 6,
+    "secret": 5,
+    "overasked": 4,
+    "camp": 5,
+    "victory": 4,
+    "down": 3
+  },
+
+  "reads_the_throw": true
+}

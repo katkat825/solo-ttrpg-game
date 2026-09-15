@@ -1,0 +1,5 @@
+{
+  "id": "charcoal_burner",
+  "nudges": { "heart": 1 },
+  "skills": { "survival": "d4" }
+}

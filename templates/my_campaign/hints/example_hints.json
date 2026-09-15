@@ -1,0 +1,32 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  //  hints/*.json  —  HINT LADDERS. [OPTIONAL]
+  //
+  //  Hints are PULLED, never pushed: the player asks, and the companion never
+  //  volunteers the solution. Three rungs on repeat asks - an observation, a
+  //  nudge, then something close to the answer - and a fourth ask gets the
+  //  companion noticing it is being over-asked, in its own voice.
+  //
+  //  A rung names a BEAT, not a line, so every companion has to be able to
+  //  phrase it. A hint only one voice can give is a hint gated on which class
+  //  the player picked.
+  //
+  //  NEVER GATE ANYTHING ON A HINT. Every piece of information behind a rung
+  //  must be reachable another way. No validator can check that for you.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  "hints": [
+    {
+      // [REQUIRED] id - the PROBLEM this is about. The ladder counts asks per
+      //            problem, so this is what it counts.
+      "id": "the_spore_gallery",
+
+      // [REQUIRED] rungs - exactly 3 beat ids from beats/, worst hint first.
+      "rungs": [
+        "the_walls_are_moving",
+        "they_lean_toward_you",
+        "hold_your_breath"
+      ]
+    }
+  ]
+}

@@ -99,6 +99,13 @@ namespace Game.Diagnostics
             foreach (string key in dm) keys.Add(key);
 
             GD.Print($"dm          {string.Join(", ", dm)}");
+
+            // the sheet's printed labels and the room's objects (Phase R)
+            var room = new SortedSet<string>(Game.Sheet.SheetKeys.All());
+
+            foreach (string key in room) keys.Add(key);
+
+            GD.Print($"room        {string.Join(", ", Game.Room.Props.Words)}");
             GD.Print("");
 
             return keys;
@@ -144,9 +151,18 @@ namespace Game.Diagnostics
         {
             if (Archetypes is not Game.Campaigns.Library library) return;
 
+            // Phase W. A beat has to be deliverable by ANY companion the player might turn up
+            // with, so the spine is checked against every voice on the shelf and not just the ones
+            // this campaign happens to ship. A campaign that writes for somebody else's companion
+            // is exactly the case this exists for.
+            string[] voices = library.Voices.ToArray();
+
+            GD.Print("");
+            GD.Print($"voices      {(voices.Length == 0 ? "none on this shelf" : string.Join(", ", voices))}");
+
             foreach (Game.Campaigns.Loaded campaign in library.Campaigns)
             {
-                var expected = new SortedSet<string>(campaign.Keys());
+                var expected = new SortedSet<string>(campaign.Keys(voices));
 
                 GD.Print("");
                 GD.Print($"campaign    {campaign}");
@@ -166,9 +182,10 @@ namespace Game.Diagnostics
 
                 if (english == null) continue;
 
-                CheckCoverage(expected, english, files[0], Label(campaign.Id, files));
+                CheckCoverage(expected, english, files[0], Label(campaign.Id, files),
+                              new HashSet<string>(campaign.Spare(voices)));
                 CheckGrammar(english);
-                CheckPlaceholders(english);
+                CheckPlaceholders(english, library);
 
                 // prove the strings came from the folder by asking the translation server, not the CSV
                 CheckTheUnloadPath(campaign, expected);
@@ -260,14 +277,18 @@ namespace Game.Diagnostics
         }
 
         // both directions: a key with no text breaks the screen, text with no key is dead weight
+        // spare: keys the file is allowed to carry and is never asked for - the shared spine,
+        // where what a campaign owes is "every player can be told this" rather than "every key"
         void CheckCoverage(IReadOnlyCollection<string> expected, Dictionary<string, string> english,
-                           string file, string label = null)
+                           string file, string label = null, ISet<string> spare = null)
         {
             var have = new HashSet<string>(english.Keys);
             string named = label ?? Named(file);
 
             var missing = expected.Where(k => !have.Contains(k)).ToList();
-            var orphans = english.Keys.Where(k => !expected.Contains(k)).ToList();
+            var orphans = english.Keys
+                                 .Where(k => !expected.Contains(k) && spare?.Contains(k) != true)
+                                 .ToList();
 
             GD.Print($"keys        the game emits {expected.Count}, {named} has {english.Count}");
 
@@ -295,13 +316,17 @@ namespace Game.Diagnostics
         }
 
         // a name_numbered key missing {0} silently numbers nothing; a stray {0} prints braces on screen
-        void CheckPlaceholders(Dictionary<string, string> english)
+        void CheckPlaceholders(Dictionary<string, string> english,
+                               Game.Campaigns.Library shelf = null)
         {
             foreach (KeyValuePair<string, string> row in english)
             {
-                // check engine keys and DM lines both: a DM line that lost its {0} would look deliberate
+                // engine keys, DM lines and a companion's readout all format numbers in: any of
+                // them losing its {0} would read as a deliberate translation choice
                 bool needsOne = EngineKeys.TakesAnArgument(row.Key) ||
-                                Game.Dm.DmLines.TakesAnArgument(row.Key);
+                                Game.Dm.DmLines.TakesAnArgument(row.Key) ||
+                                Game.Sheet.SheetKeys.TakesAnArgument(row.Key) ||
+                                Reads(shelf, row.Key);
                 bool hasOne = row.Value.Contains("{0}");
 
                 if (needsOne && !hasOne)
@@ -310,6 +335,18 @@ namespace Game.Diagnostics
                 if (!needsOne && hasOne)
                     Problem($"{row.Key} contains a {{0}} but nothing formats it, so the braces will show: \"{row.Value}\"");
             }
+        }
+
+        // a readout key belonging to any voice on the shelf; the campaign that ships the bank and
+        // the campaign that ships the line need not be the same one
+        static bool Reads(Game.Campaigns.Library shelf, string key)
+        {
+            if (shelf == null) return false;
+
+            foreach (Game.Campaigns.Loaded campaign in shelf.InPlay)
+                if (campaign.Barks.TakesAnArgument(key)) return true;
+
+            return false;
         }
 
         // shows the pseudolocale on a few strings, so it is obvious it is wired and what hardcoded English looks like

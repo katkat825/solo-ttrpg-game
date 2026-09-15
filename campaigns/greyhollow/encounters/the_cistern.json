@@ -13,7 +13,7 @@
   ],
 
   "cues": [
-    { "when": "entered", "cue": "it_turns_to_look" },
+    { "when": "entered", "cue": "it_turns_to_look", "beat": "it_was_a_person" },
     { "when": "cleared", "cue": "the_hollow_goes_quiet" }
   ]
 }

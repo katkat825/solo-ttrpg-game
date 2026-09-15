@@ -28,14 +28,25 @@ namespace Content.Saves
 
         public SavedActor Hero { get; set; }
 
+        // THE SHEET (R0/R4). The hero above is what the fight did to a character; this is the
+        // character. It is what the room's shelf shows on a box and what a resumed game rebuilds
+        // the hero from, so it goes in the save beside the fight rather than instead of it.
+        //
+        // Null in a save written before Phase R, and a save that has one still reads on a build
+        // that does not - which is what "versioned, degrading save/load" (P6) means in practice.
+        public Content.Sheet.CharacterSheet Sheet { get; set; }
+
         public IList<SavedActor> Foes { get; } = new List<SavedActor>();
 
         public IList<SavedDie> Felt { get; } = new List<SavedDie>();
 
         public bool MidFight => Round > 0;
 
+        public bool HasASheet => Sheet != null && !Sheet.IsBlank;
+
         public override string ToString() =>
             $"{Campaign}/{Encounter} format {Format}" +
+            (HasASheet ? $", {Sheet}" : "") +
             (MidFight ? $", round {Round}, {Foes.Count} foes, {Felt.Count} dice on the felt"
                       : ", not mid-fight");
     }

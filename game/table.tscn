@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=17 format=3]
 
 ; THE TABLE. The game's main scene from B0 onward, and the shipped view of it.
 ;
@@ -23,6 +23,11 @@
 [ext_resource type="PackedScene" path="res://Board/dread.tscn" id="9_dread"]
 [ext_resource type="Script" path="res://Fight/Fight.cs" id="7_fight"]
 [ext_resource type="Script" path="res://Dm/Dm.cs" id="10_dm"]
+[ext_resource type="Script" path="res://Companion/Companion.cs" id="11_companion"]
+[ext_resource type="Script" path="res://Companion/HintCord.cs" id="12_cord"]
+[ext_resource type="Script" path="res://Dialogue/Talk.cs" id="13_talk"]
+[ext_resource type="Script" path="res://Camp/Camp.cs" id="14_camp"]
+[ext_resource type="Script" path="res://Sheet/Sheet.cs" id="15_sheet"]
 [ext_resource type="Texture2D" path="res://textures/tray_wood/color.jpg" id="3_color"]
 [ext_resource type="Texture2D" path="res://textures/tray_wood/roughness.jpg" id="4_rough"]
 [ext_resource type="Texture2D" path="res://textures/tray_wood/normalgl.jpg" id="5_normal"]
@@ -76,14 +81,33 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.08, -0.041, 0.03)
 mesh = SubResource("Mesh_table")
 material_override = SubResource("Mat_table")
 
+; THE CHARACTER SHEET (ROOM_AND_SHEET.md R0-R2, THE_TABLE.md section 5).
+;
+; A piece of paper, lying on the table to the player's right where a real one would be, at the
+; table's own scale and in the table's own light. You fill it in by touching the blanks; the DM
+; picks it up and reads it; and everything that happens in play is written on it in pencil.
+;
+; IT IS THE CHARACTER, not a view of one. The hero thrown on the tray is assembled from this every
+; time, so there is nothing anywhere else that could drift from it - which is what deletes the
+; character screen, the level-up modal and the inventory panel in one go.
+;
+; Laid flat (pitched back off the vertical so the fixed camera reads it as paper on a table rather
+; than a poster) and handed the DM, so the hands can come across and take it (R1).
+[node name="Sheet" type="Node3D" parent="."]
+script = ExtResource("15_sheet")
+transform = Transform3D(1, 0, 0, 0, 0.1736482, 0.9848078, 0, -0.9848078, 0.1736482, 0.78, -0.038, 0.16)
+DmPath = NodePath("../Dm")
+
 ; the board does not own a tray and the tray does not know there is a board - only the table
 ; knows both are standing on it, so this is where they are introduced (B4)
 [node name="Board" parent="." instance=ExtResource("1_board")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.3, -0.014, -0.03)
 TrayPath = NodePath("../DiceTray")
+SheetPath = NodePath("../Sheet")
 
 [node name="DiceTray" parent="." instance=ExtResource("2_tray")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.38, 0, 0.09)
+CompanionPath = NodePath("../Companion")
 
 ; THE DM, ACROSS THE TABLE (DM_PRESENCE.md D0). The screen stands at the far edge, art facing the
 ; player, and the hands come from behind it - which is the loading boundary D0 establishes:
@@ -97,6 +121,62 @@ script = ExtResource("10_dm")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.02, -0.041, -0.46)
 BoardPath = NodePath("../Board")
 
+; THE COMPANION, ALIVE ON THE TABLE (COMPANION_AND_DIALOGUE.md W1, THE_TABLE.md section 4).
+;
+; Every mini on the table is inert; this one is not. It sits ALONGSIDE the map with its chin on the
+; edge - on the table, never on the board - which is the conceit and also the guarantee: there is
+; no square under it, so nothing can give it a turn.
+;
+; PLACED HERE IN WORLD SPACE like everything else on this table. The wolf's perch is the map's left
+; edge, so this sits just off the board's western side and a little forward of it, where the fixed
+; camera can see its head turn.
+;
+; It is handed the screen and the tray so it has something to LOOK AT: it turns to the screen when
+; it hears the DM roll, and follows the dice when they are in the air. Neither is required - unset
+; them and it simply stares ahead.
+;
+; The placeholder body is deliberate (W1: build the idles first). The model arrives later and
+; nothing about the behaviour changes when it does.
+[node name="Companion" type="Node3D" parent="."]
+script = ExtResource("11_companion")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6, -0.013, 0.16)
+CompanionId = "hearthguard.wolf"
+ScreenPath = NodePath("../Dm")
+TrayPath = NodePath("../DiceTray")
+
+; THE HINT CORD (W4). Pulled, never pushed: the player asks, and the companion never volunteers the
+; solution. Three rungs on repeat asks, then it notices it is being over-asked and says so in
+; character. Press H, or reach for the cord itself.
+;
+; It gates NOTHING. Every rung is a line, and every piece of information behind one is reachable
+; another way - that is a rule about how campaigns are authored and no validator can hold you to it.
+[node name="HintCord" type="Node3D" parent="."]
+script = ExtResource("12_cord")
+transform = Transform3D(1, 0, 0, 0, 0.7071068, 0.7071068, 0, -0.7071068, 0.7071068, -0.72, 0.02, 0.34)
+CompanionPath = NodePath("../Companion")
+DmPath = NodePath("../Dm")
+
+; A CONVERSATION, WHEN THERE IS ONE (W0). Idle until something starts it; the choices are laid out
+; as cards on the table in front of you, because THE_TABLE.md section 6 is a hard rule and a
+; dialogue menu is the most tempting panel in the game to bolt over the scene.
+;
+; A line goes to whoever says it: the companion's own lines come out of its mouth, the DM's are
+; pushed across the table on a note (D5), and anybody else's lands in this node's own bubble.
+[node name="Talk" type="Node3D" parent="."]
+script = ExtResource("13_talk")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.02, -0.038, 0.26)
+CompanionPath = NodePath("../Companion")
+DmPath = NodePath("../Dm")
+
+; CAMP (W3). A scene, not a rest button with a menu behind it: a fire on the table, the companion
+; coming over to sit by it, and one conversation about the day you actually had. The rest effects
+; (Strain cleared, one Condition slept off, Nerve back to 3) are core/'s Rest.Camp and know nothing
+; about any of this.
+[node name="Camp" type="Node3D" parent="."]
+script = ExtResource("14_camp")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.02, -0.038, 0.22)
+CompanionPath = NodePath("../Companion")
+
 ; THE FIGHT (COMBAT_LOOP.md C0). It needs the board and the tray both, and the table is the one
 ; place that knows both are standing on it - the same reason the board's TrayPath is set here and
 ; not inside board.tscn. Last child, so the board has finished loading its map and made its hero
@@ -106,6 +186,7 @@ script = ExtResource("7_fight")
 BoardPath = NodePath("../Board")
 TrayPath = NodePath("../DiceTray")
 DmPath = NodePath("../Dm")
+CompanionPath = NodePath("../Companion")
 RivalPiece = ExtResource("6_rival")
 RabblePiece = ExtResource("8_rabble")
 DreadPiece = ExtResource("9_dread")

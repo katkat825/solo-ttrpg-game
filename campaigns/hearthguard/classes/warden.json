@@ -7,6 +7,7 @@
   "wields": "warden_glaive",
   "kit": [ "steady_guard", "hearth_ward", "force_door" ],
   "mini": "barbarian",
+  "companion": "wolf",
   "growth": [
     { "id": "shield_wall", "attribute": "might" },
     { "id": "watchful", "skill": "insight" },

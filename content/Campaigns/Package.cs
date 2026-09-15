@@ -9,6 +9,8 @@ using Content.Items;
 using Content.Kits;
 using Content.Minis;
 using Content.Models;
+using Content.Companions;
+using Content.Dialogue;
 using Content.Monsters;
 using Content.Schema;
 using Core.Space;
@@ -31,6 +33,22 @@ namespace Content.Campaigns
         public const string MinisFolder = "minis";
         public const string ModelsFolder = "models";
         public const string AudioFolder = "audio";
+
+        // Phase W. The branching lives in dialogue/, the short reactions in barks/, the intents
+        // every companion must be able to deliver in beats/, and what a hint escalates through in
+        // hints/. companions/ says who is sitting on the table to say any of it.
+        public const string DialogueFolder = "dialogue";
+
+        public const string BarksFolder = "barks";
+
+        public const string BeatsFolder = "beats";
+
+        public const string HintsFolder = "hints";
+
+        public const string CompanionsFolder = "companions";
+
+        // Phase R. What the blanks on the character sheet offer.
+        public const string SheetFolder = "sheet";
 
         public const string MapExtension = ".map";
 
@@ -77,6 +95,27 @@ namespace Content.Campaigns
         public KitBook Kit { get; }
 
         public MiniCatalogue Minis { get; }
+
+        // Phase W's four folders and Phase R's one. Set after construction rather than through the
+        // constructor: a package already takes ten collaborators and a longer list stops being read.
+        public Content.Dialogue.DialogueBook Dialogue { get; private set; } =
+            Content.Dialogue.DialogueBook.Read(null, "");
+
+        public Content.Dialogue.BarkBook Barks { get; private set; } =
+            Content.Dialogue.BarkBook.Read(null);
+
+        public Content.Dialogue.BeatBook Beats { get; private set; } =
+            Content.Dialogue.BeatBook.Read(null, "");
+
+        public Content.Dialogue.HintBook Hints { get; private set; } =
+            Content.Dialogue.HintBook.Read(null, "");
+
+        public Content.Companions.CompanionBook Companions { get; private set; } =
+            Content.Companions.CompanionBook.Read(null, "");
+
+        // Phase R. What the blanks on a character sheet offer (sheet/races/, sheet/backgrounds/)
+        public Content.Sheet.SheetOptions Sheet { get; private set; } =
+            Content.Sheet.SheetOptions.Read(null, "");
 
         public IReadOnlyList<ContentProblem> Problems { get; }
 
@@ -135,7 +174,24 @@ namespace Content.Campaigns
                                       minis, classes, kit, problems)
             {
                 ManifestFile = ManifestFileIn(folder),
+                Dialogue = Content.Dialogue.DialogueBook.Read(In(folder, DialogueFolder), id),
+                Barks = Content.Dialogue.BarkBook.Read(In(folder, BarksFolder)),
+                Beats = Content.Dialogue.BeatBook.Read(In(folder, BeatsFolder), id),
+                Hints = Content.Dialogue.HintBook.Read(In(folder, HintsFolder), id),
+                Companions = Content.Companions.CompanionBook.Read(In(folder, CompanionsFolder), id),
+                Sheet = Content.Sheet.SheetOptions.Read(In(folder, SheetFolder), id),
             };
+
+            Gather(problems, DialogueFolder, package.Dialogue.Problems);
+            Gather(problems, BarksFolder, package.Barks.Problems);
+            Gather(problems, BeatsFolder, package.Beats.Problems);
+            Gather(problems, HintsFolder, package.Hints.Problems);
+            Gather(problems, CompanionsFolder, package.Companions.Problems);
+            Gather(problems, SheetFolder, package.Sheet.Problems);
+
+            // a race and a class sharing an id collide in the class namespace, and one of the two
+            // names would silently never be seen
+            package.Sheet.MustNotCollideWith(classes, problems);
 
             package.CrossCheck(problems);
 
@@ -143,6 +199,18 @@ namespace Content.Campaigns
         }
 
         static string In(string folder, string inside) => Path.Combine(folder, inside);
+
+        // a book names its files relative to itself; the campaign puts the folder back on the front
+        // so an author reads "dialogue/camp.yarn: line 12" and knows where to look
+        static void Gather(List<ContentProblem> problems, string folder,
+                           IReadOnlyList<ContentProblem> found)
+        {
+            foreach (ContentProblem problem in found)
+                problems.Add(problem.File.StartsWith(folder + "/", StringComparison.Ordinal)
+                    ? problem
+                    : new ContentProblem(folder + "/" + problem.File, problem.Where, problem.What,
+                                         problem.Line));
+        }
 
         static string ManifestFileIn(string folder)
         {
@@ -371,6 +439,8 @@ namespace Content.Campaigns
 
             CrossCheckArt(problems);
 
+            CrossCheckVoices(problems);
+
             if (Manifest.Preview.Length > 0 &&
                 !File.Exists(Path.Combine(Folder, Manifest.Preview)))
                 problems.Add(new ContentProblem(
@@ -396,6 +466,14 @@ namespace Content.Campaigns
                         "another pack, write it as '<pack>.<mini>' and name that pack in " +
                         "dependencies"));
 
+                if (card.HasACompanion && !Keeps(card.Companion))
+                    problems.Add(new ContentProblem(
+                        file, "companion",
+                        $"'{card.Companion}' is not a companion this pack ships - it has " +
+                        $"{Offered(Companions.Ids.Select(ContentId.LocalOf).OrderBy(i => i, StringComparer.Ordinal))}. " +
+                        "If it belongs to another pack, write it as '<pack>.<companion>' and name " +
+                        "that pack in dependencies"));
+
                 int at = 0;
 
                 foreach (string ability in card.Kit)
@@ -420,6 +498,97 @@ namespace Content.Campaigns
                 }
             }
         }
+
+        // Phase W's half of the cross-check: a spine nobody can deliver, a rung with no beat behind
+        // it, and a beat nothing ever reaches. All three compile perfectly and all three are silence.
+        void CrossCheckVoices(List<ContentProblem> problems)
+        {
+            var reached = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (Hint hint in Hints.All)
+            {
+                string file = HintsFolder + "/";
+                int rung = 0;
+
+                foreach (string id in hint.Rungs)
+                {
+                    rung++;
+                    reached.Add(id);
+
+                    Beat beat = Beats.Of(id);
+
+                    if (beat == null)
+                    {
+                        problems.Add(new ContentProblem(
+                            file, $"{hint.Id}.rungs[{rung - 1}]",
+                            $"'{id}' is not one of this campaign's beats - it has " +
+                            $"{Offered(Beats.Ids.OrderBy(i => i, StringComparer.Ordinal))}"));
+                        continue;
+                    }
+
+                    if (beat.Kind == BeatKind.Hint) continue;
+
+                    problems.Add(new ContentProblem(
+                        file, $"{hint.Id}.rungs[{rung - 1}]",
+                        $"'{id}' is a '{beat.Kind.Word()}' beat and a hint rung has to be a " +
+                        $"'{BeatKind.Hint.Word()}' one - the kinds are what tell a reader which " +
+                        "lines are answers to a question nobody has to ask"));
+                }
+            }
+
+            foreach (EncounterPlan plan in Encounters.All)
+            {
+                string file = EncountersFolder + "/" + plan.Id + EncounterBook.Extension;
+                int at = 0;
+
+                foreach (Cue cue in plan.Cues)
+                {
+                    string where = $"cues[{at++}].beat";
+
+                    if (!cue.Prompts) continue;
+
+                    reached.Add(cue.Beat);
+
+                    if (Beats.Has(cue.Beat)) continue;
+
+                    problems.Add(new ContentProblem(
+                        file, where,
+                        $"'{cue.Beat}' is not one of this campaign's beats - it has " +
+                        $"{Offered(Beats.Ids.OrderBy(i => i, StringComparer.Ordinal))}"));
+                }
+            }
+
+            // the same argument as an encounter no chapter names: written, translated, never heard
+            foreach (Beat beat in Beats.All)
+            {
+                if (beat.Kind == BeatKind.Colour || reached.Contains(beat.Id)) continue;
+
+                problems.Add(new ContentProblem(
+                    BeatsFolder + "/", beat.Id,
+                    $"nothing reaches this beat - a '{beat.Kind.Word()}' beat is delivered by a " +
+                    "cue that names it or by a rung of a hint, and one with neither is a line " +
+                    "every companion will be asked to write and no player will ever hear"));
+            }
+
+            // WHO CAN SAY THESE LINES IS NOT A QUESTION THIS FOLDER CAN ANSWER. A voice is
+            // deliberately un-prefixed - dialogue.wolf.* is base-game shared vocabulary and belongs
+            // to no campaign (CONVENTIONS.md section 7) - so a campaign writing for the wolf has no
+            // '<pack>.<voice>' form to write the way a cross-pack mini id does. That makes it a
+            // shelf question, and Shelf.CrossCheck asks it where every pack is known.
+        }
+
+        // the creatures this pack can speak as, for the shelf to gather up
+        public IEnumerable<string> Voices =>
+            Companions.Voices
+                      .Concat(Barks.Speakers)
+                      .Distinct(StringComparer.Ordinal)
+                      .OrderBy(v => v, StringComparer.Ordinal);
+
+        // same rule as a mini: a dotted id naming another pack is allowed through, the shelf resolves it
+        bool Keeps(string companion) =>
+            ContentId.IsScoped(companion)
+                ? Companions.Has(companion) || ContentId.CampaignOf(companion) != Id
+                : Companions.Has(ContentId.Scoped(Id, companion));
 
         void CheckGear(string id, string where, string file, List<ContentProblem> problems)
         {
@@ -539,6 +708,12 @@ namespace Content.Campaigns
                    (Minis.Ids.Count > 0 ? $", {Minis.Ids.Count} minis" : "") +
                    (Classes.Ids.Count > 0 ? $", {Classes.Ids.Count} classes" : "") +
                    (Kit.Ids.Count > 0 ? $", {Kit.Ids.Count} abilities" : "") +
+                   (Companions.Count > 0 ? $", {Companions.Count} companions" : "") +
+                   (Dialogue.Count > 0 ? $", {Dialogue.Count} lines in {Dialogue.Nodes.Count} nodes" : "") +
+                   (Barks.Lines > 0 ? $", {Barks.Lines} barks" : "") +
+                   (Beats.Count > 0 ? $", {Beats.Count} beats" : "") +
+                   (Hints.Count > 0 ? $", {Hints.Count} hints" : "") +
+                   (Sheet.Count > 0 ? $", {Sheet}" : "") +
                    (Problems.Count > 0 ? $", {Problems.Count} problems" : "");
         }
     }

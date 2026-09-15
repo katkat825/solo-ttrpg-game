@@ -21,7 +21,8 @@ namespace Content.Classes
             IReadOnlyList<string> kit = null,
             string miniId = null,
             int nerveCap = 0,
-            IReadOnlyList<Growth> growth = null)
+            IReadOnlyList<Growth> growth = null,
+            string companion = null)
         {
             Id = id;
             Vigor = vigor;
@@ -34,6 +35,7 @@ namespace Content.Classes
             MiniId = miniId ?? "";
             NerveCap = nerveCap;
             Growth = growth ?? Array.Empty<Growth>();
+            Companion = companion ?? "";
         }
 
         // scoped by the pack, so two strangers' Wardens don't collide
@@ -62,6 +64,13 @@ namespace Content.Classes
 
         // the vocabulary, not the schedule; a campaign says when a step is earned
         public IReadOnlyList<Growth> Growth { get; }
+
+        // "your class isn't a build, it's a relationship" (CORE_RULES.md section 12). The class
+        // picks the companion and the companion owns the voice; empty means this class plays alone,
+        // which is legal and is what every class did before Phase W.
+        public string Companion { get; }
+
+        public bool HasACompanion => Companion.Length > 0;
 
         public Growth Step(string id) =>
             id == null ? null : Growth.FirstOrDefault(g => g.Id == id);
@@ -134,6 +143,7 @@ namespace Content.Classes
             (Wears != null ? $" over {Wears}" : "") +
             (Kit.Count > 0 ? $", kit: {string.Join(", ", Kit)}" : ", no kit") +
             (MiniId.Length > 0 ? $", stands as {MiniId}" : "") +
+            (Companion.Length > 0 ? $", with {Companion}" : "") +
             (Growth.Count > 0 ? $", {Growth.Count} growth steps" : "");
     }
 }

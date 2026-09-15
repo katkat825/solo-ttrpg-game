@@ -1,0 +1,10 @@
+{
+  //  A MINI PACK — figures other packs (or campaigns) can stand on the board.
+  "id": "my_minis",     // [REQUIRED] matches the folder name
+  "kind": "minis",      // [REQUIRED in a pack]
+  "format": 1,          // [REQUIRED]
+  "engine": "0.4",      // [REQUIRED]
+  "author": "your name",// [OPTIONAL]
+  "tags": [ "minis" ],  // [OPTIONAL]
+  "dependencies": []    // [OPTIONAL]
+}

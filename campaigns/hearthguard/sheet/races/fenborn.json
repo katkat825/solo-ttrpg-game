@@ -1,0 +1,5 @@
+{
+  "id": "fenborn",
+  "nudges": { "wits": 1, "might": -1 },
+  "skills": { "survival": "d4" }
+}

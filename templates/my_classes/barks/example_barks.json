@@ -1,0 +1,45 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  //  barks/*.json  —  a voice's short reactions. [OPTIONAL]
+  //
+  //  Barks are the best writing-cost-to-presence ratio in the game: forty
+  //  short lines buy the single highest-frequency piece of characterisation
+  //  there is. Spend your writing time here and in camp scenes, not on
+  //  exhaustive branching.
+  //
+  //  THIS FILE HOLDS COUNTS, NOT LINES. The number is how many lines your
+  //  locale CSV has for that situation, numbered from 1:
+  //
+  //      dialogue.<speaker>.bark.<situation>.001   ... .002, .003
+  //
+  //  So adding a bark is bumping one number and adding one CSV row.
+  //  The game deals a bank rather than drawing from it, so every line is said
+  //  once before any is said twice.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // [REQUIRED] speaker - the CREATURE, never the class. Unscoped: a campaign
+  //            writing more of the wolf's barks adds to the same bank.
+  "speaker": "example_companion",
+
+  // [REQUIRED] banks - how many lines you have written for each situation.
+  //            Leave a situation out entirely for none; silence is a real
+  //            answer and a bank of 40 Snags with no victory line is fine.
+  "banks": {
+    "snag":      4,   // exactly one 1 on the felt - 33% of early rolls, cosmetic
+    "trouble":   2,   // two or more 1s - a real consequence
+    "nerve":     2,   // a Nerve spent or committed
+    "secret":    2,   // a rattle behind the DM's screen
+    "overasked": 2,   // asked for a hint once too often. Needed if you ship hints
+    "camp":      2,   // the fire is lit
+    "victory":   2,
+    "down":      1    // the hero is on the floor. Most voices go quiet here
+  },
+
+  // [OPTIONAL] reads_the_throw - true and THIS voice, rather than the DM, says
+  //            what the dice came to. It then owes three more keys, each of
+  //            which formats numbers in:
+  //              dialogue.<speaker>.readout.hit    {0} total {1} defence {2} impact
+  //              dialogue.<speaker>.readout.miss   {0} total {1} defence
+  //              dialogue.<speaker>.readout.guard  {0} name  {1} defence
+  "reads_the_throw": false
+}

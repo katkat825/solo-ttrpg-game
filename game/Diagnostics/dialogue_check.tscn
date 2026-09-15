@@ -1,0 +1,20 @@
+[gd_scene load_steps=2 format=3]
+
+; The dialogue check, on its own scene beside the locale audit and the campaign check.
+;
+; It plays every conversation every installed campaign ships - the real Yarn program, through the
+; real runtime the game uses - taking every branch it is offered, and holds the whole thing to the
+; one claim W0 makes: the branching is the campaign's and the WORDS ARE THE LOCALE'S. It proves
+; that by playing each line twice, once with the pseudolocale on; a line that reads the same both
+; times came out of the .yarn file, which is English hard-coded in a data folder.
+;
+; It also holds the shared spine to its promise (every voice on the shelf phrases every beat) and
+; walks every hint ladder the way a player does, including the fourth ask.
+;
+; It needs no board, no tray and no dice. The one thing this scene is here for is the translation
+; server. Run it with check-dialogue.ps1.
+
+[ext_resource type="Script" path="res://Diagnostics/DialogueCheck.cs" id="1_check"]
+
+[node name="DialogueCheck" type="Node"]
+script = ExtResource("1_check")

@@ -1,0 +1,13 @@
+{
+  //  AN ITEM (gear). id is a GLOBAL namespace shared with the engine's gear.
+  //  Display name is a locale key: gear.<id>.name.
+  //  An item must do at least ONE of: die, defense, inflicts.
+
+  "id": "example_blade",     // [REQUIRED]
+
+  "die": "d8",               // [OPTIONAL] weapon die added to the pool (d4..d12)
+  "supports": "blades",      // [OPTIONAL] the skill this weapon helps (its die joins that check)
+  "inflicts": [ "reeling" ]  // [OPTIONAL] conditions a hit leaves: winded, reeling, rattled, shaken
+
+  // "defense": 1            // [OPTIONAL] armor bonus to Defense, whole number -2..+2 (armor, not weapons)
+}

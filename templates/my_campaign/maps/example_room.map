@@ -1,0 +1,17 @@
+;  example_room  —  a small starter room.
+;
+;  "Double resolution": each SQUARE sits on an odd row and odd column, and the LINE
+;  between two squares sits on the positions in between. Corners are '+'. Comment
+;  lines start with ';'. Width and height (in characters) are both odd, minimum 3.
+;
+;  squares:  .  floor    ~  difficult ground    #  rock (blocks)    @  hero start (exactly one)
+;            1-9  a numbered spawn slot (an encounter says who stands on each)
+;  lines:    (space) open    |  wall up a line    -  wall along a line    x  shut door    +  corner
+
++-+-+-+-+-+
+|@ . . 1 .|
++ + + + + +
+|. .|~ . .|
++ + + + + +
+|. . . 2 .|
++-+-+-+-+-+

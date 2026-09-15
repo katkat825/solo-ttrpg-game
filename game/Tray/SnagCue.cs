@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Content.Dialogue;
 using Core.Dice;
 using Core.Localization;
 using Core.Resolution;
@@ -14,21 +15,36 @@ namespace Game.Tray
 
         public const string Situation = "snag";
 
-        // placeholder: about forty barks per companion, none written yet, so this is the size of the hole
+        // what M9 used before there were any lines: about forty barks per companion was the size
+        // of the hole, and the key was built against a bank that did not exist. W2 filled it, and
+        // this stays only as the fallback for a table with no companion sitting at it
         public const int PlaceholderLines = 40;
 
         // the randomness seam, so a seeded session says the same things twice
         readonly IRng _rng;
 
+        // the real bank, once a companion is at the table; null falls back to the placeholder and
+        // the keys it builds are still well formed, they just have nothing behind them
+        readonly Speaking _speaking;
+
         Die[] _pool;
 
-        public SnagCue(IReadOnlyList<Die> pool, IRng rng = null)
+        public SnagCue(IReadOnlyList<Die> pool, IRng rng = null, BarkBank bank = null)
         {
             // no ambient default - a caller that wants a repeatable session passes a seeded one
             _rng = rng ?? new SeededRng(Environment.TickCount);
 
+            // dealt rather than drawn, so forty lines do not repeat inside ten throws (W2)
+            _speaking = bank?.Open(_rng);
+
             Reset(pool);
         }
+
+        // which creature's bank this is drawing on
+        public string Speaking => _speaking?.Speaker ?? Speaker;
+
+        // false while the fallback is in use: the key is shaped right and nobody has written it
+        public bool HasLines => _speaking != null;
 
         public int Throws { get; private set; }
 
@@ -66,8 +82,10 @@ namespace Game.Tray
 
             Snags++;
 
-            // built, not written out, so it stays correct if the key grammar ever moves
-            return LastKey = KeyConventions.Bark(Speaker, Situation, _rng.Roll(PlaceholderLines));
+            // the companion's own bank where there is one; built, never written out, so the key
+            // stays correct if the grammar ever moves
+            return LastKey = _speaking?.Next(Bark.Snag)
+                          ?? KeyConventions.Bark(Speaker, Situation, _rng.Roll(PlaceholderLines));
         }
 
         public double Rate => Throws == 0 ? 0.0 : (double)Snags / Throws;

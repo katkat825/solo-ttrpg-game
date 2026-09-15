@@ -1,0 +1,45 @@
+// GREYHOLLOW - the conversation half of the second campaign test (CONTENT_PIPELINE.md P7).
+//
+// The whole point of this file is that it is DATA. No new C# was written to make this campaign
+// talk; it was written with a text editor, in a folder, exactly as a Workshop author would.
+//
+// Two rules, both enforced by the loader:
+//
+//   1. Every line carries an explicit #line: tag. That tag becomes the last segment of the
+//      localization key, so it must be lowercase a-z, 0-9 and underscore. Without one, Yarn
+//      invents an id out of a hash of the text - and then editing the words orphans every
+//      translation of the line.
+//
+//   2. The text below is the AUTHOR'S WORKING COPY and is never what a player reads. The words
+//      come from locale/greyhollow.csv, in every language including English. Turn on the
+//      pseudolocale (L in the dice tray) and every line here mangles - that is the proof.
+//
+// Each node says who is talking with a 'speaker:' header, keyed by creature and never by class.
+
+title: the_drowned_chapel
+speaker: wolf
+---
+There is water under this floor. I can hear it moving. #line:water_under_the_floor
+Whatever is down there has been growing a long while without anybody watching it. #line:growing_unwatched
+
+-> Ask it what it smells #line:ask_what_it_smells
+    Wet rope. Old bread. Something that was a person. #line:wet_rope_old_bread
+    <<jump the_choice>>
+-> Tell it to stay close #line:tell_it_stay_close
+    I am always close. That is the arrangement. #line:that_is_the_arrangement
+    <<jump the_choice>>
+-> Say nothing #line:say_nothing_at_all
+    Mm. Suit yourself. #line:suit_yourself
+    <<jump the_choice>>
+===
+
+title: the_choice
+speaker: wolf
+---
+The stair goes down. The stair is the only thing that goes down. #line:the_stair_goes_down
+
+-> Go down #line:go_down
+    Of course we do. #line:of_course_we_do
+-> Stand here a moment longer #line:stand_a_moment
+    A moment. Then down. #line:a_moment_then_down
+===

@@ -1,0 +1,46 @@
+// Camp scenes (W3). A node with a 'topic:' header is a camp scene, and the topic is what the DAY
+// was - the fights that happened, the Nerve that got spent, whether you ended up on the floor. The
+// vocabulary is the engine's: loss, boss, bloodied, trouble, wounded, untouched, quiet.
+//
+// A night falls back to 'quiet' and to nothing else, because every other topic asserts something
+// about a day the companion would then be wrong about. Write a quiet scene.
+
+title: the_quiet_night
+speaker: wolf
+topic: quiet
+---
+Nothing tried to eat us today. That is a day. #line:nothing_tried_to_eat_us
+Sleep. I will wake you if the water changes. #line:i_will_wake_you
+===
+
+title: after_a_bad_one
+speaker: wolf
+topic: bloodied
+---
+Sit down. No - all the way down. #line:sit_all_the_way_down
+You bled on my map. That is the second time this month. #line:bled_on_my_map
+It will keep. Most things keep. #line:most_things_keep
+===
+
+title: the_stalk_is_dead
+speaker: wolf
+topic: boss
+---
+It is dead. I watched it stop. #line:i_watched_it_stop
+I have never smelled anything go quiet like that. #line:go_quiet_like_that
+===
+
+title: still_standing
+speaker: wolf
+topic: untouched
+---
+Not a mark on you. Do not get used to it. #line:not_a_mark_on_you
+===
+
+title: after_the_floor
+speaker: wolf
+topic: loss
+---
+You went down. #line:you_went_down
+I am not going to say anything else about it tonight. #line:nothing_else_tonight
+===

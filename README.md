@@ -26,14 +26,18 @@ dotnet run --project sim        # balance tables
 dotnet run --project sim 50000  # more trials
 ```
 
-To run the game, open `game/` in Godot 4.7 (.NET build) and press F5. It doesn't run from the CLI.
+To run the game, open `game/` in Godot 4.7 (.NET build) and press F5. It doesn't run from the CLI. The main scene is `room.tscn` — the room, with the table inside it.
 
-Three PowerShell checks run headless and exit non-zero on failure:
+The PowerShell checks run headless and exit non-zero on failure. Each runs the real thing rather than a copy of it, so none of them can pass something the game then refuses. Build first; `dotnet test` does.
 
 ```
 .\check-fairness.ps1 [-Dice 3] [-Shape N] [-Tray name]   # chi-squared, are the dice uniform
 .\check-locale.ps1                                       # every key has text, every string has a key
-.\check-maps.ps1                                         # every shipped map parses
+.\check-maps.ps1                                         # every shipped and campaign map parses
+.\check-campaign.ps1 [-ExpectSome]                       # every campaign folder validates
+.\check-fight.ps1                                        # whole fights, played on the real table
+.\check-dialogue.ps1 [-ExpectSome]                       # every conversation plays, in both locales
+.\check-room.ps1                                         # the room boots, and has no menus in it
 ```
 
 ## Layout
@@ -47,20 +51,37 @@ core/           pure C# rules engine, never references Godot
   Characters/   Traits, Actor, IArchetypeSource
   Combat/       CombatEngine, ITargetSelector, ICombatObserver
 core.tests/     xUnit, one file per concern
+content/        campaign content read off disk, also never references Godot
+  Campaigns/    a folder becomes a campaign here: ContentId, Manifest, Package, Shelf
+  Monsters/ Items/ Kits/ Classes/ Minis/ Models/ Audio/   what a pack can ship
+  Dialogue/     the Yarn integration, bark banks, the shared spine, hint ladders, camp
+  Companions/   the creature on the table, and which of five places it sits in
+  Sheet/        the character sheet, and the cards that fill its blanks
+  Saves/        SaveGame, its reader and writer, and the shelf of boxes they make
+  Schema/       ContentProblem, Read<T>, ContentFormat, Vocabulary
+content.tests/  xUnit over the readers
 sim/            headless balance harness
+campaigns/      the packs that ship; templates/ has a starting folder for each kind
 game/           the Godot project
   Dice/         DieBody, DieSolid, DieFaceTable, the die itself
   Tray/         DiceTray, TrayResolution, skins, the Snag cue
+  Board/ Fight/ the map, and the fight on it
+  Dm/           the screen, the hands, the secret roll
+  Companion/    the creature beside the map: idles, moods, bubbles, the hint cord
+  Dialogue/ Camp/   a conversation at the table, and the fire it happens by
+  Sheet/ Room/  the paper, and the room that has no menus in it
+  Campaigns/ Saves/ the shelf at runtime, and a fight turned into a save
   audio/        DieAudio, SurfaceVoice, ImpactPool, the samples
-  Diagnostics/  fairness sweep, locale audit
+  Diagnostics/  one scene per check: fairness, locale, maps, campaigns, fight, dialogue, room
   Localization/ GodotLocalizer, the only place a key becomes text
   locale/       game.csv, one column per language
+  table.tscn    the table; room.tscn is the main scene and has the table inside it
 game.tests/     xUnit over the Godot-free helpers in game/
 ```
 
 Namespaces match folders throughout: `Core.*` in `core/`, `Game.*` in `game/`.
 
-`SoloTabletopRpg.slnx` at the root covers core, core.tests, game, game.tests and sim, so `dotnet test` builds the Godot project too — that needs `Godot.NET.Sdk` from nuget.org and no Godot install. Godot generates its own `.sln` inside `game/`, which is gitignored. `core` and `game` target net8.0 because Godot 4.7 does; `sim`, `core.tests` and `game.tests` are on net10.0.
+`SoloTabletopRpg.slnx` at the root covers core, content, their test projects, game, game.tests and sim, so `dotnet test` builds the Godot project too — that needs `Godot.NET.Sdk` from nuget.org and no Godot install. Godot generates its own `.sln` inside `game/`, which is gitignored. `core` and `game` target net8.0 because Godot 4.7 does; `sim` and the three test projects are on net10.0.
 
 See [`core/README.md`](core/README.md) for the layer order and the substitution seams.
 

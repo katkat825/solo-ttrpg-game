@@ -70,6 +70,55 @@ namespace Game.Campaigns
             return null;
         }
 
+        // Phase W. The voices on the shelf, whichever pack shipped them.
+        //
+        // A companion is looked up across every campaign in play rather than out of one, because a
+        // class pack can ship the wolf and a campaign can ship the wolf's barks, and neither knows
+        // about the other. That is the same argument the mini shelf makes, and it is what lets a
+        // campaign write for somebody else's companion.
+        public Content.Companions.CompanionCard CompanionOf(string id)
+        {
+            if (id == null) return null;
+
+            foreach (Loaded campaign in InPlay)
+            {
+                Content.Companions.CompanionCard card = campaign.Companions.Of(id);
+
+                if (card != null) return card;
+            }
+
+            return null;
+        }
+
+        // barks are NOT pack-scoped: the wolf ships in the base game and belongs to no campaign
+        // (CONVENTIONS.md section 7), so a campaign writing more of them adds to one bank
+        public Content.Dialogue.BarkBank BarksFor(string speaker)
+        {
+            if (speaker == null) return null;
+
+            foreach (Loaded campaign in InPlay)
+            {
+                Content.Dialogue.BarkBank bank = campaign.Barks.Of(speaker);
+
+                if (bank != null) return bank;
+            }
+
+            return null;
+        }
+
+        // every creature anything on this shelf can speak as. The spine check asks for exactly this:
+        // a beat has to be deliverable by any companion the player might turn up with.
+        public IEnumerable<string> Voices =>
+            InPlay.SelectMany(c => c.Companions.Voices.Concat(c.Barks.Speakers))
+                  .Distinct()
+                  .OrderBy(v => v, System.StringComparer.Ordinal);
+
+        public IEnumerable<Loaded> InPlay =>
+            Campaigns.Where(c => !c.Failed && !c.Waiting);
+
+        public Content.Dialogue.DialogueBook DialogueOf(string campaign) =>
+            Campaign(campaign)?.Dialogue;
+
         public Content.Kits.Ability Ability(string id) =>
             id != null && _abilities.TryGetValue(id, out Content.Kits.Ability ability)
                 ? ability

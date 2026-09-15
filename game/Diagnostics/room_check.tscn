@@ -1,0 +1,18 @@
+[gd_scene load_steps=3 format=3]
+
+; The room check, holding the SHIPPED room inside it - which holds the shipped table, which holds
+; the board, the tray, the DM, the companion and the sheet. Same shape as the fight check and for
+; the same reason: the thing measured has to be the thing played.
+;
+; It boots the room, walks the objects, fills the sheet in by touching its blanks, proves the dice
+; follow what was written, and takes a box off the shelf. And it greps the whole build for a menu,
+; a panel or a modal, which is the half of R5's verify list a machine can do better than a person.
+;
+; Run it with check-room.ps1.
+
+[ext_resource type="Script" path="res://Diagnostics/RoomCheck.cs" id="1_check"]
+[ext_resource type="PackedScene" path="res://room.tscn" id="2_room"]
+
+[node name="RoomCheck" type="Node"]
+script = ExtResource("1_check")
+TheRoom = ExtResource("2_room")

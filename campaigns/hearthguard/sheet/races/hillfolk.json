@@ -1,0 +1,11 @@
+{
+  // A blank on the character sheet, filled from a card (ROOM_AND_SHEET.md R0).
+  //
+  // A race NUDGES. It moves a die a step up or down the ladder and it never sets one - that is the
+  // class's job - which is what lets a race, a background, a growth step and a Condition all land
+  // in any order and mean the same thing. F3's trait pipeline, and the reason writing on the sheet
+  // in play is safe.
+
+  "id": "hillfolk",
+  "nudges": { "might": 1, "grace": -1 }
+}

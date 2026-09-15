@@ -1,0 +1,40 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  //  campaign.json  —  the manifest, one per campaign folder.
+  //  Campaign JSON allows // comments and trailing commas (the game strips them).
+  //  NAME and DESCRIPTION are NOT here — they are keys in locale/my_campaign.csv.
+  //  Full guide + all valid values: templates/README.md
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // [REQUIRED] id — this campaign's namespace. lowercase a-z, 0-9, underscore; no dots.
+  //            MUST match the folder name. Every key the campaign emits starts with it.
+  "id": "my_campaign",
+
+  // [REQUIRED] format — content schema version this build reads. Leave as 1.
+  "format": 1,
+
+  // [REQUIRED] engine — oldest engine build that can play this, "MAJOR.MINOR". This build is 0.4.
+  "engine": "0.4",
+
+  // [REQUIRED] chapters — the campaign in play order; >= 1 chapter, each with >= 1 encounter.
+  //   id         : chapter id (a-z 0-9 _). Title is a locale key: quest.<id>.<chapter>.title
+  //   encounters : encounter ids (files in encounters/, without .json), in play order
+  "chapters": [
+    { "id": "chapter_one", "encounters": [ "example_room" ] }
+  ],
+
+  // [OPTIONAL] author — free text on the storefront card (not localized).
+  "author": "your name",
+
+  // [OPTIONAL] tags — storefront filter words (lowercase a-z 0-9 _), not player-facing.
+  "tags": [ "short" ],
+
+  // [OPTIONAL] dependencies — ids of OTHER packs this needs (e.g. a mini pack). [] if standalone.
+  "dependencies": [],
+
+  // [OPTIONAL] start — which chapter to begin on, by id. Defaults to the first chapter.
+  "start": "chapter_one"
+
+  // [OPTIONAL] preview — a preview image path inside this folder, e.g. "preview.png".
+  // [PACKS ONLY] kind — omit for a campaign. A pack.json sets kind and has NO chapters.
+}

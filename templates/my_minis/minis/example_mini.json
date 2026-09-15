@@ -1,0 +1,19 @@
+{
+  //  A MINI. name is a locale key: mini.<pack>.<id>.name.
+  //  Exactly ONE of 'variant' or 'model':
+  //    variant = re-dress a figure the game already ships (a recolor/rescale — no model file).
+  //    model   = "some/path.glb" INSIDE this pack (a brand-new figure).
+
+  "id": "example_mini",   // [REQUIRED]
+  "variant": "rabble",    // [REQUIRED (this one OR "model")] a shipped mini's bare id, or "<pack>.<mini>"
+
+  // [OPTIONAL]
+  "tint": "#D8CFB8",      // "#RRGGBB" — a palette name will not work here
+  "height": 0.062         // metres (a square is 0.06; a figure is about 0.075)
+
+  // "model": "models/thing.glb",     // use INSTEAD of 'variant'; a path inside this pack, no ".." or drive
+  // "fit": "cell",                   // cell (as wide as a square) | height (needs a 'height')
+  // "foot": 0.0,                     // metres
+  // "clips": { "move": "Walk_A" },   // model animation names, per motion: placed, move, strike, wobble, topple
+  // "foley": { "move": "sfx/steps" } // a FOLDER of wavs inside the pack, per motion
+}

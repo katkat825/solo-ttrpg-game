@@ -1,0 +1,58 @@
+// ─────────────────────────────────────────────────────────────────────────
+//  dialogue/*.yarn  —  conversations. Yarn Spinner; the game compiles these
+//  when it loads your campaign, so there is no tool to run and no build step.
+//  Full guide: templates/README.md
+// ─────────────────────────────────────────────────────────────────────────
+//
+//  TWO RULES, AND THE LOADER ENFORCES BOTH.
+//
+//  1. EVERY LINE NEEDS A #line: TAG. Without one Yarn invents an id out of a
+//     hash of the text - and then editing the words orphans every translation
+//     of that line. The tag is lowercase a-z, 0-9 and underscore, and it
+//     becomes the last segment of the line's key:
+//
+//         dialogue.<speaker>.line.<your_campaign_id>.<tag>
+//
+//  2. THE TEXT BELOW IS YOUR WORKING COPY AND IS NEVER SHOWN. The words a
+//     player reads come from locale/<your-id>.csv, in every language
+//     including English. Write here to see the shape of the scene; put the
+//     finished wording in the CSV. Press L in the dice tray and every line
+//     should mangle - one that does not is being read out of this file.
+//
+//  Each node says who is talking with a 'speaker:' header. Speakers are keyed
+//  by CREATURE and never by class: 'wolf', not 'barbarian'. A line can name a
+//  different speaker with a '#speaker:imp' tag where two creatures share a
+//  scene.
+//
+//  This template speaks as 'example_companion', which templates/my_classes
+//  ships - so the two templates work together and neither leans on a pack
+//  that happens to be installed.
+//
+//  Your campaign must be able to speak as that creature: ship a companion in
+//  companions/ or a bark bank in barks/, or depend on a pack that does.
+
+title: example_talk
+speaker: example_companion
+---
+Something down there is breathing. #line:something_is_breathing
+
+-> Ask what it is #line:ask_what_it_is
+    Nothing I have a word for. #line:no_word_for_it
+-> Say nothing #line:say_nothing
+    Suit yourself. #line:suit_yourself
+===
+
+// A node with a 'topic:' header is a CAMP SCENE - the conversation by the fire
+// on a night that matches. The day picks the topic, and the vocabulary is the
+// engine's: loss, boss, bloodied, trouble, wounded, untouched, quiet.
+//
+// WRITE A QUIET ONE. A night falls back to 'quiet' and to nothing else,
+// because every other topic asserts something about a day the companion would
+// then be wrong about.
+
+title: example_quiet_night
+speaker: example_companion
+topic: quiet
+---
+Nothing tried to eat us today. Sleep. #line:nothing_tried_to_eat_us
+===

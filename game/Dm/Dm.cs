@@ -103,6 +103,22 @@ namespace Game.Dm
             return _hands.ToLocal(_board.ToGlobal(_board.Metrics.Centre(cell.Value)));
         }
 
+        // A GESTURE WITH NO LINE BEHIND IT (R1). Most of what the DM does carries words on a
+        // pushed note, and a Cue is the right shape for that. Picking up the character sheet,
+        // turning it round and looking at it is not - "no text required, the gesture carries it" -
+        // and going through a Cue for it would build a narration key for a line nobody wrote.
+        public void Does(params Gesture[] gestures)
+        {
+            foreach (Gesture gesture in gestures ?? System.Array.Empty<Gesture>())
+            {
+                _hands?.Perform(gesture);
+
+                _performed.Add(gesture.Word());
+
+                GD.Print($"dm      {gesture.Word()}");
+            }
+        }
+
         public void RollsForSomething()
         {
             _secret?.Meant();

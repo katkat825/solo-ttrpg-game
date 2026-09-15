@@ -1,0 +1,5 @@
+{
+  //  An item for the class to wield. See the campaign items/ template for all fields.
+  "id": "example_weapon",   // [REQUIRED]
+  "die": "d6"               // an item must do at least one of: die, defense, inflicts
+}

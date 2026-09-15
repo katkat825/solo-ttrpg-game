@@ -156,6 +156,23 @@ Both atlases (`dungeon_texture.png`, `barbarian_texture.png`) are **baked to the
 
 Standard is Quaternius's free tier; Pro and Source add engine implementations and raw files under the same CC0. Nothing here needs a tier above Standard.
 
+## Code
+
+One runtime dependency that is not an asset, recorded here for the same reason the assets are: if
+the game ever sells, the provenance has to be airtight, and "it came off NuGet" is not provenance.
+
+| Package | Version | Licence | Why |
+|---|---|---|---|
+| `YarnSpinner.Compiler` (and `YarnSpinner`, which it brings) | 3.2.2, [github.com/YarnSpinnerTool/YarnSpinner](https://github.com/YarnSpinnerTool/YarnSpinner) | MIT, verified on the repository 2026-09-15 | The branching-dialogue runtime, Phase W. `ARCHITECTURE.md` section 6 is a standing decision not to write one, and this is it. |
+
+**Why the compiler and not just the runtime.** Ink would have meant shipping `inklecate` and asking
+every campaign author to run it; Yarn's compiler is a library, so `Content.Dialogue.DialogueBook`
+compiles a campaign's `.yarn` files at LOAD TIME. A Workshop author writes dialogue in a text editor
+and the game reads it, which is the same promise the rest of the campaign format already makes.
+
+MIT means it ships with the game and wants its copyright notice carried, which the package does in
+its own metadata. It brings Antlr4's runtime with it, BSD-licensed, same terms.
+
 ## Resolution
 
 A die is 50 mm on a 640 mm tray. If the tray fills about 1200 px of a 1080p screen, a die occupies roughly 90 px. A 4K texture on that is around 45× more texels than pixels, costing VRAM, load time and repo space for detail nobody can see.

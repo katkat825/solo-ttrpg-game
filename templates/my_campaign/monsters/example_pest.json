@@ -1,0 +1,10 @@
+{
+  //  A RABBLE monster — a mook. Any hit removes it, so vigor is ignored (still required, >= 1).
+
+  "id": "example_pest",             // [REQUIRED]
+  "tier": "rabble",                 // [OPTIONAL] default rival; 'rabble' = a mook
+  "vigor": 1,                       // [REQUIRED] >= 1 (ignored for rabble)
+  "defense": 7,                     // [REQUIRED] >= 1
+  "attributes": { "might": "d6" },  // [RECOMMENDED]
+  "gear": { "id": "bite", "die": "d4" }  // [OPTIONAL]
+}

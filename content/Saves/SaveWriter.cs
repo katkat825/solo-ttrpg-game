@@ -29,6 +29,12 @@ namespace Content.Saves
                 json.WriteNumber("turn", save.Turn);
                 json.WriteNumber("actions", save.ActionsLeft);
 
+                if (save.HasASheet)
+                {
+                    json.WritePropertyName("sheet");
+                    WriteSheet(json, save.Sheet);
+                }
+
                 if (save.Hero != null)
                 {
                     json.WritePropertyName("hero");
@@ -60,6 +66,59 @@ namespace Content.Saves
             }
 
             return Encoding.UTF8.GetString(buffer.ToArray());
+        }
+
+        // The sheet, written the way it is filled in: the blanks first, then what play wrote on
+        // it. Empty fields are left out, so the file reads like a sheet and not like a form.
+        static void WriteSheet(Utf8JsonWriter json, Content.Sheet.CharacterSheet sheet)
+        {
+            json.WriteStartObject();
+
+            if (!string.IsNullOrEmpty(sheet.Name)) json.WriteString("name", sheet.Name);
+
+            json.WriteString("class", sheet.ClassId ?? "");
+
+            if (!string.IsNullOrEmpty(sheet.RaceId)) json.WriteString("race", sheet.RaceId);
+            if (!string.IsNullOrEmpty(sheet.BackgroundId)) json.WriteString("background", sheet.BackgroundId);
+            if (!string.IsNullOrEmpty(sheet.Appearance)) json.WriteString("appearance", sheet.Appearance);
+
+            json.WriteNumber("vigor", sheet.Vigor);
+            json.WriteNumber("nerve", sheet.Nerve);
+
+            if (sheet.Strain > 0) json.WriteNumber("strain", sheet.Strain);
+            if (sheet.Notches > 0) json.WriteNumber("notches", sheet.Notches);
+            if (sheet.Erasures > 0) json.WriteNumber("erasures", sheet.Erasures);
+
+            if (sheet.Conditions.Count > 0)
+            {
+                json.WritePropertyName("conditions");
+                json.WriteStartArray();
+
+                foreach (Condition condition in sheet.Conditions)
+                    json.WriteStringValue(Vocabulary.NameOf(condition));
+
+                json.WriteEndArray();
+            }
+
+            if (!string.IsNullOrEmpty(sheet.Wielded)) json.WriteString("wielded", sheet.Wielded);
+            if (!string.IsNullOrEmpty(sheet.Worn)) json.WriteString("worn", sheet.Worn);
+
+            Strings(json, "satchel", sheet.Satchel);
+            Strings(json, "growth", sheet.Growth);
+
+            json.WriteEndObject();
+        }
+
+        static void Strings(Utf8JsonWriter json, string name, IList<string> list)
+        {
+            if (list.Count == 0) return;
+
+            json.WritePropertyName(name);
+            json.WriteStartArray();
+
+            foreach (string one in list) json.WriteStringValue(one ?? "");
+
+            json.WriteEndArray();
         }
 
         static void WriteActor(Utf8JsonWriter json, SavedActor actor)

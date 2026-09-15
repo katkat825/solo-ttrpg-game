@@ -1,0 +1,42 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  //  beats/*.json  —  THE SHARED SPINE. [OPTIONAL]
+  //
+  //  A beat is an INTENT, written once - "warn the player the bridge is
+  //  trapped" - and EVERY companion at the table supplies its own phrasing of
+  //  it. That is what makes several companions affordable, and what stops any
+  //  one of them quietly withholding something the player needs.
+  //
+  //  One file holds a LIST of beats; the spine is read and edited as a whole.
+  //  Each beat needs one locale key per voice:
+  //
+  //      dialogue.<speaker>.beat.<your_campaign_id>.<beat_id>
+  //
+  //  check-dialogue.ps1 fails if a voice on the shelf is missing one.
+  //  Full guide: templates/README.md
+  // ─────────────────────────────────────────────────────────────────────────
+
+  "beats": [
+    {
+      // [REQUIRED] id - lowercase a-z, 0-9, underscore. The name of the INTENT.
+      "id": "warn_the_floor_is_thin",
+
+      // [OPTIONAL] kind - plot (default) | hint | colour.
+      //   plot   : the player needs it. No companion may be missing it.
+      //   hint   : a rung of a hint ladder. Also required of every voice.
+      //   colour : texture. A voice with no opinion about it is fine.
+      "kind": "plot",
+
+      // [OPTIONAL] note - the brief, for whoever writes the lines. NEVER shown
+      //            to a player and never localized.
+      "note": "tell them the floor over the cistern will not hold"
+    },
+
+    // a beat NOTHING reaches is refused at load: a 'plot' or 'hint' beat has to
+    // be named by an encounter cue's "beat" field or by a rung of a hint ladder,
+    // or it is a line every companion writes and no player ever hears.
+    { "id": "the_walls_are_moving",   "kind": "hint" },
+    { "id": "they_lean_toward_you",   "kind": "hint" },
+    { "id": "hold_your_breath",       "kind": "hint" }
+  ]
+}

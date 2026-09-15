@@ -57,6 +57,9 @@ namespace Content.Saves
                     problems.Add(new ContentProblem(file, "format",
                                                     SaveFormat.Unfamiliar(save.Format)));
 
+                if (root.TryGetProperty("sheet", out JsonElement sheet))
+                    save.Sheet = Sheet(sheet, file, problems);
+
                 if (root.TryGetProperty("hero", out JsonElement hero))
                     save.Hero = Actor(hero, file, "hero", problems);
 
@@ -93,7 +96,13 @@ namespace Content.Saves
         static readonly string[] Fields =
         {
             "format", "engine", "campaign", "campaign_format", "chapter", "encounter",
-            "round", "turn", "actions", "hero", "foes", "felt",
+            "round", "turn", "actions", "sheet", "hero", "foes", "felt",
+        };
+
+        static readonly string[] SheetFields =
+        {
+            "name", "class", "race", "background", "appearance", "vigor", "nerve", "strain",
+            "notches", "erasures", "conditions", "wielded", "worn", "satchel", "growth",
         };
 
         static readonly string[] ActorFields =
@@ -103,6 +112,64 @@ namespace Content.Saves
         };
 
         static readonly string[] DieFields = { "trait", "die", "value" };
+
+        // Degrading, like everything else a save reads: a sheet missing a field gets the field's
+        // own default rather than taking the save down with it. The ONE thing it cannot do without
+        // is the class - a sheet with no class names no character, and there would be nothing to
+        // assemble from it.
+        static Content.Sheet.CharacterSheet Sheet(JsonElement element, string file,
+                                                  List<ContentProblem> problems)
+        {
+            const string where = "sheet";
+
+            if (element.ValueKind != JsonValueKind.Object)
+            {
+                problems.Add(new ContentProblem(
+                    file, where, $"this is a {Named(element.ValueKind)} and not a character sheet"));
+                return null;
+            }
+
+            Unknown(element, SheetFields, file, where + ".", problems);
+
+            var sheet = new Content.Sheet.CharacterSheet
+            {
+                Name = Text(element, "name", file, problems, where),
+                ClassId = Text(element, "class", file, problems, where),
+                RaceId = Text(element, "race", file, problems, where),
+                BackgroundId = Text(element, "background", file, problems, where),
+                Appearance = Text(element, "appearance", file, problems, where),
+                Vigor = Number(element, "vigor", -1, file, problems, where),
+                Nerve = Number(element, "nerve", Core.Combat.Nerve.StartOfDay, file, problems, where),
+                Strain = Number(element, "strain", 0, file, problems, where),
+                Notches = Number(element, "notches", 0, file, problems, where),
+                Erasures = Number(element, "erasures", 0, file, problems, where),
+            };
+
+            if (sheet.ClassId.Length == 0)
+            {
+                problems.Add(new ContentProblem(
+                    file, where + ".class",
+                    "this sheet names no class, so there is no character to build from it - the " +
+                    "save is read without one"));
+                return null;
+            }
+
+            foreach (Condition condition in Words<Condition>(element, "conditions", file, where,
+                                                             problems))
+                if (!sheet.Conditions.Contains(condition)) sheet.Conditions.Add(condition);
+
+            sheet.Wielded = Text(element, "wielded", file, problems, where);
+            sheet.Worn = Text(element, "worn", file, problems, where);
+
+            foreach (string id in Strings(element, "satchel", file, where, problems))
+                sheet.Satchel.Add(id);
+
+            // a step this build no longer offers is carried, not dropped; it returns if its pack does
+            foreach (string step in Strings(element, "growth", file, where, problems))
+                sheet.Growth.Add(step);
+
+            return sheet;
+        }
 
         static void ReadFelt(JsonElement root, SaveGame save, string file,
                              List<ContentProblem> problems)
