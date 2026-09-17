@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Content.Campaigns;
 using Content.Classes;
-using Content.Encounters;
+using Content.Places;
 using Content.Kits;
 using Content.Items;
 using Content.Minis;
@@ -51,7 +51,13 @@ namespace Game.Campaigns
 
         public Content.Sheet.SheetOptions Sheet => Package.Sheet;
 
-        public EncounterBook Encounters => Package.Encounters;
+        public PlaceBook Places => Package.Places;
+
+        public Content.Entities.EntityBook Entities => Package.Entities;
+
+        public Content.Quests.QuestBook Quests => Package.Quests;
+
+        public RoadBook Roads => Package.Roads;
 
         public IReadOnlyDictionary<string, MapLayout> Maps => Package.Maps;
 
@@ -83,10 +89,20 @@ namespace Game.Campaigns
                 foreach (string key in card.Keys())
                     yield return key;
 
-            foreach (Content.Encounters.EncounterPlan plan in Encounters.All)
-                foreach (Content.Encounters.Cue cue in plan.Cues)
-                    if (cue.LineKey(Id) is { } line)
-                        yield return line;
+            // the World layer. A place has a name, an entity has a name, a quest has a title and
+            // a description, and a road has a name - all of them things a player reads, so all of
+            // them keys the audit holds this campaign's CSV to (CONVENTIONS.md section 7).
+            foreach (Content.Places.Place place in Places.All)
+                foreach (string key in place.Keys(Id))
+                    yield return key;
+
+            foreach (string key in Entities.Keys()) yield return key;
+
+            foreach (string key in Quests.Keys(Id)) yield return key;
+
+            foreach (Road road in Roads.All)
+                foreach (string key in road.Keys(Id))
+                    yield return key;
 
             foreach (Ability ability in Kit.All)
                 foreach (string key in ability.Keys())

@@ -7,6 +7,10 @@ namespace Game.Campaigns
     {
         public const string CampaignArg = "--campaign=";
 
+        public const string PlaceArg = "--place=";
+
+        // format 1's spelling, still accepted: a check script or a shortcut written before the
+        // map became the noun keeps working
         public const string EncounterArg = "--encounter=";
 
         public const string HeroArg = "--hero=";
@@ -15,7 +19,8 @@ namespace Game.Campaigns
 
         public static string Campaign => Value(CampaignArg);
 
-        public static string Encounter => Value(EncounterArg);
+        public static string Place =>
+            Value(PlaceArg) is { Length: > 0 } named ? named : Value(EncounterArg);
 
         public static string Hero => Value(HeroArg);
 

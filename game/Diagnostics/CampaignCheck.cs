@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using Content.Campaigns;
-using Content.Encounters;
+using Content.Places;
 using Content.Minis;
 using Content.Schema;
 using Core.Characters;
@@ -46,7 +46,9 @@ namespace Game.Diagnostics
 
             foreach (Shelf.Entry entry in shelf.Entries) Check(entry, shelf);
 
-            foreach (ContentProblem problem in shelf.Problems) Problem("  " + problem);
+            foreach (ContentProblem problem in shelf.Problems)
+                if (problem.IsACaution) Caution("  " + problem);
+                else Problem("  " + problem);
 
             GD.Print("");
             GD.Print($"minis   {shelf.Minis}");
@@ -72,7 +74,9 @@ namespace Game.Diagnostics
             // folder name first, even for a campaign too broken to know its id: it is all an author can act on
             GD.Print($"  {package.Id}");
 
-            foreach (ContentProblem problem in package.Problems) Problem("  " + problem);
+            foreach (ContentProblem problem in package.Problems)
+                if (problem.IsACaution) Caution("  " + problem);
+                else Problem("  " + problem);
 
             // missing deps is waiting, not broken: a subscription not yet made, not a bug
             if (entry.Missing.Count > 0)
@@ -109,7 +113,10 @@ namespace Game.Diagnostics
                      $"{strings} strings");
 
             GD.Print($"        {package.Monsters.Ids.Count} monsters, {package.Items.Ids.Count} " +
-                     $"items, {package.Maps.Count} maps, {package.Encounters.Ids.Count} encounters" +
+                     $"items, {package.Maps.Count} maps, {package.Places.Count} places" +
+                     (package.Entities.Count > 0 ? $", {package.Entities.Count} entities" : "") +
+                     (package.Quests.Count > 0 ? $", {package.Quests.Count} quests" : "") +
+                     (package.Roads.Count > 0 ? $", {package.Roads.Count} roads" : "") +
                      (package.Minis.Ids.Count > 0 ? $", {package.Minis.Ids.Count} minis" : "") +
                      (package.Classes.Ids.Count > 0 ? $", {package.Classes.Ids.Count} classes" : "") +
                      (package.Kit.Ids.Count > 0 ? $", {package.Kit.Ids.Count} abilities" : ""));
@@ -155,32 +162,50 @@ namespace Game.Diagnostics
             foreach (Chapter chapter in manifest.Chapters)
                 GD.Print($"        chapter {chapter.Id}" +
                          (chapter.Id == manifest.Start ? " (starts here)" : "") +
-                         $": {string.Join(", ", chapter.Encounters)}");
+                         $": {string.Join(", ", chapter.Places)}");
 
-            foreach (EncounterPlan plan in package.Encounters.All) Describe(package, plan);
+            foreach (Content.Places.Place place in package.Places.All) Describe(package, place);
+
+            foreach (Content.Entities.Entity entity in package.Entities.All)
+                GD.Print($"        entity {entity.Local} - titled '{Text(entity.NameKey)}', " +
+                         $"{entity}");
+
+            foreach (Content.Quests.Quest quest in package.Quests.All)
+                GD.Print($"        quest {quest.Id} - titled '{Text(quest.TitleKey(package.Id))}', " +
+                         $"{quest}");
+
+            foreach (Road road in package.Roads.All)
+                GD.Print($"        road {road.Id} - titled '{Text(road.NameKey(package.Id))}', " +
+                         $"{road}");
 
             GD.Print("");
         }
 
-        void Describe(Package package, EncounterPlan plan)
+        void Describe(Package package, Content.Places.Place place)
         {
-            GD.Print($"        {plan.Id} on {plan.Map}:");
+            GD.Print($"        {place.Id} on {place.Map} - '{Text(place.NameKey(package.Id))}'" +
+                     (place.IsAFight ? ", and a fight is waiting in it" : ""));
 
-            foreach (Placement placement in plan.Placements.OrderBy(p => p.Slot))
+            package.Maps.TryGetValue(place.Map, out var map);
+
+            foreach (Standing standing in place.Standings.OrderBy(s => s.Slot))
             {
-                string where = package.Maps.TryGetValue(plan.Map, out var map)
-                               && map.SpawnAt(placement.Slot) is { } cell
+                string where = map != null && map.SpawnAt(standing.Slot) is { } cell
                     ? cell.ToString()
                     : "nowhere";
 
-                GD.Print($"          spawn {placement.Slot} {where} - {placement.Monster}");
+                GD.Print($"          spawn {standing.Slot} {where} - {standing}");
             }
 
-            // triggers printed though not yet run: a silent slot is indistinguishable from a broken one
-            foreach (Trigger trigger in plan.Triggers)
-                GD.Print($"          trigger {trigger} - carried; the runner is Phase R");
+            // the ways out, printed beside who is standing there: a place is both
+            foreach (Exit exit in place.Exits)
+                GD.Print($"          exit {exit}");
 
-            foreach (Cue cue in plan.Cues)
+            // triggers printed though not yet run: a silent slot is indistinguishable from a broken one
+            foreach (Trigger trigger in place.Triggers)
+                GD.Print($"          trigger {trigger}");
+
+            foreach (Cue cue in place.Cues)
                 GD.Print($"          cue {cue}" +
                          (cue.LineKey(package.Id) is { } line
                              ? $" - \"{Text(line)}\""

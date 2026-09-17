@@ -1,0 +1,19 @@
+// A QUEST IS A NAMED VIEW OVER FACTS and nothing else is stored anywhere.
+//
+// 'Done' needs the gate open AND Norrel alive to be told about it; 'failed' is Norrel dead. Accept
+// the errand and then murder the man who set it, and this resolves itself - which is the point
+// (PLACES_AND_PERSISTENCE.md section 6). check-campaign.ps1 raises a CAUTION about exactly that
+// arrangement, because an author should find out about it from the validator rather than from a
+// player; it is a caution and not a refusal, because it is also completely deliberate here.
+{
+  "id": "the_sluice",
+
+  "offered": { "when": [ "norrel.spoken" ] },
+
+  "done": {
+    "when": [ "the_sluice_gate.open" ],
+    "unless": [ "norrel.dead" ]
+  },
+
+  "failed": { "when": [ "norrel.dead" ] }
+}

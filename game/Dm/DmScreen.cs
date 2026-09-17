@@ -36,8 +36,16 @@ namespace Game.Dm
             float half = PanelWidth * 0.5f;
             float wing = PanelWidth * 0.62f;
 
-            Panel("Left", new Vector3(-half, 0f, 0f), FoldDegrees, wing, hingeLeft: true);
-            Panel("Right", new Vector3(half, 0f, 0f), -FoldDegrees, wing, hingeLeft: false);
+            // THE WINGS FOLD AWAY FROM THE PLAYER, around the DM. A screen is concave on the
+            // side the DM sits on - that is what it is for - and convex toward the table, and the
+            // eye check found this built inside out: the wings came forward and cupped the PLAYER,
+            // which reads as a screen with its back to you.
+            //
+            // -Z is behind it. DmHands.Behind says so at its own line, and everything the DM
+            // produces comes from back there (DM_PRESENCE.md D0), so that is the direction the
+            // wings have to sweep.
+            Panel("Left", new Vector3(-half, 0f, 0f), -FoldDegrees, wing, hingeLeft: true);
+            Panel("Right", new Vector3(half, 0f, 0f), FoldDegrees, wing, hingeLeft: false);
 
             Props();
         }
@@ -65,7 +73,8 @@ namespace Game.Dm
             AddChild(mesh.Owner = pivot);
         }
 
-        // props on the inside edge, deliberately too small and edge-on to read from the camera
+        // props on the inside edge, deliberately too small and edge-on to read from the camera.
+        // Inside is -Z, the DM's side, which is the side the wings now close around.
         void Props()
         {
             var inside = new Node3D { Name = "Inside", Position = new Vector3(0f, 0f, -Thickness) };

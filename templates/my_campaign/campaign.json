@@ -10,17 +10,17 @@
   //            MUST match the folder name. Every key the campaign emits starts with it.
   "id": "my_campaign",
 
-  // [REQUIRED] format — content schema version this build reads. Leave as 1.
-  "format": 1,
+  // [REQUIRED] format — content schema version this build reads. Leave as 2.
+  "format": 2,
 
   // [REQUIRED] engine — oldest engine build that can play this, "MAJOR.MINOR". This build is 0.4.
   "engine": "0.4",
 
-  // [REQUIRED] chapters — the campaign in play order; >= 1 chapter, each with >= 1 encounter.
-  //   id         : chapter id (a-z 0-9 _). Title is a locale key: quest.<id>.<chapter>.title
-  //   encounters : encounter ids (files in encounters/, without .json), in play order
+  // [REQUIRED] chapters — the campaign in play order; >= 1 chapter, each with >= 1 place.
+  //   id     : chapter id (a-z 0-9 _). Title is a locale key: quest.<id>.<chapter>.title
+  //   places : place ids (files in places/, without .json), in play order
   "chapters": [
-    { "id": "chapter_one", "encounters": [ "example_room" ] }
+    { "id": "chapter_one", "places": [ "example_room", "example_square" ] }
   ],
 
   // [OPTIONAL] author — free text on the storefront card (not localized).

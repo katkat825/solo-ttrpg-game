@@ -54,10 +54,28 @@ namespace Game.Companion
             Build();
         }
 
-        // a cord hanging off the edge of the table. Static, cheap, and unmistakably a thing to pull
+        // A CORD YOU CAN SEE IS A CORD. Static, cheap, and it has to read as a thing to pull.
+        //
+        // It did not. A bare 9 cm cylinder lying at an angle on a table is a twig, and the eye
+        // check of 2026-09-16 called it exactly that: "a random line or stick below the bottom
+        // left corner of the map". The braid was right and everything holding it up was missing.
+        //
+        // Three parts and it reads: a ring screwed into the table, the braid hanging from it, and
+        // a wooden knob on the end at the height a hand closes round. The knob is what does most
+        // of the work - a cord with a handle on it is asking to be pulled, and a cord without one
+        // is string.
         void Build()
         {
             if (GetNodeOrNull("Cord") != null) return;
+
+            var braid = new StandardMaterial3D { AlbedoColor = Braid, Roughness = 1f };
+
+            var brass = new StandardMaterial3D
+            {
+                AlbedoColor = Braid.Darkened(0.35f),
+                Roughness = 0.55f,
+                Metallic = 0.6f,
+            };
 
             var cord = new MeshInstance3D
             {
@@ -69,10 +87,44 @@ namespace Game.Companion
                     Height = 0.09f,
                     RadialSegments = 6,
                 },
-                MaterialOverride = new StandardMaterial3D { AlbedoColor = Braid, Roughness = 1f },
+                MaterialOverride = braid,
             };
 
             AddChild(cord);
+
+            // the anchor: without it the braid hangs from nothing and the eye reads it as debris
+            var ring = new MeshInstance3D
+            {
+                Name = "Ring",
+                Mesh = new TorusMesh
+                {
+                    InnerRadius = 0.004f,
+                    OuterRadius = 0.007f,
+                    RingSegments = 8,
+                    Rings = 6,
+                },
+                Position = new Vector3(0f, 0.046f, 0f),
+                MaterialOverride = brass,
+            };
+
+            ring.RotateX(Mathf.DegToRad(90f));
+
+            AddChild(ring);
+
+            // and the handle, at the end a hand reaches for
+            AddChild(new MeshInstance3D
+            {
+                Name = "Knob",
+                Mesh = new SphereMesh
+                {
+                    Radius = 0.0075f,
+                    Height = 0.017f,
+                    RadialSegments = 10,
+                    Rings = 6,
+                },
+                Position = new Vector3(0f, -0.050f, 0f),
+                MaterialOverride = brass,
+            });
         }
 
         public void Knows(Package campaign) => _campaign = campaign;

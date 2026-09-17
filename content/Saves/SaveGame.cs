@@ -13,7 +13,15 @@ namespace Content.Saves
 
         public string Chapter { get; set; } = "";
 
-        public string Encounter { get; set; } = "";
+        // where the party is. This was Encounter, and it is a PLACE now - the save says where you
+        // are standing, not which fight you are in the middle of (PLACES_AND_PERSISTENCE.md 1).
+        public string Place { get; set; } = "";
+
+        // THE DURABLE HALF, and the reason a save is small. Local fact names, in the campaign's own
+        // spelling. A place is rebuilt out of these on load; nothing about where the minis were
+        // standing, what was lying on the floor or which dice were on the felt mid-exploration is
+        // written down, because a place makes all of that again (section 3).
+        public IList<string> Facts { get; } = new List<string>();
 
         public int Format { get; set; } = SaveFormat.Current;
 
@@ -42,11 +50,14 @@ namespace Content.Saves
 
         public bool MidFight => Round > 0;
 
+        public bool Remembers => Facts.Count > 0;
+
         public bool HasASheet => Sheet != null && !Sheet.IsBlank;
 
         public override string ToString() =>
-            $"{Campaign}/{Encounter} format {Format}" +
+            $"{Campaign}/{Place} format {Format}" +
             (HasASheet ? $", {Sheet}" : "") +
+            (Remembers ? $", {Facts.Count} fact(s)" : "") +
             (MidFight ? $", round {Round}, {Foes.Count} foes, {Felt.Count} dice on the felt"
                       : ", not mid-fight");
     }

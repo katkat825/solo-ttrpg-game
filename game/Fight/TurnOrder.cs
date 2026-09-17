@@ -8,18 +8,35 @@ namespace Game.Fight
 {
     public partial class TurnOrder : Node3D
     {
+        // THE INITIATIVE LIST, AS A THING ON THE TABLE.
+        //
+        // It used to lie FLAT against the felt in 8 mm type. From the fixed camera - 60 degrees
+        // down, a metre and a half away - that is nine pixels of text squashed to half height, and
+        // the eye check said what you would expect: "there are words next to the map on the upper
+        // left. I can't read them."
+        //
+        // So it stands up instead, the way a DM's initiative card stands at the side of the mat:
+        // one small card at the far corner of the left edge, tilted toward the player, with the
+        // names stacked UP it rather than down the table. It is still an object and not a panel -
+        // THE_TABLE.md section 6 is a hard rule - it is just an object you can read.
+
         // off the mat edge, clear of the board and inside the camera frame
-        public const float Margin = 0.06f;
+        public const float Margin = 0.055f;
 
-        public const float LineHeight = 0.008f;
+        // 16 mm of cap height, square-on to the camera; roughly twice what a mini is wide
+        public const float LineHeight = 0.016f;
 
-        public const float LineGap = 0.004f;
+        public const float LineGap = 0.006f;
 
-        public const float Lift = 0.002f;
+        public const float Lift = 0.004f;
 
-        public const float MarkerGap = 0.006f;
+        public const float MarkerGap = 0.010f;
 
-        public const float MarkerSize = 0.004f;
+        public const float MarkerSize = 0.007f;
+
+        // where the card stands along the mat's left edge: the FAR corner, because the near one is
+        // where the companion sits with its chin on the map (table.tscn places it there)
+        public const float FromTheFarEdge = 0.02f;
 
         public Color Ink { get; set; } = new Color(0.72f, 0.66f, 0.54f);
 
@@ -60,21 +77,29 @@ namespace Game.Fight
 
             _order.AddRange(order);
 
-            // left edge of the mat, running from the near side, so it reads top-to-bottom
-            float x = -metrics.HalfWidth - Margin;
-            float z = -metrics.HalfDepth;
+            // the card stands at the far corner of the mat's left edge, and the names stack up
+            // it from the table, so the one at the top of the list is the one highest off the felt
+            Position = new Vector3(-metrics.HalfWidth - Margin, Lift,
+                                   -metrics.HalfDepth + FromTheFarEdge);
 
             for (int i = 0; i < _order.Count; i++)
             {
                 Label3D line = Write(_order[i]);
-                line.Position = new Vector3(x, Lift, z + i * (LineHeight + LineGap));
+
+                line.Position = new Vector3(0f, (_order.Count - 1 - i) * (LineHeight + LineGap), 0f);
+
                 _lines[_order[i]] = line;
             }
+
+            // tilted toward the player, like every other thing on this table with words on it
+            Game.Room.TableView.Face(this);
 
             AddChild(_marker = new MeshInstance3D
             {
                 Name = "Marker",
-                Mesh = new BoxMesh { Size = new Vector3(MarkerSize, 0.0008f, MarkerSize) },
+                // standing with the list now, so it is a square pip beside the name and not a
+                // tile lying on the felt
+                Mesh = new BoxMesh { Size = new Vector3(MarkerSize, MarkerSize, 0.0008f) },
                 MaterialOverride = Unshaded(Up),
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                 Visible = false,
@@ -103,9 +128,6 @@ namespace Game.Fight
 
                 // Godot would translate the Label3D itself, a second place a key becomes words
                 AutoTranslateMode = AutoTranslateModeEnum.Disabled,
-
-                // lying on the table, glyph tops away from the camera
-                Transform = new Transform3D(new Basis(Vector3.Right, Vector3.Forward, Vector3.Up), Vector3.Zero),
             };
 
             AddChild(line);
@@ -143,7 +165,7 @@ namespace Game.Fight
             }
 
             _marker.Visible = true;
-            _marker.Position = at.Position + new Vector3(MarkerGap, 0f, 0f);
+            _marker.Position = at.Position + new Vector3(MarkerGap, LineHeight * 0.4f, 0f);
         }
 
         static StandardMaterial3D Unshaded(Color colour) => new StandardMaterial3D

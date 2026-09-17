@@ -1,0 +1,16 @@
+; A SQUARE — somewhere that is not a fight.
+;
+; The spawn numbers are the same numbers. What stands on them is a person, a thing, a grave and a
+; way out rather than two foes, and that is the whole difference between a room you fight in and a
+; place you live in. Same format, same reader, same board (PLACES_AND_PERSISTENCE.md).
+;
+;   .  floor      ~  difficult ground   #  rock      @  the hero starts
+;   1-9 a spawn   |  wall up a line     -  wall along a line   x  door, shut   +  a corner
+
++-+-+-+-+-+-+
+|. . 1 . . .|
++ + + + + + +
+|. @ . . 2 .|
++ + + + + + +
+|. . 3 . . 4|
++-+-+-+-+-+-+

@@ -1,0 +1,23 @@
+; THE WEIR - the other end of the marsh road, and the place the errand is actually about.
+;
+; This one IS pre-armed: two marsh-jacks standing on it when you walk in, exactly the way an
+; ashfall room is. A place whose standings are all foes is the degenerate case of a place, and it
+; has to stay this cheap to write or the whole reframe was wrong.
+;
+; Slot 3 is the sluice gate - a thing to open rather than somebody to fight - and slot 4 is the
+; way back to the quay.
+;
+;   .  floor      ~  difficult ground   #  rock      @  the hero starts
+;   1-9 a spawn   |  wall up a line     -  wall along a line   x  door, shut   +  a corner
+
++-+-+-+-+-+-+-+-+
+|~ ~ . . . . 3 .|
++ + + + + + + + +
+|~ . . 1 . . . .|
++ + + + + + + + +
+|. . . . . 2 . .|
++ + +-+-+-+ + + +
+|. . .|~ ~|. . .|
++ + + + + + + + +
+|. @ . ~ ~ . . 4|
++-+-+-+-+-+-+-+-+

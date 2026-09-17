@@ -125,7 +125,22 @@ namespace Game.Companion
 
             if (_bubble == null)
             {
-                _bubble = new Bubble { Name = "Bubble", Position = new Vector3(0f, 0.075f, 0.02f) };
+                // WIDE AND SHORT, because of where the companion now sits. At the dice tray it
+                // is near the top of the picture, so a card growing upward runs out of frame
+                // before it runs out of words - but there is any amount of room SIDEWAYS behind
+                // the tray. A 40 cm card holds the longest line the wolf ships (103 characters) in
+                // two rows, with a third in hand, and Tallest stops a pathological one climbing
+                // out of the picture or back into the DM's screen.
+                //
+                // It is set just behind the wolf rather than beside it: beside, it drifted toward
+                // the sheet, and a card belongs between its speaker and you.
+                _bubble = new Bubble
+                {
+                    Name = "Bubble",
+                    Position = new Vector3(0f, 0.02f, 0.06f),
+                    Width = 0.40f,
+                    Tallest = 0.24f,
+                };
                 AddChild(_bubble);
             }
 
@@ -177,29 +192,77 @@ namespace Game.Companion
 
             _body = new Node3D { Name = "Body" };
 
-            var flank = new MeshInstance3D
-            {
-                Name = "Flank",
-                Mesh = new BoxMesh { Size = new Vector3(0.048f, 0.026f, 0.086f) },
-                MaterialOverride = paint,
-                Position = new Vector3(0f, 0.013f, 0f),
-            };
+            // A SILHOUETTE, NOT A CRATE. Still a placeholder and still boxes - W1 builds the idles
+            // first and the model arrives later without changing a line of the behaviour - but the
+            // eye check named this thing TWICE without recognising it ("a box type shape in the
+            // lower left that moves and I don't know why it's there"), and a companion nobody can
+            // identify is a companion whose idles nobody is reading.
+            //
+            // Four legs, a muzzle, two ears and a tail is the whole difference between a crate and
+            // an animal at this scale, and it costs seven boxes. What it is NOT is an attempt at a
+            // wolf: it is a shape that reads as a sitting quadruped from the one angle this table
+            // is ever seen from, so the thing being watched is legible while the art is waited for.
+            Box(_body, "Flank", paint, new Vector3(0.042f, 0.024f, 0.072f),
+                new Vector3(0f, 0.026f, -0.004f));
 
-            _body.AddChild(flank);
+            Box(_body, "Haunch", paint, new Vector3(0.038f, 0.030f, 0.026f),
+                new Vector3(0f, 0.020f, -0.038f));
 
-            _head = new Node3D { Name = "Head", Position = new Vector3(0f, 0.022f, 0.048f) };
+            // front legs down, back legs folded - it is sitting, which is why its chin can be on the map
+            Box(_body, "LegFrontLeft", paint, new Vector3(0.008f, 0.030f, 0.008f),
+                new Vector3(-0.013f, 0.015f, 0.026f));
 
-            var skull = new MeshInstance3D
-            {
-                Name = "Skull",
-                Mesh = new BoxMesh { Size = new Vector3(0.026f, 0.022f, 0.034f) },
-                MaterialOverride = paint,
-            };
+            Box(_body, "LegFrontRight", paint, new Vector3(0.008f, 0.030f, 0.008f),
+                new Vector3(0.013f, 0.015f, 0.026f));
 
-            _head.AddChild(skull);
+            Box(_body, "PawLeft", paint, new Vector3(0.010f, 0.007f, 0.018f),
+                new Vector3(-0.013f, 0.004f, 0.034f));
+
+            Box(_body, "PawRight", paint, new Vector3(0.010f, 0.007f, 0.018f),
+                new Vector3(0.013f, 0.004f, 0.034f));
+
+            var tail = Box(_body, "Tail", paint, new Vector3(0.007f, 0.007f, 0.040f),
+                           new Vector3(0f, 0.016f, -0.062f));
+
+            tail.RotateX(Mathf.DegToRad(18f));
+
+            _head = new Node3D { Name = "Head", Position = new Vector3(0f, 0.044f, 0.030f) };
+
+            Box(_head, "Skull", paint, new Vector3(0.024f, 0.020f, 0.026f), Vector3.Zero);
+
+            Box(_head, "Muzzle", paint, new Vector3(0.013f, 0.011f, 0.020f),
+                new Vector3(0f, -0.004f, 0.021f));
+
+            // ears are most of what makes a box read as a listening animal, and listening is the
+            // whole of what this thing does
+            var left = Box(_head, "EarLeft", paint, new Vector3(0.009f, 0.014f, 0.004f),
+                           new Vector3(-0.008f, 0.015f, -0.006f));
+
+            var right = Box(_head, "EarRight", paint, new Vector3(0.009f, 0.014f, 0.004f),
+                            new Vector3(0.008f, 0.015f, -0.006f));
+
+            left.RotateZ(Mathf.DegToRad(12f));
+            right.RotateZ(Mathf.DegToRad(-12f));
+
             _body.AddChild(_head);
 
             AddChild(_body);
+        }
+
+        static MeshInstance3D Box(Node3D parent, string name, Material paint, Vector3 size,
+                                  Vector3 at)
+        {
+            var box = new MeshInstance3D
+            {
+                Name = name,
+                Mesh = new BoxMesh { Size = size },
+                MaterialOverride = paint,
+                Position = at,
+            };
+
+            parent.AddChild(box);
+
+            return box;
         }
 
 

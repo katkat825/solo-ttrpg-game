@@ -39,16 +39,23 @@ ambient_light_energy = 0.18
 
 ; the walls: one box, inverted, so the room is the inside of it. Cheaper than four planes and it
 ; cannot develop a gap at a corner
+; DARK AND GREY, and taken down twice. R3 painted them 0.27/0.24/0.21, a warm mid-brown, and a warm
+; mid-brown lit by a warm lamp is the brightest thing in the picture after the table - which is
+; backwards, because the walls are the part nobody is meant to look at. 0.17 was not far enough
+; (the eye check said so again on 2026-09-17), and taking the last of the warmth out of the hue
+; matters as much as the value: a touch COOLER than neutral is what reads as grey under a lamp this
+; warm, where a neutral grey just reads as more brown.
 [sub_resource type="StandardMaterial3D" id="Mat_wall"]
-albedo_color = Color(0.27, 0.24, 0.21, 1)
+albedo_color = Color(0.105, 0.108, 0.116, 1)
 roughness = 1.0
 cull_mode = 1
 
 [sub_resource type="BoxMesh" id="Mesh_walls"]
 size = Vector3(5.0, 2.7, 5.0)
 
+; the floor goes with them, or it reads warmer than the wall standing behind it
 [sub_resource type="StandardMaterial3D" id="Mat_floor"]
-albedo_color = Color(0.19, 0.16, 0.13, 1)
+albedo_color = Color(0.082, 0.084, 0.09, 1)
 roughness = 1.0
 
 [node name="Room" type="Node3D"]

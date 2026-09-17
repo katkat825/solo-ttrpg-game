@@ -1,0 +1,26 @@
+{
+  "id": "the_weir",
+  "map": "the_weir",
+
+  "standing": [
+    { "slot": 1, "monster": "marsh_jack" },
+    { "slot": 2, "monster": "marsh_jack" },
+
+    { "slot": 3, "entity": "the_sluice_gate" }
+  ],
+
+  "exits": [
+    { "slot": 4, "to": "the_quay", "arriving": 4, "road": "the_causeway" }
+  ],
+
+  "triggers": [
+    { "when": "fact", "fact": "the_sluice_gate.open", "then": "set", "sets": "the_weir.raised" }
+  ],
+
+  "cues": [
+    { "when": "entered", "cue": "two_of_them_on_the_hurdles" },
+    { "when": "cleared", "cue": "the_weir_is_yours" },
+
+    { "when": "fact", "fact": "the_weir.raised", "cue": "the_water_lets_go" }
+  ]
+}

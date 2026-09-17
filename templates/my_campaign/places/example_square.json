@@ -1,0 +1,35 @@
+{
+  //  A PLACE THAT IS NOT A FIGHT — somebody to talk to, something to open, a way out, and a
+  //  grave that is not there until it is.
+  //
+  //  Nothing here is a different KIND of file from example_room.json. It is the same schema with
+  //  entities on the spawn slots instead of monsters, which is the point: combat is one of the
+  //  things that can happen in a place, not what a place is for.
+
+  "id": "example_square",
+  "map": "example_square",
+
+  "standing": [
+    // somebody: an entity from entities/, with the verbs its own file permits
+    { "slot": 1, "entity": "example_person" },
+
+    // something: an entity too — a chest, a door, a shrine
+    { "slot": 2, "entity": "example_chest" },
+
+    // and one that is only here once a fact is true. The engine remembers the death; YOU decide
+    // what it means. It never invents the grave and you never have to poll for the death.
+    { "slot": 3, "entity": "example_grave", "when": [ "example_person.dead" ] }
+  ],
+
+  "exits": [
+    // a journey rather than a step: the road's wayside table decides whether you get there
+    { "slot": 4, "to": "example_room", "road": "example_road" }
+  ],
+
+  "cues": [
+    { "when": "entered", "cue": "the_square_opens" },
+
+    // reactivity: this fires when the fact BECOMES true, once per visit
+    { "when": "fact", "fact": "example_person.dead", "cue": "quieter_than_it_was" }
+  ]
+}

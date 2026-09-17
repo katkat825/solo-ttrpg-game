@@ -19,7 +19,9 @@ namespace Game.Board
         [Export] public string MapName { get; set; } = "";
 
         // on the board, not the fight: Godot readies children before parents, so the room is down before the fight exists
-        [Export] public string Encounter { get; set; } = "";
+        // WHICH PLACE IS LAID OUT ON IT. This was Encounter: the board is somewhere now, and a
+        // fight is one of the things that can happen there (PLACES_AND_PERSISTENCE.md section 1).
+        [Export] public string Where { get; set; } = "";
 
         public const string MapsFolder = Content.Campaigns.Package.MapsFolder;
 
@@ -308,7 +310,7 @@ namespace Game.Board
         }
 
         // the encounter's roster, read here because the room is chosen here; the fight musters from it
-        public Content.Encounters.EncounterPlan Plan { get; private set; }
+        public Content.Places.Place Plan { get; private set; }
 
         string Chosen()
         {
@@ -318,8 +320,8 @@ namespace Game.Board
                 if (Game.Campaigns.Requested.Campaign.Length > 0)
                     Campaign = Game.Campaigns.Requested.Campaign;
 
-                if (Game.Campaigns.Requested.Encounter.Length > 0)
-                    Encounter = Game.Campaigns.Requested.Encounter;
+                if (Game.Campaigns.Requested.Place.Length > 0)
+                    Where = Game.Campaigns.Requested.Place;
             }
 
             if (string.IsNullOrWhiteSpace(Campaign)) return MapPath;
@@ -344,7 +346,7 @@ namespace Game.Board
         // the full Library.Load is the one that validates the campaign, so a broken manifest is caught here
         string Named()
         {
-            if (string.IsNullOrWhiteSpace(Encounter))
+            if (string.IsNullOrWhiteSpace(Where))
                 return string.IsNullOrWhiteSpace(MapName) ? null : MapName;
 
             Game.Campaigns.Loaded campaign = Game.Campaigns.Library.Load(quiet: true).Campaign(Campaign);
@@ -357,12 +359,12 @@ namespace Game.Board
                 return null;
             }
 
-            Plan = campaign.Encounters.Of(Encounter);
+            Plan = campaign.Places.Of(Where);
 
             if (Plan == null)
             {
-                GD.PushError($"board: '{Campaign}' has no encounter called '{Encounter}' - it has " +
-                             $"{string.Join(", ", campaign.Encounters.Ids)}. " +
+                GD.PushError($"board: '{Campaign}' has no place called '{Where}' - it has " +
+                             $"{string.Join(", ", campaign.Places.Ids)}. " +
                              $"Falling back to {MapPath}");
                 return null;
             }

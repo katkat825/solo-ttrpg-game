@@ -93,20 +93,28 @@ material_override = SubResource("Mat_table")
 ;
 ; Laid flat (pitched back off the vertical so the fixed camera reads it as paper on a table rather
 ; than a poster) and handed the DM, so the hands can come across and take it (R1).
+;
+; A4, AND CLEAR OF THE TRAY. The eye check found it 8 cm inside the dice tray's right wall with its
+; own right edge off the side of the screen, and both were the same cause: at 0.30 x 0.40 it was an
+; A3 sheet, and the board, the tray and an A3 sheet do not fit across this camera's frame. A real
+; character sheet is A4 (Sheet.cs Width/Height now say so), which is 9 cm narrower, and that is
+; exactly the room the three of them needed.
 [node name="Sheet" type="Node3D" parent="."]
 script = ExtResource("15_sheet")
-transform = Transform3D(1, 0, 0, 0, 0.1736482, 0.9848078, 0, -0.9848078, 0.1736482, 0.78, -0.038, 0.16)
+transform = Transform3D(1, 0, 0, 0, 0.1736482, 0.9848078, 0, -0.9848078, 0.1736482, 0.765, -0.038, 0.05)
 DmPath = NodePath("../Dm")
 
 ; the board does not own a tray and the tray does not know there is a board - only the table
 ; knows both are standing on it, so this is where they are introduced (B4)
+; shifted 3 cm left of where B0 put it, and the tray 5 cm, so the board, the tray and the sheet
+; stand apart instead of touching - see the note on the Sheet above
 [node name="Board" parent="." instance=ExtResource("1_board")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.3, -0.014, -0.03)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, -0.014, -0.03)
 TrayPath = NodePath("../DiceTray")
 SheetPath = NodePath("../Sheet")
 
 [node name="DiceTray" parent="." instance=ExtResource("2_tray")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.38, 0, 0.09)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3, 0, 0.09)
 CompanionPath = NodePath("../Companion")
 
 ; THE DM, ACROSS THE TABLE (DM_PRESENCE.md D0). The screen stands at the far edge, art facing the
@@ -137,9 +145,24 @@ BoardPath = NodePath("../Board")
 ;
 ; The placeholder body is deliberate (W1: build the idles first). The model arrives later and
 ; nothing about the behaviour changes when it does.
+; AT THE DICE TRAY, not the map's edge (moved 2026-09-17, on the eye check's own call). It sits on
+; the table just behind the tray, where it can watch the dice come down - which is what most of its
+; idles are about, and the tray is where the thing it reacts to actually happens.
+;
+; That is Perch.TrayRim rather than Perch.MapEdge, and hearthguard's wolf card says so. NOTHING
+; PLACES BY THE PERCH YET - the field is carried and reported and this scene is what actually puts
+; it down - so the card and this line have to be moved together until Companion honours it.
+;
+; The map's left edge is now clear for the initiative list and the hint cord, which were crowding
+; the wolf there anyway.
+;
+; IT IS STILL A PLACEHOLDER, deliberately (W1: build the idles first, the model arrives later and
+; nothing about the behaviour changes when it does) - a silhouette rather than a crate since the
+; second eye check, so what it is doing is at least legible. Parked in DEFERRED.md with the DM's
+; hands and screen.
 [node name="Companion" type="Node3D" parent="."]
 script = ExtResource("11_companion")
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6, -0.013, 0.16)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3, -0.013, -0.27)
 CompanionId = "hearthguard.wolf"
 ScreenPath = NodePath("../Dm")
 TrayPath = NodePath("../DiceTray")
@@ -150,9 +173,11 @@ TrayPath = NodePath("../DiceTray")
 ;
 ; It gates NOTHING. Every rung is a line, and every piece of information behind one is reachable
 ; another way - that is a rule about how campaigns are authored and no validator can hold you to it.
+; brought 3 cm in from the table's left edge: measured off the side of the camera frame, and a
+; cord you are told to reach for is not much use hanging outside the picture
 [node name="HintCord" type="Node3D" parent="."]
 script = ExtResource("12_cord")
-transform = Transform3D(1, 0, 0, 0, 0.7071068, 0.7071068, 0, -0.7071068, 0.7071068, -0.72, 0.02, 0.34)
+transform = Transform3D(1, 0, 0, 0, 0.7071068, 0.7071068, 0, -0.7071068, 0.7071068, -0.625, 0.02, 0.33)
 CompanionPath = NodePath("../Companion")
 DmPath = NodePath("../Dm")
 

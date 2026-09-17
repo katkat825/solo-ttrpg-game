@@ -1,0 +1,11 @@
+// Opening this sets the_sluice_gate.open, which is what the quest's 'done' clause waits on and
+// what the weir's fact trigger reacts to. The fact is derived from the verb and the id, so the
+// author never spelled it anywhere and it cannot be spelled wrong.
+{
+  "id": "the_sluice_gate",
+
+  "can": {
+    "examine": "the_gate_is_seized",
+    "open": null
+  }
+}

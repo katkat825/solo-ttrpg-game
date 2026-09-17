@@ -1,0 +1,21 @@
+// MOST OF A GOOD TABLE IS THE EMPTY ENTRY.
+//
+// Six parts in eight are "narrate and arrive" - the GM says one sentence about the walk and you
+// get there. One is a thing you find once. One is the ambush, which is a place, which happens to
+// have foes standing on it - and that is a coincidence rather than a rule: a merchant, a shrine or
+// a broken bridge would be the same entry resolving to somewhere else
+// (PLACES_AND_PERSISTENCE.md section 7).
+{
+  "id": "the_causeway",
+
+  "from": "the_quay",
+  "to": "the_weir",
+
+  "wayside": [
+    { "weight": 6 },
+
+    { "event": "a_boat_pulled_up_the_bank", "weight": 1, "once": true },
+
+    { "event": "jacks_at_the_ford", "weight": 1, "place": "the_marsh_road" }
+  ]
+}

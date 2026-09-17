@@ -343,7 +343,7 @@ namespace Content.Campaigns
                     problems.Add(new ContentProblem(
                         file, "chapters",
                         "a campaign needs chapters, as a list in the order they are played - " +
-                        "[ { \"id\": \"the_yard\", \"encounters\": [ \"ash_yard\" ] } ]"));
+                        "[ { \"id\": \"the_yard\", \"places\": [ \"ash_yard\" ] } ]"));
 
                 return chapters;
             }
@@ -393,7 +393,12 @@ namespace Content.Campaigns
             return chapters;
         }
 
-        static readonly string[] ChapterFields = { "id", "encounters" };
+        // 'encounters' is format 1's spelling of 'places' and is read for exactly as long as
+        // ContentFormat.Oldest is 1 - see the note beside PlaceReader.Placements. A chapter is a
+        // sequence of somewheres now, and the old word named the fight instead of the room.
+        public const string OldSpelling = "encounters";
+
+        static readonly string[] ChapterFields = { "id", "places", OldSpelling };
 
         static Chapter OneChapter(JsonElement entry, string file, string where,
                                   List<ContentProblem> problems)
@@ -418,14 +423,17 @@ namespace Content.Campaigns
             }
 
             string id = idValue.GetString();
-            var encounters = new List<string>();
+            var places = new List<string>();
 
-            if (!entry.TryGetProperty("encounters", out JsonElement list) ||
-                list.ValueKind != JsonValueKind.Array)
+            string field = entry.TryGetProperty("places", out JsonElement list) ? "places"
+                         : entry.TryGetProperty(OldSpelling, out list) ? OldSpelling
+                         : null;
+
+            if (field == null || list.ValueKind != JsonValueKind.Array)
             {
                 problems.Add(new ContentProblem(
-                    file, $"{where}.encounters",
-                    "a chapter needs its encounters, by id, in the order they are played"));
+                    file, $"{where}.places",
+                    "a chapter needs its places, by id, in the order they are played"));
                 return null;
             }
 
@@ -433,23 +441,23 @@ namespace Content.Campaigns
 
             foreach (JsonElement one in list.EnumerateArray())
             {
-                string spot = $"{where}.encounters[{at++}]";
+                string spot = $"{where}.{field}[{at++}]";
 
                 if (one.ValueKind != JsonValueKind.String || !ContentId.IsLocal(one.GetString()))
                 {
                     problems.Add(new ContentProblem(
-                        file, spot, $"'{Shown(one)}' is not an encounter id"));
+                        file, spot, $"'{Shown(one)}' is not a place id"));
                     continue;
                 }
 
-                encounters.Add(one.GetString());
+                places.Add(one.GetString());
             }
 
-            if (encounters.Count == 0)
+            if (places.Count == 0)
                 problems.Add(new ContentProblem(
-                    file, $"{where}.encounters", $"chapter '{id}' has nothing in it"));
+                    file, $"{where}.{field}", $"chapter '{id}' has nothing in it"));
 
-            return new Chapter(id, encounters);
+            return new Chapter(id, places);
         }
 
         static string Start(JsonElement root, IReadOnlyList<Chapter> chapters, string file,

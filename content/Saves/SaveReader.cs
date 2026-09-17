@@ -47,15 +47,21 @@ namespace Content.Saves
                     Campaign = Text(root, "campaign", file, problems),
                     CampaignFormat = Number(root, "campaign_format", 0, file, problems),
                     Chapter = Text(root, "chapter", file, problems),
-                    Encounter = Text(root, "encounter", file, problems),
+                    // 'encounter' is format 1's spelling, and a format 1 encounter IS a place
+                    Place = Text(root, "place", file, problems) is { Length: > 0 } where
+                        ? where
+                        : Text(root, "encounter", file, problems),
                     Round = Number(root, "round", 0, file, problems),
                     Turn = Number(root, "turn", -1, file, problems),
                     ActionsLeft = Number(root, "actions", 0, file, problems),
                 };
 
-                if (save.Format != SaveFormat.Current)
+                // an older format this build still reads is not a problem; that is what Oldest is for
+                if (!SaveFormat.CanRead(save.Format))
                     problems.Add(new ContentProblem(file, "format",
                                                     SaveFormat.Unfamiliar(save.Format)));
+
+                ReadFacts(root, save, file, problems);
 
                 if (root.TryGetProperty("sheet", out JsonElement sheet))
                     save.Sheet = Sheet(sheet, file, problems);
@@ -95,8 +101,8 @@ namespace Content.Saves
 
         static readonly string[] Fields =
         {
-            "format", "engine", "campaign", "campaign_format", "chapter", "encounter",
-            "round", "turn", "actions", "sheet", "hero", "foes", "felt",
+            "format", "engine", "campaign", "campaign_format", "chapter", "place", "encounter",
+            "facts", "round", "turn", "actions", "sheet", "hero", "foes", "felt",
         };
 
         static readonly string[] SheetFields =
@@ -169,6 +175,49 @@ namespace Content.Saves
                 sheet.Growth.Add(step);
 
             return sheet;
+        }
+
+        // THE DURABLE HALF (PLACES_AND_PERSISTENCE.md section 3). Degrading like everything else a
+        // save reads: a fact this build cannot spell is left off with a sentence, and the rest of
+        // the world still comes back.
+        static void ReadFacts(JsonElement root, SaveGame save, string file,
+                              List<ContentProblem> problems)
+        {
+            if (!root.TryGetProperty("facts", out JsonElement facts)) return;
+
+            if (facts.ValueKind != JsonValueKind.Array)
+            {
+                if (facts.ValueKind != JsonValueKind.Null)
+                    problems.Add(new ContentProblem(
+                        file, "facts",
+                        "facts is the list of things that have happened and stayed true - the " +
+                        "world comes back as though none of them had"));
+                return;
+            }
+
+            int at = 0;
+
+            foreach (JsonElement one in facts.EnumerateArray())
+            {
+                string where = $"facts[{at++}]";
+
+                if (one.ValueKind != JsonValueKind.String)
+                {
+                    problems.Add(new ContentProblem(
+                        file, where, $"a fact is a name and this is a {Named(one.ValueKind)} - left off"));
+                    continue;
+                }
+
+                string explained = Content.World.FactName.Explain(one.GetString());
+
+                if (explained != Content.World.FactName.WellFormed)
+                {
+                    problems.Add(new ContentProblem(file, where, explained + " - left off"));
+                    continue;
+                }
+
+                if (!save.Facts.Contains(one.GetString())) save.Facts.Add(one.GetString());
+            }
         }
 
         static void ReadFelt(JsonElement root, SaveGame save, string file,

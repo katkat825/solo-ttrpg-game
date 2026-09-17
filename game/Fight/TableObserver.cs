@@ -55,11 +55,13 @@ namespace Game.Fight
 
             if (piece == null) return;
 
-            // freed from the grid but left toppled where it fell
+            // freed from the grid, toppled where it fell, and then taken off the table: the
+            // fall is the beat and the body is not scenery (the eye check, 2026-09-16)
             Cell? fell = _board?.CellOf(piece.Mini);
 
             _board?.Squares.Remove(piece.Mini);
             piece.Mini.Topple();
+            piece.Mini.SweepUp();
 
             if (piece.Vigor != null) piece.Vigor.Visible = false;
             if (piece.Marks != null) piece.Marks.Visible = false;

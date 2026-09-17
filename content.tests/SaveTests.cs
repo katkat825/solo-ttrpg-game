@@ -36,7 +36,7 @@ namespace Content.Tests
                 Campaign = "ashfall",
                 CampaignFormat = 1,
                 Chapter = "the_yard",
-                Encounter = "ash_yard",
+                Place = "ash_yard",
                 Round = 3,
                 Turn = 0,
                 ActionsLeft = 1,
@@ -96,7 +96,7 @@ namespace Content.Tests
 
             Assert.Equal("ashfall", back.Campaign);
             Assert.Equal("the_yard", back.Chapter);
-            Assert.Equal("ash_yard", back.Encounter);
+            Assert.Equal("ash_yard", back.Place);
             Assert.Equal(3, back.Round);
             Assert.Equal(0, back.Turn);
             Assert.Equal(1, back.ActionsLeft);
@@ -193,7 +193,7 @@ namespace Content.Tests
             Read<SaveGame> read = SaveReader.From(path);
 
             Assert.True(read.Ok);
-            Assert.Equal("ash_yard", read.Value.Encounter);
+            Assert.Equal("ash_yard", read.Value.Place);
         }
 
         [Fact]

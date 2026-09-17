@@ -1,0 +1,25 @@
+; THE QUAY - a place that is not a fight, which is the whole point of it.
+;
+; Saltmarch is the THIRD campaign test (PLACES_AND_PERSISTENCE.md, the World layer). ashfall and
+; greyhollow proved a dungeon is data; this proves a WORLD is - somewhere to stand, people to deal
+; with, a way out, a road with something on it, and a quest that can be failed - and like both of
+; them it was authored with a text editor and no new C# was written to make it exist.
+;
+; Nobody hostile is drawn on this map. The spawn slots are people and things: Norrel on 1, the
+; lockbox on 2, his grave on 3 (which is empty ground until it isn't), and the marsh road out on 4.
+; The same numbers, doing something that is not a fight, is the reframe in one file.
+;
+;   .  floor      ~  difficult ground   #  rock      @  the hero starts
+;   1-9 a spawn   |  wall up a line     -  wall along a line   x  door, shut   +  a corner
+
++-+-+-+-+-+-+-+-+-+
+|~ ~ ~ . . . . . .|
++ + + + + + + + + +
+|~ ~ . . 1 . . . .|
++ + + + + + + + + +
+|~ . . . . . 2 . .|
++ + + + + +-+-+-+ +
+|. . @ . .|# # #|.|
++ + + + + +-+-+-+ +
+|. . . . . 3 . . 4|
++-+-+-+-+-+-+-+-+-+

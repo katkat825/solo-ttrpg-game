@@ -1,0 +1,21 @@
+; THE MARSH ROAD - where the road stops, when it stops.
+;
+; A wayside event that interrupts a journey drops you into a place like any other. This one is that
+; place, and it is a fight, and that is a coincidence rather than a rule: a merchant, a shrine or a
+; broken bridge would be the same entry in the same weighted table, resolving to somewhere else
+; (PLACES_AND_PERSISTENCE.md section 7).
+;
+;   .  floor      ~  difficult ground   #  rock      @  the hero starts
+;   1-9 a spawn   |  wall up a line     -  wall along a line   x  door, shut   +  a corner
+
++-+-+-+-+-+-+-+
+|~ ~ ~ ~ ~ ~ ~|
++ + + + + + + +
+|~ . . 1 . . ~|
++ + + + + + + +
+|. . . . . . .|
++ + + + + + + +
+|~ . @ . . 2 ~|
++ + + + + + + +
+|~ ~ ~ ~ ~ ~ ~|
++-+-+-+-+-+-+-+

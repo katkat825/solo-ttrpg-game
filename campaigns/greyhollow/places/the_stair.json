@@ -1,0 +1,19 @@
+{
+  "id": "the_stair",
+  "map": "the_stair",
+
+  "standing": [
+    { "slot": 1, "monster": "blight_rat" },
+    { "slot": 2, "monster": "hollow_warden" }
+  ],
+
+  "triggers": [
+    { "when": "cleared", "then": "next" }
+  ],
+
+  "cues": [
+    { "when": "entered", "cue": "something_moves_below", "beat": "the_water_is_wrong" },
+    { "when": "entered", "cue": "the_warden_is_set_down", "gesture": "place", "hesitant": true, "at": 2 },
+    { "when": "cleared", "cue": "the_way_on", "gesture": "tap", "at": 1 }
+  ]
+}

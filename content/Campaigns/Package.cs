@@ -4,10 +4,13 @@ using System.IO;
 using System.Linq;
 using Content.Audio;
 using Content.Classes;
-using Content.Encounters;
+using Content.Entities;
 using Content.Items;
 using Content.Kits;
 using Content.Minis;
+using Content.Places;
+using Content.Quests;
+using Content.World;
 using Content.Models;
 using Content.Companions;
 using Content.Dialogue;
@@ -22,7 +25,20 @@ namespace Content.Campaigns
         public const string MonstersFolder = "monsters";
         public const string ItemsFolder = "items";
         public const string MapsFolder = "maps";
+        // THE WORLD LAYER. A place owns a map and a fight is one of the things that can
+        // happen in it, so the folder is named for the room rather than for the brawl. entities/
+        // is Bob and the chest and the door; quests/ is the named view over facts; roads/ joins
+        // places to each other. PLACES_AND_PERSISTENCE.md.
+        public const string PlacesFolder = "places";
+
+        // format 1's spelling of places/, read for exactly as long as ContentFormat.Oldest is 1
         public const string EncountersFolder = "encounters";
+
+        public const string EntitiesFolder = "entities";
+
+        public const string QuestsFolder = "quests";
+
+        public const string RoadsFolder = "roads";
         public const string LocaleFolder = "locale";
         public const string AssetsFolder = "assets";
 
@@ -53,7 +69,7 @@ namespace Content.Campaigns
         public const string MapExtension = ".map";
 
         Package(string folder, string id, Manifest manifest, JsonArchetypeSource monsters,
-                ItemCatalogue items, EncounterBook encounters,
+                ItemCatalogue items, PlaceBook places,
                 IReadOnlyDictionary<string, MapLayout> maps, MiniCatalogue minis,
                 ClassRoster classes, KitBook kit, List<ContentProblem> problems)
         {
@@ -62,7 +78,7 @@ namespace Content.Campaigns
             Manifest = manifest;
             Monsters = monsters;
             Items = items;
-            Encounters = encounters;
+            Places = places;
             Maps = maps;
             Minis = minis ?? MiniCatalogue.Of(null);
             Classes = classes ?? ClassRoster.Of(id);
@@ -85,9 +101,9 @@ namespace Content.Campaigns
 
         public ItemCatalogue Items { get; }
 
-        public EncounterBook Encounters { get; }
+        public PlaceBook Places { get; }
 
-        // keyed by file name without the extension, which is how an encounter names one
+        // keyed by file name without the extension, which is how a place names one
         public IReadOnlyDictionary<string, MapLayout> Maps { get; }
 
         public ClassRoster Classes { get; }
@@ -117,12 +133,24 @@ namespace Content.Campaigns
         public Content.Sheet.SheetOptions Sheet { get; private set; } =
             Content.Sheet.SheetOptions.Read(null, "");
 
+        // The World layer's three, set the same way and for the same reason.
+        public EntityBook Entities { get; private set; } = EntityBook.Read(null, null);
+
+        public QuestBook Quests { get; private set; } = QuestBook.Read(null);
+
+        public RoadBook Roads { get; private set; } = RoadBook.Read(null);
+
         public IReadOnlyList<ContentProblem> Problems { get; }
 
         // a failed package contributes nothing; all-or-nothing avoids a half-installed campaign
         public bool Failed => Manifest == null;
 
-        public bool Clean => Problems.Count == 0;
+        // a caution is a sentence somebody should read, not a thing that stopped the loader
+        public bool Clean => !Problems.Any(p => p.IsAFault);
+
+        public IEnumerable<ContentProblem> Faults => Problems.Where(p => p.IsAFault);
+
+        public IEnumerable<ContentProblem> Cautions => Problems.Where(p => p.IsACaution);
 
 
         public static Package Read(string folder)
@@ -142,7 +170,7 @@ namespace Content.Campaigns
 
             JsonArchetypeSource monsters = JsonArchetypeSource.Read(In(folder, MonstersFolder), id);
             ItemCatalogue items = ItemCatalogue.Read(In(folder, ItemsFolder));
-            EncounterBook encounters = EncounterBook.Read(In(folder, EncountersFolder));
+            PlaceBook places = ReadPlaces(folder);
             IReadOnlyDictionary<string, MapLayout> maps = ReadMaps(folder, problems);
             MiniCatalogue minis = MiniCatalogue.Read(In(folder, MinisFolder), id);
             ClassRoster classes = ClassRoster.Read(In(folder, ClassesFolder), id);
@@ -156,21 +184,21 @@ namespace Content.Campaigns
 
             problems.AddRange(monsters.Problems);
             problems.AddRange(items.Problems);
-            problems.AddRange(encounters.Problems);
+            Gather(problems, PlacesIn(folder), places.Problems);
 
             foreach (ContentProblem problem in classes.Problems)
                 problems.Add(new ContentProblem(ClassesFolder + "/" + problem.File, problem.Where,
-                                                problem.What, problem.Line));
+                                                problem.What, problem.Line, problem.How));
 
             foreach (ContentProblem problem in kit.Problems)
                 problems.Add(new ContentProblem(KitsFolder + "/" + problem.File, problem.Where,
-                                                problem.What, problem.Line));
+                                                problem.What, problem.Line, problem.How));
 
             foreach (ContentProblem problem in minis.Problems)
                 problems.Add(new ContentProblem(MinisFolder + "/" + problem.File, problem.Where,
-                                                problem.What, problem.Line));
+                                                problem.What, problem.Line, problem.How));
 
-            var package = new Package(folder, id, manifest, monsters, items, encounters, maps,
+            var package = new Package(folder, id, manifest, monsters, items, places, maps,
                                       minis, classes, kit, problems)
             {
                 ManifestFile = ManifestFileIn(folder),
@@ -180,6 +208,9 @@ namespace Content.Campaigns
                 Hints = Content.Dialogue.HintBook.Read(In(folder, HintsFolder), id),
                 Companions = Content.Companions.CompanionBook.Read(In(folder, CompanionsFolder), id),
                 Sheet = Content.Sheet.SheetOptions.Read(In(folder, SheetFolder), id),
+                Entities = EntityBook.Read(In(folder, EntitiesFolder), id),
+                Quests = QuestBook.Read(In(folder, QuestsFolder)),
+                Roads = RoadBook.Read(In(folder, RoadsFolder)),
             };
 
             Gather(problems, DialogueFolder, package.Dialogue.Problems);
@@ -188,6 +219,9 @@ namespace Content.Campaigns
             Gather(problems, HintsFolder, package.Hints.Problems);
             Gather(problems, CompanionsFolder, package.Companions.Problems);
             Gather(problems, SheetFolder, package.Sheet.Problems);
+            Gather(problems, EntitiesFolder, package.Entities.Problems);
+            Gather(problems, QuestsFolder, package.Quests.Problems);
+            Gather(problems, RoadsFolder, package.Roads.Problems);
 
             // a race and a class sharing an id collide in the class namespace, and one of the two
             // names would silently never be seen
@@ -200,6 +234,16 @@ namespace Content.Campaigns
 
         static string In(string folder, string inside) => Path.Combine(folder, inside);
 
+        // places/ if it is there, encounters/ if it is not - a campaign authored before the map
+        // became the noun still reads, and its encounters ARE places whose standings are all foes
+        static string PlacesIn(string folder) =>
+            !Directory.Exists(In(folder, PlacesFolder)) &&
+            Directory.Exists(In(folder, EncountersFolder))
+                ? EncountersFolder
+                : PlacesFolder;
+
+        static PlaceBook ReadPlaces(string folder) => PlaceBook.Read(In(folder, PlacesIn(folder)));
+
         // a book names its files relative to itself; the campaign puts the folder back on the front
         // so an author reads "dialogue/camp.yarn: line 12" and knows where to look
         static void Gather(List<ContentProblem> problems, string folder,
@@ -209,7 +253,7 @@ namespace Content.Campaigns
                 problems.Add(problem.File.StartsWith(folder + "/", StringComparison.Ordinal)
                     ? problem
                     : new ContentProblem(folder + "/" + problem.File, problem.Where, problem.What,
-                                         problem.Line));
+                                         problem.Line, problem.How));
         }
 
         static string ManifestFileIn(string folder)
@@ -323,69 +367,123 @@ namespace Content.Campaigns
         // every cross-file reference, followed here where the whole folder is open
         void CrossCheck(List<ContentProblem> problems)
         {
-            string book = EncountersFolder + "/";
+            string book = PlacesIn(Folder) + "/";
 
-            foreach (EncounterPlan plan in Encounters.All)
+            foreach (Place place in Places.All)
             {
-                string file = book + plan.Id + EncounterBook.Extension;
+                string file = book + place.Id + PlaceBook.Extension;
 
-                if (!Maps.TryGetValue(plan.Map, out MapLayout map))
+                if (!Maps.TryGetValue(place.Map, out MapLayout map))
                 {
                     problems.Add(new ContentProblem(
                         file, "map",
-                        $"'{plan.Map}' is not one of this campaign's maps - it has " +
+                        $"'{place.Map}' is not one of this campaign's maps - it has " +
                         $"{Offered(Maps.Keys)}"));
                     map = null;
                 }
 
                 int at = 0;
 
-                foreach (Placement placement in plan.Placements)
+                foreach (Standing standing in place.Standings)
                 {
-                    string where = $"placements[{at++}]";
+                    string where = $"standing[{at++}]";
 
-                    if (!Monsters.Has(ContentId.Scoped(Id, placement.Monster)))
+                    if (standing.IsAFoe)
+                    {
+                        if (!Monsters.Has(ContentId.Scoped(Id, standing.Monster)))
+                            problems.Add(new ContentProblem(
+                                file, where + ".monster",
+                                $"'{standing.Monster}' is not one of this campaign's monsters - " +
+                                $"it has {Offered(Local(Monsters.Ids))}"));
+                    }
+                    else if (!Entities.Has(standing.Entity))
+                    {
                         problems.Add(new ContentProblem(
-                            file, where + ".monster",
-                            $"'{placement.Monster}' is not one of this campaign's monsters - it " +
-                            $"has {Offered(Local(Monsters.Ids))}"));
+                            file, where + ".entity",
+                            $"'{standing.Entity}' is not one of this campaign's entities - it " +
+                            $"has {Offered(Entities.Ids.Select(ContentId.LocalOf))}"));
+                    }
 
-                    if (map != null && map.SpawnAt(placement.Slot) == null)
-                        problems.Add(new ContentProblem(
-                            file, where + ".slot",
-                            $"{plan.Map} has no spawn {placement.Slot} drawn on it - it has " +
-                            $"{Offered(map.Spawns.Keys.OrderBy(s => s).Select(s => s.ToString()))}"));
+                    Drawn(map, place, standing.Slot, file, where + ".slot", problems);
                 }
 
                 at = 0;
 
-                foreach (Cue cue in plan.Cues)
+                foreach (Exit exit in place.Exits)
+                {
+                    string where = $"exits[{at++}]";
+
+                    Drawn(map, place, exit.Slot, file, where + ".slot", problems);
+
+                    if (!Places.Has(exit.To))
+                    {
+                        problems.Add(new ContentProblem(
+                            file, where + ".to",
+                            $"'{exit.To}' is not one of this campaign's places - it has " +
+                            $"{Offered(Places.Ids)}"));
+                        continue;
+                    }
+
+                    // where you come out has to be a square somebody drew on the map over there
+                    if (exit.Arriving > 0)
+                    {
+                        Place there = Places.Of(exit.To);
+
+                        if (Maps.TryGetValue(there.Map, out MapLayout other) &&
+                            other.SpawnAt(exit.Arriving) == null)
+                            problems.Add(new ContentProblem(
+                                file, where + ".arriving",
+                                $"{there.Map} has no spawn {exit.Arriving} drawn on it for you to " +
+                                $"arrive on - it has {Spawns(other)}"));
+                    }
+
+                    if (!exit.IsAJourney) continue;
+
+                    Road road = Roads.Of(exit.Road);
+
+                    if (road == null)
+                    {
+                        problems.Add(new ContentProblem(
+                            file, where + ".road",
+                            $"'{exit.Road}' is not one of this campaign's roads - it has " +
+                            $"{Offered(Roads.Ids)}"));
+                        continue;
+                    }
+
+                    if (!road.Joins(place.Id, exit.To))
+                        problems.Add(new ContentProblem(
+                            file, where + ".road",
+                            $"'{road.Id}' runs between '{road.From}' and '{road.To}', and this " +
+                            $"exit walks it from '{place.Id}' to '{exit.To}' - a road joins the " +
+                            "two places it says it does"));
+                }
+
+                at = 0;
+
+                foreach (Cue cue in place.Cues)
                 {
                     string cueWhere = $"cues[{at++}].at";
 
-                    if (cue.Slot > 0 && map != null && map.SpawnAt(cue.Slot) == null)
-                        problems.Add(new ContentProblem(
-                            file, cueWhere,
-                            $"{plan.Map} has no spawn {cue.Slot} drawn on it for the DM to " +
-                            $"{cue.Does.Word()} at - it has " +
-                            $"{Offered(map.Spawns.Keys.OrderBy(s => s).Select(s => s.ToString()))}"));
+                    if (cue.Slot > 0)
+                        Drawn(map, place, cue.Slot, file, cueWhere, problems,
+                              $"for the DM to {cue.Does.Word()} at");
                 }
 
                 at = 0;
 
-                foreach (Trigger trigger in plan.Triggers)
+                foreach (Trigger trigger in place.Triggers)
                 {
-                    string where = $"triggers[{at++}].encounter";
+                    string where = $"triggers[{at++}].place";
 
-                    if (trigger.ThenDo == Then.Goto && !Encounters.Has(trigger.Encounter))
+                    if (trigger.ThenDo == Then.Goto && !Places.Has(trigger.Place))
                         problems.Add(new ContentProblem(
                             file, where,
-                            $"'{trigger.Encounter}' is not one of this campaign's encounters - it " +
-                            $"has {Offered(Encounters.Ids)}"));
+                            $"'{trigger.Place}' is not one of this campaign's places - it has " +
+                            $"{Offered(Places.Ids)}"));
                 }
             }
 
-            // an encounter no chapter names can never be played
+            // a place no chapter names and no exit leads to can never be reached
             var named = new HashSet<string>(StringComparer.Ordinal);
             int chapter = 0;
 
@@ -393,16 +491,16 @@ namespace Content.Campaigns
             {
                 int index = 0;
 
-                foreach (string encounter in one.Encounters)
+                foreach (string place in one.Places)
                 {
-                    named.Add(encounter);
+                    named.Add(place);
 
-                    if (!Encounters.Has(encounter))
+                    if (!Places.Has(place))
                         problems.Add(new ContentProblem(
                             ManifestFile,
-                            $"chapters[{chapter}].encounters[{index}]",
-                            $"'{encounter}' is not one of this campaign's encounters - it has " +
-                            $"{Offered(Encounters.Ids)}"));
+                            $"chapters[{chapter}].places[{index}]",
+                            $"'{place}' is not one of this campaign's places - it has " +
+                            $"{Offered(Places.Ids)}"));
 
                     index++;
                 }
@@ -410,12 +508,62 @@ namespace Content.Campaigns
                 chapter++;
             }
 
-            foreach (string orphan in Encounters.Ids.OrderBy(i => i, StringComparer.Ordinal))
+            foreach (Place place in Places.All)
+            {
+                foreach (Exit exit in place.Exits) named.Add(exit.To);
+
+                foreach (Trigger trigger in place.Triggers)
+                    if (trigger.ThenDo == Then.Goto) named.Add(trigger.Place);
+            }
+
+            foreach (Road road in Roads.All)
+            {
+                string file = RoadsFolder + "/" + road.Id + RoadBook.Extension;
+
+                foreach ((string end, string where) in new[] { (road.From, "from"), (road.To, "to") })
+                    if (!Places.Has(end))
+                        problems.Add(new ContentProblem(
+                            file, where,
+                            $"'{end}' is not one of this campaign's places - it has " +
+                            $"{Offered(Places.Ids)}"));
+
+                int at = 0;
+
+                foreach (Happening happening in road.Wayside)
+                {
+                    string where = $"wayside[{at++}].place";
+
+                    if (!happening.Stops) continue;
+
+                    named.Add(happening.Place);
+
+                    if (!Places.Has(happening.Place))
+                        problems.Add(new ContentProblem(
+                            file, where,
+                            $"'{happening.Place}' is not one of this campaign's places - it has " +
+                            $"{Offered(Places.Ids)}"));
+                }
+            }
+
+            foreach (string orphan in Places.Ids.OrderBy(i => i, StringComparer.Ordinal))
                 if (!named.Contains(orphan))
                     problems.Add(new ContentProblem(
-                        book + orphan + EncounterBook.Extension, "id",
-                        "no chapter names this encounter, so nothing can ever play it - put it in " +
-                        "a chapter, or delete the file"));
+                        book + orphan + PlaceBook.Extension, "id",
+                        "no chapter names this place, no exit leads to it and nothing goes to it, " +
+                        "so it can never be reached - put it in a chapter, give something a way " +
+                        "in, or delete the file"));
+
+            // a road nothing walks is a road that will never be walked
+            var walked = new HashSet<string>(
+                Places.All.SelectMany(p => p.Exits).Where(e => e.IsAJourney).Select(e => e.Road),
+                StringComparer.Ordinal);
+
+            foreach (Road road in Roads.All)
+                if (!walked.Contains(road.Id))
+                    problems.Add(new ContentProblem(
+                        RoadsFolder + "/" + road.Id + RoadBook.Extension, "id",
+                        $"no exit walks this road - an exit out of '{road.From}' or '{road.To}' " +
+                        "has to name it, or nobody will ever travel it"));
 
             // a drop must be the campaign's own item; a shared-namespace axe breaks where the campaign isn't installed
             foreach (string id in Monsters.Ids.OrderBy(i => i, StringComparer.Ordinal))
@@ -441,11 +589,268 @@ namespace Content.Campaigns
 
             CrossCheckVoices(problems);
 
+            CrossCheckEntities(problems);
+
+            CrossCheckNames(problems);
+
+            CrossCheckFacts(problems);
+
             if (Manifest.Preview.Length > 0 &&
                 !File.Exists(Path.Combine(Folder, Manifest.Preview)))
                 problems.Add(new ContentProblem(
                     ManifestFile, "preview",
                     $"there is no '{Manifest.Preview}' in this campaign's folder"));
+        }
+
+        void Drawn(MapLayout map, Place place, int slot, string file, string where,
+                   List<ContentProblem> problems, string saying = "to stand on")
+        {
+            if (map == null || map.SpawnAt(slot) != null) return;
+
+            problems.Add(new ContentProblem(
+                file, where,
+                $"{place.Map} has no spawn {slot} drawn on it {saying} - it has {Spawns(map)}"));
+        }
+
+        static string Spawns(MapLayout map) =>
+            map == null
+                ? "none at all"
+                : Offered(map.Spawns.Keys.OrderBy(s => s).Select(s => s.ToString()));
+
+        // Bob is data, and everything he names has to be there: the statblock he fights as if the
+        // author let you fight him, the conversation he has, the figure he stands as, the loot in
+        // the chest (PLACES_AND_PERSISTENCE.md section 4).
+        void CrossCheckEntities(List<ContentProblem> problems)
+        {
+            foreach (Entity entity in Entities.All)
+            {
+                string file = EntitiesFolder + "/" + entity.Local + EntityBook.Extension;
+
+                if (entity.Fights && !Monsters.Has(ContentId.Scoped(Id, entity.Monster)))
+                    problems.Add(new ContentProblem(
+                        file, "monster",
+                        $"'{entity.Monster}' is not one of this campaign's monsters - it has " +
+                        $"{Offered(Local(Monsters.Ids))}. Something you may attack has to have a " +
+                        "statblock to be attacked as"));
+
+                if (entity.Mini.Length > 0 && !Names(entity.Mini))
+                    problems.Add(new ContentProblem(
+                        file, "mini",
+                        $"'{entity.Mini}' is not a mini this pack ships and not one the game " +
+                        $"ships ({Offered(SharedMinis.Catalogue.Ids)}) - if it belongs to another " +
+                        "pack, write it as '<pack>.<mini>' and name that pack in dependencies"));
+
+                string node = entity.Named(Content.Entities.Interaction.Talk);
+
+                if (node.Length > 0 && !Dialogue.Has(node))
+                    problems.Add(new ContentProblem(
+                        file, "can.talk",
+                        $"'{node}' is not a node in this campaign's {DialogueFolder}/ folder - it " +
+                        $"has {Offered(Dialogue.Nodes.OrderBy(n => n, StringComparer.Ordinal))}"));
+
+                foreach (string item in entity.Loot.Entries.Select(e => e.Item).Where(i => i != null))
+                    if (!Items.Has(item))
+                        problems.Add(new ContentProblem(
+                            file, "loot",
+                            $"'{item}' is not one of this campaign's items - a campaign has to " +
+                            $"ship what it holds. It has {Offered(Items.Ids)}"));
+            }
+        }
+
+        // TWO IDS, ONE KEY. A campaign's chapters, places, quests and roads all name themselves
+        // under quest.<campaign>.*, and its monsters and entities both under actor.<campaign>.*,
+        // so two of them sharing an id means one of the two names is written, translated and never
+        // seen. This is the same refusal Phase R made for a race and a class (CONVENTIONS.md 7).
+        void CrossCheckNames(List<ContentProblem> problems)
+        {
+            var claimed = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            foreach (Chapter chapter in Manifest.Chapters) claimed[chapter.Id] = "a chapter";
+
+            foreach (Place place in Places.All)
+                Claim(claimed, place.Id, "a place",
+                      PlacesIn(Folder) + "/" + place.Id + PlaceBook.Extension, problems);
+
+            foreach (Quest quest in Quests.All)
+                Claim(claimed, quest.Id, "a quest",
+                      QuestsFolder + "/" + quest.Id + QuestBook.Extension, problems);
+
+            foreach (Road road in Roads.All)
+                Claim(claimed, road.Id, "a road",
+                      RoadsFolder + "/" + road.Id + RoadBook.Extension, problems);
+
+            var actors = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            foreach (string id in Monsters.Ids) actors[ContentId.LocalOf(id)] = "a monster";
+
+            foreach (Entity entity in Entities.All)
+                Claim(actors, entity.Local, "an entity",
+                      EntitiesFolder + "/" + entity.Local + EntityBook.Extension, problems);
+        }
+
+        static void Claim(Dictionary<string, string> claimed, string id, string what, string file,
+                          List<ContentProblem> problems)
+        {
+            if (claimed.TryGetValue(id, out string already))
+            {
+                problems.Add(new ContentProblem(
+                    file, "id",
+                    $"'{id}' is already the id of {already} in this campaign, and both would " +
+                    "claim the same key - one of the two names would be written, translated and " +
+                    "never seen"));
+                return;
+            }
+
+            claimed[id] = what;
+        }
+
+        // THE REACHABILITY PASS (PLACES_AND_PERSISTENCE.md sections 6 and 10). The World layer
+        // cannot be chi-squared - you cannot statistically test a town - so what "correct" means
+        // for it is this: every fact anything waits on is a fact something can make true, and every
+        // quest is either completable or explicitly allowed to fail.
+        void CrossCheckFacts(List<ContentProblem> problems)
+        {
+            HashSet<string> written = Written();
+
+            foreach (Place place in Places.All)
+            {
+                string file = PlacesIn(Folder) + "/" + place.Id + PlaceBook.Extension;
+                int at = 0;
+
+                foreach (Standing standing in place.Standings)
+                    Reachable(standing.Needs.Facts, written, file, $"standing[{at++}]", problems);
+
+                at = 0;
+
+                foreach (Exit exit in place.Exits)
+                    Reachable(exit.Needs.Facts, written, file, $"exits[{at++}]", problems);
+
+                at = 0;
+
+                foreach (Trigger trigger in place.Triggers)
+                {
+                    string where = $"triggers[{at++}].fact";
+
+                    if (trigger.WhenIt == When.Fact)
+                        Reachable(new[] { trigger.Fact }, written, file, where, problems);
+                }
+
+                at = 0;
+
+                foreach (Cue cue in place.Cues)
+                {
+                    string where = $"cues[{at++}].fact";
+
+                    if (cue.WhenIt == When.Fact)
+                        Reachable(new[] { cue.Fact }, written, file, where, problems);
+                }
+            }
+
+            foreach (Quest quest in Quests.All)
+            {
+                string file = QuestsFolder + "/" + quest.Id + QuestBook.Extension;
+
+                Reachable(quest.Offered.Facts, written, file, "offered", problems);
+                Reachable(quest.Done.Facts, written, file, "done", problems);
+
+                if (quest.CanFail) Reachable(quest.Failed.Facts, written, file, "failed", problems);
+
+                // THE WARNING SECTION 6 ASKS FOR BY NAME, and it is a warning: if the author wants
+                // that consequence, wonderful. It is only that nobody should find out by playing.
+                foreach (string fact in quest.Done.Unless)
+                {
+                    string subject = Content.World.FactName.SubjectOf(
+                        fact, Content.World.FactName.DeadAspect);
+
+                    if (subject.Length == 0) continue;
+
+                    Entity entity = Entities.Of(subject);
+
+                    if (entity == null || !entity.Allows(Content.Entities.Interaction.Attack))
+                        continue;
+
+                    problems.Add(ContentProblem.Caution(
+                        file, "done.unless",
+                        $"this quest cannot be finished once '{subject}' is dead, and '{subject}' " +
+                        "is attackable - killing them may make it impossible. That is allowed, " +
+                        (quest.CanFail
+                            ? "and this quest says what failing looks like, so the log will say so"
+                            : "but this quest has no 'failed' clause, so the log will sit there " +
+                              "forever telling the player to go back to somebody who is dead")));
+                }
+
+                if (!quest.CanFail) continue;
+            }
+        }
+
+        // every fact anything in this campaign can ever make true: the ones the engine derives
+        // from what it is asked to do, and the ones an author writes by hand
+        HashSet<string> Written()
+        {
+            var written = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (Entity entity in Entities.All)
+                foreach (Content.Entities.Interaction verb in entity.Verbs)
+                {
+                    string writes = verb.Writes(entity.Local);
+
+                    if (writes.Length > 0) written.Add(writes);
+                }
+
+            foreach (Place place in Places.All)
+            {
+                written.Add(Content.World.FactName.Visited(place.Id));
+
+                if (place.IsAFight) written.Add(Content.World.FactName.Cleared(place.Id));
+
+                // a standing that is somebody the author let you kill dies as a durable fact
+                foreach (Standing standing in place.Standings)
+                {
+                    if (standing.IsAFoe) continue;
+
+                    Entity entity = Entities.Of(standing.Entity);
+
+                    if (entity != null && entity.Fights)
+                        written.Add(Content.World.FactName.Dead(entity.Local));
+                }
+
+                foreach (Trigger trigger in place.Triggers)
+                    if (trigger.Sets.Length > 0) written.Add(trigger.Sets);
+
+                // a door an author opens with a fact; derived at both ends so they cannot disagree
+                if (Maps.TryGetValue(place.Map, out MapLayout map))
+                    foreach (Border border in map.Borders)
+                        if (map.At(border) == Edge.Door)
+                            written.Add(Content.World.Exploring.DoorFact(place.Id, border));
+            }
+
+            foreach (Quest quest in Quests.All) written.Add(quest.AcceptedFact);
+
+            foreach (Road road in Roads.All)
+                foreach (Happening happening in road.Wayside)
+                {
+                    if (happening.Once) written.Add(happening.HappenedFact);
+
+                    if (happening.Sets.Length > 0) written.Add(happening.Sets);
+                }
+
+            return written;
+        }
+
+        void Reachable(IEnumerable<string> facts, HashSet<string> written, string file,
+                       string where, List<ContentProblem> problems)
+        {
+            foreach (string fact in facts)
+            {
+                if (fact.Length == 0 || written.Contains(fact)) continue;
+
+                problems.Add(new ContentProblem(
+                    file, where,
+                    $"nothing in this campaign ever makes '{fact}' true, so whatever waits on it " +
+                    "waits forever. The engine writes a fact for each thing it is asked to do - " +
+                    $"{Offered(Content.World.FactName.Aspects.Select(a => "<something>." + a))} - " +
+                    "and a trigger or a wayside event writes the rest"));
+            }
         }
 
         // shared gear counts here, unlike a monster's loot: the engine's axe is as portable as the class itself
@@ -536,12 +941,12 @@ namespace Content.Campaigns
                 }
             }
 
-            foreach (EncounterPlan plan in Encounters.All)
+            foreach (Place place in Places.All)
             {
-                string file = EncountersFolder + "/" + plan.Id + EncounterBook.Extension;
+                string file = PlacesIn(Folder) + "/" + place.Id + PlaceBook.Extension;
                 int at = 0;
 
-                foreach (Cue cue in plan.Cues)
+                foreach (Cue cue in place.Cues)
                 {
                     string where = $"cues[{at++}].beat";
 
@@ -685,7 +1090,7 @@ namespace Content.Campaigns
                     problem.File.Length > 0 ? problem.File : file,
                     problem.Where.Length > 0 ? problem.Where
                                              : $"foley.{set.Key.ToString().ToLowerInvariant()}",
-                    problem.What, problem.Line));
+                    problem.What, problem.Line, problem.How));
         }
 
         IEnumerable<string> Local(IEnumerable<string> scoped) => scoped
@@ -704,7 +1109,10 @@ namespace Content.Campaigns
             if (Failed) return $"{Id}: FAILED, {Problems.Count} problems";
 
             return $"{Id}: {Monsters.Ids.Count} monsters, {Items.Ids.Count} items, " +
-                   $"{Maps.Count} maps, {Encounters.Ids.Count} encounters" +
+                   $"{Maps.Count} maps, {Places.Count} places" +
+                   (Entities.Count > 0 ? $", {Entities.Count} entities" : "") +
+                   (Quests.Count > 0 ? $", {Quests.Count} quests" : "") +
+                   (Roads.Count > 0 ? $", {Roads.Count} roads" : "") +
                    (Minis.Ids.Count > 0 ? $", {Minis.Ids.Count} minis" : "") +
                    (Classes.Ids.Count > 0 ? $", {Classes.Ids.Count} classes" : "") +
                    (Kit.Ids.Count > 0 ? $", {Kit.Ids.Count} abilities" : "") +

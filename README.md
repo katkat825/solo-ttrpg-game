@@ -38,6 +38,7 @@ The PowerShell checks run headless and exit non-zero on failure. Each runs the r
 .\check-fight.ps1                                        # whole fights, played on the real table
 .\check-dialogue.ps1 [-ExpectSome]                       # every conversation plays, in both locales
 .\check-room.ps1                                         # the room boots, and has no menus in it
+.\check-world.ps1                                        # a whole world walked: places, verbs, a fight, a save
 ```
 
 ## Layout
@@ -99,7 +100,7 @@ Exactly one 1 in the pool is a **Snag**, which is cosmetic and just cues the com
 
 `core/` never references Godot. Headless tests and overnight balance runs both depend on it.
 
-Rules in code, world in data. The dice system stays hard-coded. Monsters, items, maps, encounters and dialogue are content and live in data files. If adding a campaign would mean touching it, it's content.
+Rules in code, world in data. The dice system stays hard-coded. Monsters, items, maps, places, the people standing in them, quests and dialogue are content and live in data files. If adding a campaign would mean touching it, it's content.
 
 Anything that's a policy decision goes behind an interface with a default implementation. `core.tests/SeamTests.cs` substitutes each seam from outside the library, so a test that stops compiling means I've welded one shut.
 

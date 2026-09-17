@@ -1,0 +1,23 @@
+[gd_scene load_steps=2 format=3]
+
+; The world check, on its own scene like the campaign check and the locale audit.
+;
+; check-campaign.ps1 asks whether a campaign folder is WELL FORMED. This asks whether the world in
+; it can be WALKED: enter every place, look at what the facts leave standing on it, do every verb
+; the author permitted, begin a fight and come back out of it into a map that is still there, take
+; every road, read the quest log off the facts - and then save, reload, and prove every place comes
+; back identically from base map + facts.
+;
+; That last line is the World layer's answer to the fairness sweep. You cannot chi-squared a town
+; (PLACES_AND_PERSISTENCE.md section 10), so what correct means here is the validator plus the
+; round trip, and this scene is the round trip.
+;
+; It needs no board, no tray and no dice - Content.World.Exploring is Godot-free on purpose, and
+; this whole check is the proof of that. The one thing the scene is here for is the translation
+; server, so a cue, a place name and a quest title can be read as a player would read them. Run it
+; with check-world.ps1.
+
+[ext_resource type="Script" path="res://Diagnostics/WorldCheck.cs" id="1_check"]
+
+[node name="WorldCheck" type="Node"]
+script = ExtResource("1_check")

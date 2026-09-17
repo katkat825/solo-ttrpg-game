@@ -6,7 +6,7 @@ using Core.Combat;
 using Core.Dice;
 using Core.Localization;
 using Core.Space;
-using Content.Encounters;
+using Content.Places;
 using Game.Board;
 using Game.Fight;
 using Game.Localization;
@@ -45,7 +45,7 @@ namespace Game.Diagnostics
         [Export] public string CampaignId { get; set; } = "ashfall";
 
         // one string names the encounter; everything else is read from the folder and checked against it
-        [Export] public string CampaignEncounter { get; set; } = "ash_yard";
+        [Export] public string CampaignPlace { get; set; } = "ash_yard";
 
         // reload is a second fresh table.tscn, so anything the restore forgot to say is simply not there
         [Export] public bool SaveAndReload { get; set; } = true;
@@ -231,7 +231,7 @@ namespace Game.Diagnostics
                     if (_campaignRoom)
                     {
                         room3.Campaign = CampaignId;
-                        room3.Encounter = CampaignEncounter;
+                        room3.Where = CampaignPlace;
                     }
                     else
                     {
@@ -356,11 +356,11 @@ namespace Game.Diagnostics
         // every expectation is read back from the plan and map, so this checks the game against the folder, not a list here
         void CheckTheRoomCameFromTheFile()
         {
-            EncounterPlan plan = _board.Plan;
+            Content.Places.Place plan = _board.Plan;
 
-            if (plan == null || plan.Id != CampaignEncounter)
+            if (plan == null || plan.Id != CampaignPlace)
             {
-                Problem($"the campaign fight asked for the encounter '{CampaignEncounter}' and " +
+                Problem($"the campaign fight asked for the encounter '{CampaignPlace}' and " +
                         $"the board is playing '{plan?.Id ?? "nothing"}' - it fell back to a map");
                 return;
             }
@@ -368,7 +368,7 @@ namespace Game.Diagnostics
             if (_board.Loaded == null ||
                 System.IO.Path.GetFullPath(_board.Loaded) != Planned())
             {
-                Problem($"'{CampaignEncounter}' is fought on {plan.Map} and the board loaded " +
+                Problem($"'{CampaignPlace}' is fought on {plan.Map} and the board loaded " +
                         $"'{_board.Loaded}' - it fell back to the map that ships");
                 return;
             }
@@ -397,7 +397,7 @@ namespace Game.Diagnostics
                 Problem($"{_hero.DebugName} started on {hero} and {plan.Map} starts him " +
                         $"on {map.Start}");
 
-            foreach (Placement placement in plan.Placements)
+            foreach (Standing placement in plan.Standings)
             {
                 string id = Content.Campaigns.ContentId.Scoped(CampaignId, placement.Monster);
                 Cell? want = map.SpawnAt(placement.Slot);
@@ -415,8 +415,8 @@ namespace Game.Diagnostics
                             $"'{id}' is standing on it");
             }
 
-            if (_fight.Foes.Count != plan.Placements.Count)
-                Problem($"'{plan.Id}' places {plan.Placements.Count} and the fight mustered " +
+            if (_fight.Foes.Count != plan.Standings.Count)
+                Problem($"'{plan.Id}' places {plan.Standings.Count} and the fight mustered " +
                         $"{_fight.Foes.Count}");
 
             _campaignRoomsFought++;
@@ -482,7 +482,7 @@ namespace Game.Diagnostics
                 if (node is BoardNode board)
                 {
                     board.Campaign = read.Campaign;
-                    board.Encounter = read.Encounter;
+                    board.Where = read.Place;
 
                     // a grown hero is base dice plus named steps: the reopened table is told the steps and re-derives the dice, never copying them
                     if (read.Hero != null)
@@ -641,14 +641,14 @@ namespace Game.Diagnostics
         // find the map through Library the way the game does, not by building a path; null when no campaign has that encounter
         string Planned()
         {
-            if (string.IsNullOrWhiteSpace(CampaignId) || string.IsNullOrWhiteSpace(CampaignEncounter))
+            if (string.IsNullOrWhiteSpace(CampaignId) || string.IsNullOrWhiteSpace(CampaignPlace))
                 return null;
 
             Game.Campaigns.Loaded campaign = Game.Campaigns.Library.Load(quiet: true).Campaign(CampaignId);
 
             if (campaign == null || campaign.Failed) return null;
 
-            EncounterPlan plan = campaign.Encounters.Of(CampaignEncounter);
+            Content.Places.Place plan = campaign.Places.Of(CampaignPlace);
 
             if (plan == null) return null;
 
@@ -835,8 +835,8 @@ namespace Game.Diagnostics
                 CampaignArmour = "";
             }
 
-            if (Game.Campaigns.Requested.Encounter.Length > 0)
-                CampaignEncounter = Game.Campaigns.Requested.Encounter;
+            if (Game.Campaigns.Requested.Place.Length > 0)
+                CampaignPlace = Game.Campaigns.Requested.Place;
 
             if (Plain) CastingHero = "";
         }
@@ -1024,6 +1024,12 @@ namespace Game.Diagnostics
 
             if (!piece.IsToppled)
                 Problem($"{actor.DebugName} went down and its piece is still on its feet");
+
+            // AND IT IS ON ITS WAY OFF. A body left lying where it fell is what the 2026-09-16 eye
+            // check found: by the third round the board was more bodies than squares.
+            if (!piece.BeingSweptUp && piece.Visible)
+                Problem($"{actor.DebugName} went down and its piece is not being taken off the " +
+                        "board - it will lie there for the rest of the fight");
         }
 
         // counted, not judged: a run should show all four spends reachable and nothing changing by itself

@@ -1,0 +1,19 @@
+{
+  "id": "the_cistern",
+  "map": "the_cistern",
+
+  "standing": [
+    { "slot": 1, "monster": "the_mother_stalk" },
+    { "slot": 2, "monster": "spore_thrall" },
+    { "slot": 3, "monster": "blight_rat" }
+  ],
+
+  "triggers": [
+    { "when": "cleared", "then": "ends" }
+  ],
+
+  "cues": [
+    { "when": "entered", "cue": "it_turns_to_look", "beat": "it_was_a_person" },
+    { "when": "cleared", "cue": "the_hollow_goes_quiet" }
+  ]
+}

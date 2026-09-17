@@ -73,16 +73,19 @@ namespace Content.Campaigns
 
     public sealed class Chapter
     {
-        public Chapter(string id, IReadOnlyList<string> encounters)
+        public Chapter(string id, IReadOnlyList<string> places)
         {
             Id = id;
-            Encounters = encounters ?? Array.Empty<string>();
+            Places = places ?? Array.Empty<string>();
         }
 
         public string Id { get; }
 
-        public IReadOnlyList<string> Encounters { get; }
+        // the places it is played in, in order. This was Encounters, and the rename is the whole
+        // reframe in one word: a chapter is a sequence of somewheres, and a fight is one of the
+        // things that can happen in one (PLACES_AND_PERSISTENCE.md section 1).
+        public IReadOnlyList<string> Places { get; }
 
-        public override string ToString() => $"{Id}: {string.Join(", ", Encounters)}";
+        public override string ToString() => $"{Id}: {string.Join(", ", Places)}";
     }
 }

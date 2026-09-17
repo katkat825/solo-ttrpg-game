@@ -1,0 +1,60 @@
+{
+  //  A PLACE — somewhere that exists, who and what is standing in it, and the ways out.
+  //
+  //  A place owns its map. A fight is one of the things that can happen in a place, not the
+  //  reason the map exists. This one is the degenerate case — everything standing on it is a
+  //  foe, so it is exactly what an "encounter" used to be. See example_square.json for the
+  //  other kind: somewhere with people in it that you can come back to.
+
+  "id": "example_room",   // [REQUIRED] local id; a chapter names the place by it, and so does
+                          //            every exit that leads here. Its name on the paper map is
+                          //            the key quest.<campaign>.<id>.name in locale/.
+  "map": "example_room",  // [REQUIRED] a file in maps/ (without .map)
+
+  // [OPTIONAL] standing — who and what is on the map.
+  //   slot    : a spawn number drawn on the map (1-9)
+  //   monster : a monster id from this campaign's monsters/ (bare, e.g. "example_grunt")
+  //   entity  : OR an entity id from this campaign's entities/ — somebody to deal with rather
+  //             than something to fight. One square holds one of the two.
+  //   when    : [opt] facts that must all be true for this to be here
+  //   unless  : [opt] facts that must none of them be true
+  "standing": [
+    { "slot": 1, "monster": "example_pest" },
+    { "slot": 2, "monster": "example_grunt" }
+  ],
+
+  // [OPTIONAL] exits — the ways out, each a square you step onto.
+  //   slot     : the spawn number you leave from
+  //   to       : the id of a place in this campaign
+  //   arriving : [opt] the spawn you appear on over there; leave it out for that place's start
+  //   road     : [opt] a road id from roads/, for a journey with a chance of something on it
+  //   when / unless : [opt] a locked door is an exit whose requirement is not met yet
+  "exits": [
+    { "slot": 3, "to": "example_square", "arriving": 4 }
+  ],
+
+  // [OPTIONAL] triggers — what happens at a moment.
+  //   when : entered | cleared | fact (add "fact": "<a fact>")
+  //   then : next (the next place in the chapter) | ends (end the chapter)
+  //          | goto (add "place": "<id>")
+  //          | set / clear (add "sets": "<a fact>") — write a fact of your own
+  "triggers": [
+    { "when": "cleared", "then": "next" }
+  ],
+
+  // [OPTIONAL] cues — DM stage directions (flavor). A cue's line is a locale key:
+  //            dialogue.dm.narration.<campaign>.<cue>.
+  //   when     : entered | cleared | fact (add "fact": "<a fact>", and it fires when that
+  //              fact becomes true — which is how a place reacts to something that happened
+  //              somewhere else)
+  //   cue      : a local id (also the last segment of its narration key)
+  //   gesture  : [opt] default 'push'. place, slide, push, tap, reachbehind, rest, withdraw, tack, turnpage, write, idle
+  //   hesitant : [opt] true only on a 'place' (a beat before the mini goes down)
+  //   at       : [opt] a spawn slot, only for gestures at a square (place, tap, slide)
+  "cues": [
+    // [OPTIONAL] "beat" - a beat from beats/ that whichever companion is at
+    //            this table answers this moment with, in its own voice. A
+    //            'plot' or 'hint' beat nothing reaches is refused at load.
+    { "when": "entered", "cue": "room_opens", "beat": "warn_the_floor_is_thin" }
+  ]
+}

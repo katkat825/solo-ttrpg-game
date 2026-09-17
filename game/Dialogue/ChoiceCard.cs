@@ -98,6 +98,9 @@ namespace Game.Dialogue
             Said = text ?? "";
 
             _text.Text = Said;
+
+            // the same tilt every card with words on it gets; see Game.Room.TableView
+            Game.Room.TableView.Face(this);
             _text.Modulate = offered ? Ink : new Color(Ink, 0.5f);
             _paper.AlbedoColor = offered ? Face : Closed;
         }

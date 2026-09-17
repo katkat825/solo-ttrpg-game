@@ -1,0 +1,9 @@
+{
+  "id": "marsh_jack",
+  "tier": "rabble",
+  "vigor": 2,
+  "defense": 9,
+  "attributes": { "might": "d6" },
+  "gear": { "id": "gaff", "die": "d6" },
+  "loot": [ { "weight": 3 }, { "item": "tide_glass", "weight": 1 } ]
+}

@@ -1,5 +1,5 @@
 using System.Linq;
-using Content.Encounters;
+using Content.Places;
 using Content.Schema;
 using Core.Localization;
 using Xunit;
@@ -8,17 +8,17 @@ namespace Content.Tests
 {
     public sealed class CueTests
     {
-        static Read<EncounterPlan> Parse(string cues) =>
-            EncounterReader.Parse(@"{
+        static Read<Content.Places.Place> Parse(string cues) =>
+            PlaceReader.Parse(@"{
                 ""id"": ""yard"",
                 ""map"": ""yard"",
                 ""placements"": [ { ""slot"": 1, ""monster"": ""ghoul"" } ],
                 ""cues"": " + cues + @"
             }", "yard.json");
 
-        static EncounterPlan Good(string cues)
+        static Content.Places.Place Good(string cues)
         {
-            Read<EncounterPlan> read = Parse(cues);
+            Read<Content.Places.Place> read = Parse(cues);
 
             Assert.True(read.Ok, string.Join("; ", read.Problems.Select(p => p.ToString())));
 
@@ -27,7 +27,7 @@ namespace Content.Tests
 
         static string Why(string cues)
         {
-            Read<EncounterPlan> read = Parse(cues);
+            Read<Content.Places.Place> read = Parse(cues);
 
             Assert.False(read.Ok, "this was supposed to be refused");
 
@@ -73,7 +73,7 @@ namespace Content.Tests
 
 
         [Fact]
-        public void OnlyAPlacementCanHesitate()
+        public void OnlyAStandingCanHesitate()
         {
             Assert.True(Good(@"[ { ""when"": ""entered"", ""cue"": ""x"", ""gesture"": ""place"",
                                    ""hesitant"": true } ]").Cues.Single().Hesitant);
@@ -134,7 +134,7 @@ namespace Content.Tests
         [Fact]
         public void TheCuesForAMomentComeBackInTheOrderTheAuthorWroteThem()
         {
-            EncounterPlan plan = Good(@"[
+            Content.Places.Place plan = Good(@"[
                 { ""when"": ""entered"", ""cue"": ""first"", ""gesture"": ""place"", ""at"": 1 },
                 { ""when"": ""cleared"", ""cue"": ""last"" },
                 { ""when"": ""entered"", ""cue"": ""second"", ""gesture"": ""tap"", ""at"": 1 }

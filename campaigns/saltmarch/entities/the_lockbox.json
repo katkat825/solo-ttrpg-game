@@ -1,0 +1,15 @@
+// Not everything with a verb on it is somebody. A lockbox is an entity with two verbs and a loot
+// table, and 'search' leaves the table the moment the_lockbox.looted is true.
+{
+  "id": "the_lockbox",
+
+  "can": {
+    "examine": "the_lockbox_on_the_boards",
+    "search": null
+  },
+
+  "loot": [
+    { "item": "tide_glass", "weight": 1 },
+    { "weight": 2 }
+  ]
+}

@@ -1,0 +1,17 @@
+// THE MAIN QUEST-GIVER PROBLEM, solved by the author rather than by the engine.
+//
+// Norrel is marked attackable, so he CAN be murdered - and if he is, he is dead, the grave appears
+// on the quay, and the errand reads as FAILED rather than sitting in the log forever saying 'go
+// back to Norrel'. Taking "attack" off this file is all it would take to make him unkillable
+// instead, and nothing else in the campaign would change (PLACES_AND_PERSISTENCE.md section 4).
+{
+  "id": "norrel",
+
+  "monster": "norrel_at_bay",
+
+  "can": {
+    "talk": "norrel_at_the_quay",
+    "examine": "norrel_looks_you_over",
+    "attack": null
+  }
+}

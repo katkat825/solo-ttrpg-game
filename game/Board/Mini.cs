@@ -156,8 +156,64 @@ namespace Game.Board
 
         bool _toppled;
 
+
+        // TAKEN OFF THE TABLE (the eye check, 2026-09-16). A toppled piece used to lie where it
+        // fell for the rest of the fight - "freed from the grid but left toppled where it fell" -
+        // and by the third round the board was more bodies than squares.
+        //
+        // The fall still registers: it topples, it LIES there for a beat, and then it is lifted
+        // away, because that is what happens at a table. A real GM scoops the dead off as they go,
+        // and the floor of a dungeon is not a diorama of everything you have ever killed.
+        //
+        // It is HIDDEN rather than freed. A Piece holds this node and a save rebuilds the fight
+        // from the actors, so freeing it here would leave a dangling reference for the sake of one
+        // object that costs nothing to keep.
+
+        // toppled and left there, so the fall is seen before the hand comes for it
+        public const double SweptAfter = 0.8;
+
+        // and then off, in one unhurried movement
+        public const double SweptOver = 0.35;
+
+        double _sweeping = -1.0;
+
+        Vector3 _sweptFrom;
+
+        public bool BeingSweptUp => _sweeping >= 0.0;
+
+        public void SweepUp()
+        {
+            if (!_toppled || _sweeping >= 0.0 || !Visible) return;
+
+            _sweeping = SweptAfter + SweptOver;
+            _sweptFrom = Position;
+        }
+
+        // counted down in _Process rather than ended with a tween callback, for the reason
+        // Bubble.cs spells out at its own line: a Callable.From(...) holds a C# delegate alive on
+        // Godot's side, and one per piece killed is one per piece leaked
+        void Sweeping(double delta)
+        {
+            _sweeping -= delta;
+
+            if (_sweeping <= 0.0)
+            {
+                _sweeping = -1.0;
+                Visible = false;
+                return;
+            }
+
+            if (_sweeping >= SweptOver) return;
+
+            float gone = 1f - (float)(_sweeping / SweptOver);
+
+            Position = _sweptFrom + new Vector3(0f, gone * FigureHeight * 1.4f, 0f);
+        }
+
         public override void _Process(double delta)
         {
+            if (_sweeping >= 0.0) { Sweeping(delta); return; }
+
             if (_step == null) return;
 
             float was = _elapsed;

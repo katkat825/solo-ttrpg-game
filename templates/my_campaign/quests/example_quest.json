@@ -1,0 +1,28 @@
+{
+  //  A QUEST — a named view over facts, and nothing else is stored anywhere.
+  //
+  //  Its title and description are the keys quest.<campaign>.<id>.title and .description.
+  //  Accepting it sets the fact <id>.accepted, and that is all "accepting" is.
+  //
+  //  Because it is only a view, "accept the errand, then murder the person who set it" resolves
+  //  itself: the turn-in depends on them, the fact makes it unreachable, and the log says FAILED
+  //  instead of sitting there forever telling the player to go back to somebody who is dead.
+
+  "id": "example_quest",
+
+  // [OPTIONAL] offered — when the player may know about it at all. Leave it out for one the
+  //            campaign opens with.
+  "offered": { "when": [ "example_person.spoken" ] },
+
+  // [REQUIRED] done — what completing it means, as facts. Every fact in "when" must be true and
+  //            none of the facts in "unless" may be.
+  "done": {
+    "when": [ "example_chest.looted" ],
+    "unless": [ "example_person.dead" ]
+  },
+
+  // [OPTIONAL] failed — leave it out for a quest that cannot fail. check-campaign.ps1 raises a
+  //            CAUTION (not a refusal) when a turn-in depends on somebody you let the player
+  //            kill and there is no failed clause to catch it.
+  "failed": { "when": [ "example_person.dead" ] }
+}

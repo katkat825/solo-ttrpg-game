@@ -275,7 +275,7 @@ namespace Game.Diagnostics
 
             GD.Print($"        the hands did {Game.Sheet.Sheet.Reading.Count} things with it: " +
                      string.Join(", ", Game.Sheet.Sheet.Reading.Select(
-                         Content.Encounters.Gestures.Word)));
+                         Content.Places.Gestures.Word)));
         }
 
         // R0's verify list, as arithmetic: change a starting attribute on the sheet and the dice

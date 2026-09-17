@@ -1,0 +1,13 @@
+// THE CLEAN EXAMPLE OF THE WHOLE ARCHITECTURE.
+//
+// The engine remembers that Norrel is dead. The author, optionally, layers meaning on top of it.
+// The engine never invents the grave and the author never has to poll for the death - the quay
+// stands this on slot 3 with a "when": [ "norrel.dead" ] and that is the entire mechanism
+// (PLACES_AND_PERSISTENCE.md section 5).
+{
+  "id": "norrels_grave",
+
+  "can": {
+    "examine": "somebody_dug_it_fast"
+  }
+}

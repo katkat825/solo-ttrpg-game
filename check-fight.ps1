@@ -30,13 +30,15 @@
     SIMULATION.md section 5.
 
 .PARAMETER Campaign
-    Which campaign's encounter to play as the first fight. Defaults to whatever FightCheck names,
+    Which campaign's place to play the first fight in. Defaults to whatever FightCheck names,
     which is the one that ships. Pass a campaign id to play somebody else's - the second-campaign
     test (CONTENT_PIPELINE.md P7) is what this exists for, and it exists because that test found
     that a campaign could only be chosen by editing a scene.
 
-.PARAMETER Encounter
-    Which encounter in it. Defaults to FightCheck's own.
+.PARAMETER Place
+    Which place in it. Defaults to FightCheck's own. -Encounter is the old spelling and still
+    works, because a place whose standings are all foes IS what an encounter was
+    (PLACES_AND_PERSISTENCE.md section 2).
 
 .PARAMETER Hero
     Which hero to play it as - an archetype id. Defaults to whatever the scene names, which is the
@@ -62,7 +64,7 @@
     .\check-fight.ps1 -Fights 10
 
 .EXAMPLE
-    .\check-fight.ps1 -Campaign greyhollow -Encounter the_cistern
+    .\check-fight.ps1 -Campaign greyhollow -Place the_cistern
 
 .EXAMPLE
     .\check-fight.ps1 -Hero hearthguard.warden
@@ -72,7 +74,8 @@ param(
     [int] $Fights,
     [switch] $Plain,
     [string] $Campaign,
-    [string] $Encounter,
+    [Alias('Encounter')]
+    [string] $Place,
     [string] $Hero,
     [string] $Grown,
     [string] $Godot
@@ -92,7 +95,7 @@ $userArgs = @()
 if ($PSBoundParameters.ContainsKey('Fights')) { $userArgs += "--fights=$Fights" }
 if ($Plain) { $userArgs += '--plain' }
 if ($Campaign) { $userArgs += "--campaign=$Campaign" }
-if ($Encounter) { $userArgs += "--encounter=$Encounter" }
+if ($Place) { $userArgs += "--place=$Place" }
 if ($Hero) { $userArgs += "--hero=$Hero" }
 if ($Grown) { $userArgs += "--grown=$Grown" }
 

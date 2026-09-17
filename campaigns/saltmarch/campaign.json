@@ -1,0 +1,14 @@
+{
+  "id": "saltmarch",
+  "format": 2,
+  "engine": "0.4",
+  "author": "the house",
+  "tags": [ "coastal", "short", "world" ],
+  "dependencies": [],
+
+  "chapters": [
+    { "id": "the_errand", "places": [ "the_quay", "the_weir" ] }
+  ],
+
+  "start": "the_errand"
+}

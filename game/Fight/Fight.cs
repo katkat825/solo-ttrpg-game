@@ -131,6 +131,9 @@ namespace Game.Fight
 
         TurnOrder _order;
 
+        // the round the DM last reached behind the screen in; -1 is "not yet this fight"
+        int _rattled = -1;
+
         // dice in the air are the initiative throw, not a blow
         bool _rollingOrder;
 
@@ -360,9 +363,9 @@ namespace Game.Fight
             _order.Write(_fight.Order, _board.Metrics);
 
             // no campaign means no plan and the DM does nothing, which is correct not a gap
-            _dm?.Perform(_board.Plan, Content.Encounters.When.Entered, _board.Campaign);
+            _dm?.Perform(_board.Plan, Content.Places.When.Entered, _board.Campaign);
 
-            Prompt(Content.Encounters.When.Entered);
+            Prompt(Content.Places.When.Entered);
 
             GD.Print("");
             GD.Print("order   " + string.Join(", ", _fight.Order.Select(
@@ -1208,11 +1211,11 @@ namespace Game.Fight
         // The cues at this moment that name a beat of the shared spine (W5). Which companion is at
         // the table changes the PHRASING and nothing else - and where this one has no phrasing,
         // the DM says it, so the information reaches the player either way.
-        void Prompt(Content.Encounters.When moment)
+        void Prompt(Content.Places.When moment)
         {
             if (_board?.Plan == null || _board.Campaign.Length == 0) return;
 
-            foreach (Content.Encounters.Cue cue in _board.Plan.CuesFor(moment))
+            foreach (Content.Places.Cue cue in _board.Plan.CuesFor(moment))
             {
                 if (!cue.Prompts) continue;
 
@@ -1240,13 +1243,13 @@ namespace Game.Fight
             if (_fight is { IsOver: true } && !_cleared)
             {
                 _cleared = true;
-                _dm?.Perform(_board.Plan, Content.Encounters.When.Cleared, _board.Campaign);
+                _dm?.Perform(_board.Plan, Content.Places.When.Cleared, _board.Campaign);
 
                 if (_hero.IsDown) _friend?.SeesTheHeroDown();
                 else _friend?.SeesTheRoomCleared();
 
                 // the beat every companion at this table has its own phrasing of (W5)
-                Prompt(Content.Encounters.When.Cleared);
+                Prompt(Content.Places.When.Cleared);
             }
 
             // only at an idle table: a rattle on top of a swing is a sound effect, not a tell
@@ -1293,8 +1296,21 @@ namespace Game.Fight
 
             if (Reaches(from.Value, to.Value))
             {
-                _dm?.RollsForSomething();
-                _friend?.HearsASecretRoll();
+                // ONCE A ROUND, NOT ONCE A SWING (the eye check, 2026-09-16). A foe's attack is a
+                // roll the player genuinely cannot see - the hero's dice go on the tray and the
+                // foes' do not - so a rattle behind the screen is the right sound for it. Firing
+                // it per swing is what was wrong: four Rabble and a Rival is five rattles a round,
+                // back to back, and a sound that happens five times a round is furniture.
+                //
+                // A real DM picks the dice up once and rolls the room's attacks together, which is
+                // both the fix and the reason it is the right fix.
+                if (_rattled != _fight.Round)
+                {
+                    _rattled = _fight.Round;
+
+                    _dm?.RollsForSomething();
+                    _friend?.HearsASecretRoll();
+                }
 
                 _fight.Strike(prey, foe.Tier.AttackAttr(), foe.Tier.AttackSkill());
                 Refresh();

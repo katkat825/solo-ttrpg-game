@@ -23,7 +23,7 @@ namespace Game.Saves
             var save = new SaveGame
             {
                 Campaign = board?.Campaign ?? "",
-                Encounter = board?.Encounter ?? "",
+                Place = board?.Where ?? "",
                 Chapter = ChapterOf(board),
                 CampaignFormat = FormatOf(board),
             };
@@ -137,10 +137,10 @@ namespace Game.Saves
         {
             Content.Campaigns.Manifest manifest = ManifestOf(board);
 
-            if (manifest == null || board.Encounter.Length == 0) return "";
+            if (manifest == null || board.Where.Length == 0) return "";
 
             foreach (Content.Campaigns.Chapter chapter in manifest.Chapters)
-                if (chapter.Encounters.Contains(board.Encounter)) return chapter.Id;
+                if (chapter.Places.Contains(board.Where)) return chapter.Id;
 
             return manifest.Start;
         }

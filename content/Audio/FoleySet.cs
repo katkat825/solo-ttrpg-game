@@ -79,7 +79,7 @@ namespace Content.Audio
                 {
                     // re-named so the author sees their folder, not this machine's absolute path
                     foreach (ContentProblem problem in read.Problems)
-                        problems.Add(new ContentProblem(name, problem.Where, problem.What, problem.Line));
+                        problems.Add(new ContentProblem(name, problem.Where, problem.What, problem.Line, problem.How));
 
                     continue;
                 }

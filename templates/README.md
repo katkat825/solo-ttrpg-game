@@ -9,7 +9,7 @@ Draft here; move to `campaigns/` when it's ready to play.
 
 | Template | What it is | Copy it to |
 |---|---|---|
-| `my_campaign/` | a playable campaign (chapters, encounters, maps, monsters, items) | `campaigns/<your-id>/` |
+| `my_campaign/` | a playable campaign (chapters, places, maps, monsters, items, people, quests, roads) | `campaigns/<your-id>/` |
 | `my_classes/`  | a class pack (playable hero classes + their abilities) | `campaigns/<your-id>/` |
 | `my_minis/`    | a mini pack (figures other packs can stand on the board) | `campaigns/<your-id>/` |
 
@@ -31,9 +31,12 @@ Draft here; move to `campaigns/` when it's ready to play.
 campaigns/<id>/
   campaign.json          the manifest (id, engine, chapters). REQUIRED.
   locale/<id>.csv        every player-facing string, by key. REQUIRED.
-  encounters/*.json      one per encounter (a room + who's in it + what happens).
-  maps/*.map             one per room (ASCII grid). Named by an encounter's "map".
-  monsters/*.json        one per foe (statblock). Named by a placement's "monster".
+  places/*.json          one per place (a map + who is standing in it + the ways out).
+  maps/*.map             one per place (ASCII grid). Named by a place's "map".
+  monsters/*.json        one per foe (statblock). Named by a standing's "monster".
+  entities/*.json        one per person or thing you can deal with, and what you may do (optional).
+  quests/*.json          one per quest - a named view over facts (optional).
+  roads/*.json           one per road between two places, and what can happen on it (optional).
   items/*.json           one per weapon/armor (optional).
   dialogue/*.yarn        conversations, and camp scenes (optional).
   beats/*.json           the shared spine: intents every companion must deliver (optional).
@@ -96,9 +99,49 @@ tells you which line is missing which word.
 | `actor.<id>.<monster>.name` / `.name_numbered` | a monster (numbered handles two of the same, `"Ghoul {0}"`) |
 | `gear.<gearid>.name` | a weapon or armor (gear ids are global — no pack segment) |
 | `dialogue.dm.narration.<id>.<cue>` | a cue's line (only cues whose gesture carries words) |
+| `quest.<id>.<place>.name` | a place's name |
+| `quest.<id>.<road>.name` | a road's name |
+| `quest.<id>.<quest>.title` / `.description` | a quest |
+| `actor.<id>.<entity>.name` | a person or thing standing in a place |
+| `dialogue.dm.narration.<id>.<line>` | an entity's `examine` line, and a road event's line |
+
+A campaign's **chapters, places, quests and roads all name themselves under `quest.<id>.*`**, and
+its **monsters and entities both under `actor.<id>.*`** — so two of them sharing an id is refused
+at load, because one of the two names would be written, translated and never seen.
 
 Class packs also use `class.<pack>.<class>.name` / `.description` and
 `ability.<pack>.<ability>.name` / `.description`; mini packs use `mini.<pack>.<mini>.name`.
+
+## Facts, and what they are for
+
+A **fact** is one thing that is true and stays true: `bob.dead`, `chest.looted`, `door.open`. It is
+the only thing the game remembers about your world. Everything else — where the minis were
+standing, the body on the floor, the dice on the felt — is rebuilt from the place and thrown away,
+which is why a save is small and why a corpse does not follow the player around for six months.
+
+**A place, entered, is base map + facts applied.** Bob stands where your place puts him *unless*
+`bob.dead`. The grave is not there *until* it. You write that with `when` / `unless` on a standing,
+on an exit, or in a quest clause.
+
+**The engine writes its own facts and derives their names**, so you never spell one it set:
+
+| Fact | Written when |
+|---|---|
+| `<entity>.dead` | it was attacked and lost |
+| `<entity>.spoken` | you talked to it |
+| `<entity>.looted` | you searched it |
+| `<entity>.open` | you opened it |
+| `<place>.visited` | you walked in, the first time |
+| `<place>.cleared` | a fight there ended with the foes down |
+| `<quest>.accepted` | the quest was accepted |
+| `<event>.happened` | a `"once": true` road event fired |
+
+Anything else is yours, written by a trigger (`"then": "set"`) or a road event (`"sets"`). A fact
+name is lowercase `a-z 0-9 _` in up to four dotted parts.
+
+**If nothing in your campaign can ever make a fact true, saying so is a load error** — a standing
+or a quest waiting on a fact nobody writes waits forever, and that is the mistake that compiles
+perfectly and is invisible at the table.
 
 ## Valid values (the closed vocabularies)
 
@@ -110,8 +153,10 @@ Class packs also use `class.<pack>.<class>.name` / `.description` and
 | conditions | `winded` (might) · `reeling` (grace) · `rattled` (wits) · `shaken` (heart) |
 | monster tier | `rabble` · `rival` · `dread` |
 | behaviour | `rabble_first` · `strongest_first` |
-| trigger `when` | `entered` · `cleared` |
-| trigger `then` | `next` · `ends` · `goto` (with `"encounter"`) |
+| trigger `when` | `entered` · `cleared` · `fact` (with `"fact"`) |
+| trigger `then` | `next` · `ends` · `goto` (with `"place"`) · `set` / `clear` (with `"sets"`) |
+| cue `when` | `entered` · `cleared` · `fact` (with `"fact"`) |
+| entity `can` | `talk` · `attack` · `examine` · `open` · `search` |
 | cue gesture | `place` `slide` `push` `tap` `reachbehind` `rest` `withdraw` `tack` `turnpage` `write` `idle` |
 | pack `kind` | `campaign` · `minis` · `classes` · `mixed` |
 | ability `primitive` | `check` · `channel` |
@@ -130,7 +175,8 @@ start with `;`. Width and height (in characters) are both **odd**, minimum 3. Ex
 
 ```
 squares:  .  floor    ~  difficult ground    #  rock (blocks)    @  hero start (exactly one)
-          1-9  a numbered spawn slot (an encounter's placements say who stands on each)
+          1-9  a numbered spawn slot (a place's standings say who or what is on each,
+               and its exits say which one is the way out)
 lines:    (space) open    |  wall up a line    -  wall along a line    x  shut door    +  corner
 ```
 
@@ -145,6 +191,7 @@ Build first (`dotnet build game`, or `dotnet test`), then from the repo root:
 .\check-campaign.ps1     # every campaign/pack folder: schema + cross-references, each problem named
 .\check-locale.ps1       # every key has text, every string has a key
 .\check-maps.ps1         # every shipped map parses
+.\check-world.ps1        # walk the whole world: places, verbs, a fight in and out, roads, a save
 ```
 
 `check-campaign.ps1` runs the same loader the game uses, so it can't pass something the game then

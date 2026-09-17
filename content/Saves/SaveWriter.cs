@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -23,7 +24,19 @@ namespace Content.Saves
                 json.WriteString("campaign", save.Campaign ?? "");
                 json.WriteNumber("campaign_format", save.CampaignFormat);
                 json.WriteString("chapter", save.Chapter ?? "");
-                json.WriteString("encounter", save.Encounter ?? "");
+                json.WriteString("place", save.Place ?? "");
+
+                // ordinal, so two saves of the same world are the same file and a diff is readable
+                if (save.Facts.Count > 0)
+                {
+                    json.WritePropertyName("facts");
+                    json.WriteStartArray();
+
+                    foreach (string fact in save.Facts.OrderBy(f => f, System.StringComparer.Ordinal))
+                        json.WriteStringValue(fact ?? "");
+
+                    json.WriteEndArray();
+                }
 
                 json.WriteNumber("round", save.Round);
                 json.WriteNumber("turn", save.Turn);

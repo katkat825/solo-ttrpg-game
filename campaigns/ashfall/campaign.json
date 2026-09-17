@@ -1,12 +1,12 @@
 {
   "id": "ashfall",
-  "format": 1,
+  "format": 2,
   "engine": "0.4",
   "author": "the house",
   "tags": [ "undead", "short" ],
   "dependencies": [ "ashen_minis" ],
   "chapters": [
-    { "id": "the_yard", "encounters": [ "ash_yard" ] }
+    { "id": "the_yard", "places": [ "ash_yard" ] }
   ],
   "start": "the_yard"
 }

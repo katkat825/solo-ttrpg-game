@@ -1,0 +1,13 @@
+{
+  "id": "the_marsh_road",
+  "map": "the_marsh_road",
+
+  "standing": [
+    { "slot": 1, "monster": "marsh_jack" },
+    { "slot": 2, "monster": "marsh_jack" }
+  ],
+
+  "cues": [
+    { "when": "entered", "cue": "they_were_waiting_at_the_ford" }
+  ]
+}

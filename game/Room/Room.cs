@@ -35,6 +35,10 @@ namespace Game.Room
 
         public const string FolderName = "saves";
 
+        // THE ONE LIGHT IN THE ROOM. Exported and actually applied - until the eye check these
+        // two were declared here, documented as the room owning the light, and read by nothing.
+        [Export] public NodePath LampPath { get; set; } = "Lamp";
+
         [Export] public Color Lamp { get; set; } = new Color("#ffd9a8");
 
         [Export] public float LampEnergy { get; set; } = 3.2f;
@@ -88,11 +92,64 @@ namespace Game.Room
             foreach (Content.Schema.ContentProblem problem in _shelf.Problems)
                 GD.PushWarning("saves: " + problem);
 
+            OwnTheLight();
+
             Stand();
 
             if (_table == null)
                 GD.PushWarning($"room: no table at '{TablePath}' - the room is furniture with " +
                                "nothing to play on");
+        }
+
+        // ONE LIGHT SOURCE, AND THE ROOM IS THE ONE THAT HAS IT (THE_TABLE.md section 6).
+        //
+        // table.tscn carries a sun and a world environment of its own, and it has to: it opens and
+        // plays on its own, and every check script since B0 has run against it that way. Inside a
+        // room those are a SECOND sun and a SECOND sky, both additive, and the eye check saw
+        // exactly what that looks like - "the lighting is way too bright on the grid map", because
+        // the board sits directly under the lamp and was getting a full directional light on top
+        // of it.
+        //
+        // So the room turns them off as it takes the table in. The table is not changed and does
+        // not know: open table.tscn by itself and its own sun is still there.
+        void OwnTheLight()
+        {
+            var lamp = LampPath != null && !LampPath.IsEmpty
+                ? GetNodeOrNull<OmniLight3D>(LampPath)
+                : null;
+
+            if (lamp != null)
+            {
+                lamp.LightColor = Lamp;
+                lamp.LightEnergy = LampEnergy;
+            }
+            else
+            {
+                GD.PushWarning($"room: no lamp at '{LampPath}' - the room is lit by its ambient " +
+                               "alone, which is not a room at night, it is a fog");
+            }
+
+            if (_table == null) return;
+
+            int doused = 0;
+
+            foreach (Node child in _table.GetChildren())
+            {
+                if (child is DirectionalLight3D sun && sun.Visible)
+                {
+                    sun.Visible = false;
+                    doused++;
+                }
+
+                if (child is WorldEnvironment sky && sky.Environment != null)
+                {
+                    sky.Environment = null;
+                    doused++;
+                }
+            }
+
+            GD.Print($"room    one lamp at {LampEnergy:0.0}, and {doused} of the table's own light " +
+                     "source(s) put out - a table indoors is lit by the room it is in");
         }
 
         // every Furniture anywhere under the room, so the scene decides where things stand and this

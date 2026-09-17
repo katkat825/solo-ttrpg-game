@@ -1,0 +1,31 @@
+{
+  //  A ROAD — two places, and a weighted table of what might happen on the way.
+  //
+  //  Travel is routes between places, not a scene type. The table is not a new idea: loot is a
+  //  weighted table that resolves to items, and a leg of a journey is one that resolves to
+  //  EVENTS — most of which are not fights. A merchant, a lost child, a shrine, a wounded
+  //  traveller, strange tracks, a broken bridge.
+  //
+  //  MOST OF A GOOD TABLE IS THE EMPTY ENTRY. That one is "narrate and arrive".
+
+  "id": "example_road",     // its name on the paper map is quest.<campaign>.<id>.name
+
+  "from": "example_square",
+  "to": "example_room",
+
+  "wayside": [
+    // nothing happened, and you arrive. Weight it heavily.
+    { "weight": 6 },
+
+    // something happened, without stopping the journey. Its line is the key
+    // dialogue.dm.narration.<campaign>.<event>.
+    //   once : a hand-authored one-shot that leaves the table after it fires
+    //   sets : [opt] a fact of your own, now true
+    //   when / unless : [opt] facts that decide whether this is in the table at all
+    { "event": "a_boat_on_the_bank", "weight": 1, "once": true },
+
+    // something happened, and travel STOPS: you are put into a place. That place may have foes
+    // standing on it, or a person, or a shrine — the table does not care which.
+    { "event": "trouble_at_the_ford", "weight": 1, "place": "example_room" }
+  ]
+}

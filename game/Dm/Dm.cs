@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Content.Encounters;
+using Content.Places;
 using Core.Dice;
 using Core.Localization;
 using Game.Localization;
@@ -26,6 +26,22 @@ namespace Game.Dm
 
         // the DM's own rng stream: rolling for nothing must not move the dice a swing is about to get, and a seeded run must stay reproducible
         [Export] public int Seed { get; set; }
+
+        // HOW OFTEN THE DM ROLLS FOR NOTHING, exported because the only way to tune a presence is
+        // to sit at the table moving the number (DEFERRED.md says exactly this about every DM
+        // timing). The eye check found the shipped pair - a 9 second rest and a 0.18 chance per
+        // second, so a rattle every ~15 seconds - was a nervous tic rather than a presence, which
+        // is the failure SecretRoll's own comment warns about. These two average one rattle a
+        // minute or so: Rest + 1/Chance seconds between them.
+        [Export] public float RollsForNothingEvery { get; set; } = 30f;
+
+        [Export] public float RollsForNothingChance { get; set; } = 0.025f;
+
+        // where a pushed note comes to rest, in the DM's own space: across the table toward the
+        // player, short of the board, where you would reach for it
+        [Export] public Vector3 NoteLands { get; set; } = new Vector3(0.02f, 0.045f, 0.72f);
+
+        Game.Companion.Bubble _note;
 
         // transcript of what the DM did, for a headless check; developer diagnostics, not localized
         readonly List<string> _performed = new List<string>();
@@ -59,10 +75,34 @@ namespace Game.Dm
 
             if (BoardPath != null && !BoardPath.IsEmpty) _board = GetNodeOrNull<Board.Board>(BoardPath);
 
-            _secret = new SecretRoll(new SeededRng(Seed != 0 ? Seed : (int)Time.GetTicksMsec()));
+            _note = GetNodeOrNull<Game.Companion.Bubble>("Note");
+
+            if (_note == null)
+            {
+                // THE WORDS THE DM PUSHES ACROSS. Until the eye check there was no such object:
+                // Says() moved a hand, printed the line to the console and put a blank card on the
+                // table - which is the "empty white-ish rectangle" the check found, and it had no
+                // words because nothing was ever asked to carry any.
+                _note = new Game.Companion.Bubble
+                {
+                    Name = "Note",
+                    Position = NoteLands,
+
+                    // a scrap torn off a pad, not the companion's card: smaller, greyer, and it
+                    // stays up long enough to be read across a table
+                    Width = 0.26f,
+                    Card = new Color(0.86f, 0.83f, 0.74f, 0.97f),
+                    Ink = new Color("#241f18"),
+                };
+
+                AddChild(_note);
+            }
+
+            _secret = new SecretRoll(new SeededRng(Seed != 0 ? Seed : (int)Time.GetTicksMsec()),
+                                     RollsForNothingEvery, RollsForNothingChance);
         }
 
-        public void Perform(EncounterPlan plan, When moment, string campaign)
+        public void Perform(Content.Places.Place plan, When moment, string campaign)
         {
             if (plan == null) return;
 
@@ -88,7 +128,16 @@ namespace Game.Dm
             GD.Print($"dm      {cue.Id}: {(cue.Hesitant ? "hesitantly " : "")}{cue.Does.Word()}" +
                      (cue.Slot > 0 ? $" at slot {cue.Slot}" : ""));
 
-            if (said != null) GD.Print($"        \"{said}\"");
+            // AND THE WORDS GO ON THE TABLE. This was the other half of the blank card the eye
+            // check found: a cue whose gesture carries a line resolved that line, printed it to
+            // the console, pushed an empty hand across and left the player looking at nothing. A
+            // gesture that tells is a gesture with something to read at the end of it.
+            if (said != null)
+            {
+                GD.Print($"        \"{said}\"");
+
+                Reads(said, line);
+            }
         }
 
         // where a gesture happens, in the hands' own space: a cue names a slot, the map knows where, and no slot returns null
@@ -155,12 +204,36 @@ namespace Game.Dm
 
             string said = Text(key, args);
 
+            // NOTHING TO SAY IS NOT A BLANK NOTE. A key with no words behind it used to push an
+            // empty card across the table; now it pushes nothing, and check-locale.ps1 is still
+            // the thing that stops a key having no words in the first place.
+            if (string.IsNullOrWhiteSpace(said) || said == key)
+            {
+                GD.PushWarning($"dm: '{key}' has no words behind it, so the note stayed on the pad");
+                return;
+            }
+
             _hands?.Perform(Gesture.Push);
+
+            Reads(said, key);
 
             _performed.Add($"push - \"{said}\"");
 
             GD.Print($"dm      \"{said}\"");
         }
+
+        // one place a line of the DM's becomes a thing on the table, so a cue and a readout cannot
+        // end up doing it two different ways
+        void Reads(string said, string key)
+        {
+            if (string.IsNullOrWhiteSpace(said) || said == key) return;
+
+            _note?.Say(said);
+        }
+
+        // what is on the note right now, for a headless check to read back; the words came from
+        // the localizer and this is a copy of them, never a second source of truth
+        public string Note => _note?.Said ?? "";
 
         static string Text(string key, params object[] args)
         {

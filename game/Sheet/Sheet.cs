@@ -23,9 +23,11 @@ namespace Game.Sheet
     public partial class Sheet : Node3D
     {
         // metres. A sheet of paper on a table, at the table's own scale
-        [Export] public float Width { get; set; } = 0.30f;
+        // A4, at the table's own scale. It was 0.30 x 0.40 - an A3 sheet - and three objects
+        // that size do not fit across the fixed camera (the eye check, 2026-09-16).
+        [Export] public float Width { get; set; } = 0.210f;
 
-        [Export] public float Height { get; set; } = 0.40f;
+        [Export] public float Height { get; set; } = 0.297f;
 
         [Export] public Color Paper { get; set; } = new Color(0.92f, 0.90f, 0.83f);
 
@@ -370,13 +372,13 @@ namespace Game.Sheet
 
         // picked up, turned round, looked over - the pause is the Rest - and set down again. Every
         // one of these is in the closed vocabulary D1 already built; R1 adds no gesture to it.
-        public static readonly IReadOnlyList<Content.Encounters.Gesture> Reading =
+        public static readonly IReadOnlyList<Content.Places.Gesture> Reading =
             new[]
             {
-                Content.Encounters.Gesture.ReachBehind,
-                Content.Encounters.Gesture.TurnPage,
-                Content.Encounters.Gesture.Rest,
-                Content.Encounters.Gesture.Withdraw,
+                Content.Places.Gesture.ReachBehind,
+                Content.Places.Gesture.TurnPage,
+                Content.Places.Gesture.Rest,
+                Content.Places.Gesture.Withdraw,
             };
 
         public bool Owns(GodotObject what) => _touch != null && ReferenceEquals(_touch, what);

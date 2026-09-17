@@ -1,0 +1,21 @@
+{
+  "id": "the_quay",
+  "map": "the_quay",
+
+  "standing": [
+    { "slot": 1, "entity": "norrel" },
+    { "slot": 2, "entity": "the_lockbox" },
+
+    { "slot": 3, "entity": "norrels_grave", "when": [ "norrel.dead" ] }
+  ],
+
+  "exits": [
+    { "slot": 4, "to": "the_weir", "arriving": 4, "road": "the_causeway" }
+  ],
+
+  "cues": [
+    { "when": "entered", "cue": "the_quay_at_low_tide" },
+
+    { "when": "fact", "fact": "norrel.dead", "cue": "the_quay_is_quieter_now" }
+  ]
+}

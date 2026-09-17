@@ -1,0 +1,8 @@
+{
+  "id": "norrel_at_bay",
+  "tier": "rival",
+  "vigor": 8,
+  "defense": 10,
+  "attributes": { "might": "d8", "grace": "d6" },
+  "gear": { "id": "gutting_knife", "die": "d6" }
+}

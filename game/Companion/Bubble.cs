@@ -24,6 +24,13 @@ namespace Game.Companion
 
         [Export] public float Fade { get; set; } = 0.22f;
 
+        // HOW TALL IT MAY GET BEFORE IT IS SOMEBODY ELSE'S PROBLEM. A card grows upward from where
+        // it stands, so what it may grow INTO depends on where that is: one set down at the near
+        // edge of the table has the whole picture above it, and one behind the dice tray has a
+        // hand's width before it is off the top of the frame. Whoever puts a bubble somewhere
+        // cramped says so here, and makes it WIDER to compensate - there is always room sideways.
+        [Export] public float Tallest { get; set; } = 0.44f;
+
         Label3D _text;
 
         MeshInstance3D _card;
@@ -101,15 +108,28 @@ namespace Game.Companion
         {
             _Ready();
 
+            // AN EMPTY CARD IS WORSE THAN NO CARD. A blank white rectangle appearing on the
+            // table is a bug report; saying nothing is just saying nothing (the eye check).
             if (string.IsNullOrWhiteSpace(text)) { Clear(); return 0.0; }
 
             Said = text;
             _text.Text = text;
 
             // the card grows to the line rather than the line being clipped to the card
-            float tall = Mathf.Clamp(0.09f + 0.055f * Rows(text), 0.13f, 0.44f);
+            float tall = Mathf.Clamp(0.09f + 0.055f * Rows(text), 0.13f, Tallest);
 
             _shape.Size = new Vector2(Width, tall);
+
+            // AND IT GROWS UPWARD, from its bottom edge. Centred, a long line reached toward the
+            // player as well as away, and the camera frame narrows toward the player - so the
+            // longer the line, the further the bottom corner went off the side of the picture.
+            // That is what the eye check saw as "the speech card cuts off on the left side", and
+            // it is why a SHORT line looked fine and a long one did not.
+            //
+            // Pinned at the bottom, this node's own position is where the card STANDS, which is
+            // also the easier thing for a caller to reason about.
+            _card.Position = new Vector3(0f, tall * 0.5f, 0f);
+            _text.Position = new Vector3(0f, tall * 0.5f, 0.001f);
 
             _left = seconds > 0.0 ? seconds : Reading.Time(text);
 
@@ -119,6 +139,11 @@ namespace Game.Companion
             _text.Modulate = Ink;
 
             Show();
+
+            // TILTED TOWARD THE PLAYER (the eye check, 2026-09-16). Standing upright, this card was
+            // 60 degrees off the fixed camera's normal and its words were squashed to half height
+            // and read as a blur. It is a piece of paper somebody is holding up for you to read.
+            Game.Room.TableView.Face(this);
 
             return _left;
         }

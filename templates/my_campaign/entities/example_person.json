@@ -1,0 +1,39 @@
+{
+  //  AN ENTITY — somebody or something a place can stand on a square.
+  //
+  //  YOU decide what the player is allowed to do. The engine handles the consequences of the
+  //  things you allow, and offers nothing you did not list. If murdering this person would make
+  //  your campaign impossible, do not give them "attack" — and then they cannot be murdered, with
+  //  no resurrection and no invented replacement.
+  //
+  //  Its name is the key actor.<campaign>.<id>.name in locale/, the same as a monster's.
+
+  "id": "example_person",  // [REQUIRED] local id. Every fact about this is named after it:
+                           //            example_person.dead, .spoken, and so on.
+
+  // [OPTIONAL] mini — the figure it stands as. Bare for one of yours, "<pack>.<mini>" for
+  //            another pack's. Leave it out for whatever the engine gives a nameless figure.
+  // "mini": "example_mini",
+
+  // [OPTIONAL] monster — the statblock it fights as. REQUIRED if you permit "attack", and
+  //            refused if you do not, because then it would never be used.
+  "monster": "example_grunt",
+
+  // [REQUIRED] can — the verbs you permit, and what each one needs said about it. The vocabulary
+  //            is CLOSED: talk, attack, examine, open, search. A verb outside it is engine work,
+  //            not campaign data.
+  //
+  //   talk    : the id of a node in dialogue/
+  //   examine : the id of the line the DM reads (key dialogue.dm.narration.<campaign>.<id>)
+  //   attack  : null — it begins a fight in this place, and needs "monster" above
+  //   open    : null — sets <id>.open
+  //   search  : null — draws from "loot" and sets <id>.looted
+  //
+  //  A verb that spends itself leaves the menu: you cannot search the same chest twice, and you
+  //  never write down anywhere that you already did. The fact says so.
+  "can": {
+    "talk": "example_talk",
+    "examine": "example_person_up_close",
+    "attack": null
+  }
+}

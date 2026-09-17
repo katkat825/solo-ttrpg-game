@@ -1,0 +1,32 @@
+// SALTMARCH - the conversation an entity's 'talk' verb runs.
+//
+// Nothing here is new machinery. This is the Phase W runtime, unchanged, reached by a verb an
+// author permitted on an entity rather than by a cue fired inside a fight - which is the whole of
+// what "interactions lean on the dialogue runtime" means (PLACES_AND_PERSISTENCE.md section 12).
+//
+// Two rules, both enforced by the loader, both unchanged from greyhollow:
+//
+//   1. Every line carries an explicit #line: tag, which becomes the last segment of its key.
+//   2. The text below is the author's working copy and is never what a player reads. The words
+//      come from locale/saltmarch.csv, in every language including English.
+
+title: norrel_at_the_quay
+speaker: wolf
+---
+The man on the boards has been waiting for somebody all morning. #line:waiting_all_morning
+He wants the sluice at the weir opened, and he will not say why. #line:will_not_say_why
+
+-> Ask what is at the weir #line:ask_what_is_at_the_weir
+    Jacks. Two, he thinks. He is being careful with the number. #line:careful_with_the_number
+    <<jump the_errand_itself>>
+-> Ask why he will not go himself #line:ask_why_not_himself
+    Because he is a man who hires. That is not a crime, whatever your face is doing. #line:a_man_who_hires
+    <<jump the_errand_itself>>
+===
+
+title: the_errand_itself
+speaker: wolf
+---
+Open the gate, come back, and he pays. #line:open_it_and_come_back
+He has to be here to pay you, mind. Do try to remember that. #line:has_to_be_here_to_pay
+===

@@ -1,0 +1,11 @@
+{
+  //  Something that is only there once a fact is true. Nothing in THIS file says so — the place
+  //  says so, with a "when" on the standing that puts it on a square. That split is the whole
+  //  architecture: the engine remembers what happened, and the author decides what it means.
+
+  "id": "example_grave",
+
+  "can": {
+    "examine": "somebody_dug_it_fast"
+  }
+}

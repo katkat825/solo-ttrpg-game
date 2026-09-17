@@ -15,7 +15,9 @@ namespace Content.Companions
         // Barbarian: a wolf lying alongside the map, chin on the edge
         MapEdge,
 
-        // Rogue: a raven on the rim of the dice tray
+        // at the dice tray, where the dice come down: the Rogue's raven on the rim of it, and
+        // since 2026-09-17 the house wolf on the table just behind it. A perch is a PLACE and no
+        // class owns one - a campaign picks from this list for whatever creature it ships.
         TrayRim,
 
         // Mage: an imp on the closed rulebook, swinging its legs

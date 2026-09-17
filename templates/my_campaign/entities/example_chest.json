@@ -1,0 +1,18 @@
+{
+  //  Not everything with a verb on it is somebody.
+
+  "id": "example_chest",
+
+  "can": {
+    "examine": "the_chest_up_close",
+    "search": null
+  },
+
+  // [REQUIRED for "search"] loot — a weighted table, exactly like a monster's. An entry with no
+  //            item is "nothing this time". A searchable thing with nothing in it is refused:
+  //            an empty chest that says nothing is a bug report.
+  "loot": [
+    { "item": "example_blade", "weight": 1 },
+    { "weight": 3 }
+  ]
+}

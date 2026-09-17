@@ -168,9 +168,12 @@ namespace Game.Campaigns
             {
                 Package package = entry.Package;
 
+                // the severity travels with it; re-wrapping a caution as a fault is how "your
+                // quest-giver is attackable" would have started looking like a broken campaign
                 foreach (ContentProblem problem in package.Problems)
                     problems.Add(new ContentProblem(
-                        package.Id + "/" + problem.File, problem.Where, problem.What, problem.Line));
+                        package.Id + "/" + problem.File, problem.Where, problem.What, problem.Line,
+                        problem.How));
 
                 if (!entry.InPlay) { loaded.Add(new Loaded(package, 0, entry.Missing)); continue; }
 
@@ -212,8 +215,15 @@ namespace Game.Campaigns
                 GD.PushError($"roster: '{collision}' is claimed by two rosters - " +
                              "one of them is not namespaced by its campaign");
 
+            // a caution is a sentence an author should read once, not a thing that went wrong -
+            // pushing it as an error would make "your quest-giver is attackable" indistinguishable
+            // from a campaign that failed to load (PLACES_AND_PERSISTENCE.md section 6)
             foreach (ContentProblem problem in problems)
-                GD.PushError("content: " + problem);
+                // a caution is PRINTED, not pushed: Godot prints a full C# backtrace behind a
+                // pushed warning, and a stack trace under "your quest-giver is attackable" makes a
+                // deliberate authoring choice look like a crash
+                if (problem.IsACaution) GD.Print("content: " + problem);
+                else GD.PushError("content: " + problem);
         }
     }
 }

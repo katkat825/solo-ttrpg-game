@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using Content.Campaigns;
-using Content.Encounters;
+using Content.Places;
 using Content.Schema;
 using Xunit;
 
@@ -101,7 +101,7 @@ namespace Content.Tests
             Assert.Equal(Ashfall, package.Id);
             Assert.True(package.Monsters.Has("ashfall.ghoul"));
             Assert.True(package.Maps.ContainsKey("yard"));
-            Assert.True(package.Encounters.Has("yard"));
+            Assert.True(package.Places.Has("yard"));
         }
 
         [Fact]
@@ -109,10 +109,10 @@ namespace Content.Tests
         {
             WholeCampaign();
 
-            EncounterPlan plan = Read().Encounters.Of("yard");
+            Content.Places.Place plan = Read().Places.Of("yard");
 
             Assert.Equal("yard", plan.Map);
-            Assert.Equal(1, Assert.Single(plan.Placements).Slot);
+            Assert.Equal(1, Assert.Single(plan.Standings).Slot);
 
             Assert.Equal(new[] { "ashfall.ghoul" }, plan.Roster(Ashfall));
         }
@@ -122,7 +122,7 @@ namespace Content.Tests
         {
             WholeCampaign();
 
-            EncounterPlan plan = Read().Encounters.Of("yard");
+            Content.Places.Place plan = Read().Places.Of("yard");
 
             Trigger trigger = Assert.Single(plan.Triggers);
             Assert.Equal(When.Cleared, trigger.WhenIt);
@@ -346,7 +346,7 @@ namespace Content.Tests
         }
 
         [Fact]
-        public void AnEncounterPlacingAMonsterTheCampaignDoesNotShipIsNamed()
+        public void APlaceStandingAMonsterTheCampaignDoesNotShipIsNamed()
         {
             WholeCampaign();
             Write(Ashfall, "encounters/yard.json", Encounter.Replace(@"""monster"": ""ghoul""",
@@ -355,22 +355,22 @@ namespace Content.Tests
             Package package = Read();
 
             Assert.Contains(package.Problems,
-                            p => p.Where == "placements[0].monster" && p.What.Contains("wight"));
+                            p => p.Where == "standing[0].monster" && p.What.Contains("wight"));
         }
 
         [Fact]
-        public void APlacementOnASlotTheMapNeverDrewIsNamed()
+        public void AStandingOnASlotTheMapNeverDrewIsNamed()
         {
             WholeCampaign();
             Write(Ashfall, "encounters/yard.json", Encounter.Replace(@"""slot"": 1", @"""slot"": 4"));
 
             Package package = Read();
 
-            Assert.Contains(package.Problems, p => p.Where == "placements[0].slot");
+            Assert.Contains(package.Problems, p => p.Where == "standing[0].slot");
         }
 
         [Fact]
-        public void AChapterNamingAnEncounterThatIsNotThereIsNamed()
+        public void AChapterNamingAPlaceThatIsNotThereIsNamed()
         {
             WholeCampaign();
             Write(Ashfall, ManifestReader.FileName,
@@ -378,11 +378,11 @@ namespace Content.Tests
 
             Package package = Read();
 
-            Assert.Contains(package.Problems, p => p.Where.StartsWith("chapters[0].encounters["));
+            Assert.Contains(package.Problems, p => p.Where.StartsWith("chapters[0].places["));
         }
 
         [Fact]
-        public void AnEncounterNoChapterNamesIsNamed()
+        public void APlaceNothingCanReachIsNamed()
         {
             WholeCampaign();
             Write(Ashfall, "encounters/crypt.json", Encounter.Replace(@"""id"": ""yard""",
