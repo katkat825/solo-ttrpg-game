@@ -129,10 +129,9 @@ That "campaign is a folder, no new code" goal is also why I'm building this to s
 
 - Vigor plus Conditions, or Conditions only. The build keeps both; the pure-Conditions version is still worth prototyping
 - Gear die scaling: rarity, quality, or both
-- Whether the Impact die explodes on a max roll
 - Whether a d20 exists at all as a collectible. It never joins the pool either way, since it would break the difficulty ladder — only its existence outside the pool is open
 
-Settled since this list was first written: the form factor (diegetic tabletop), skill advancement (authored into the campaign, not XP and not use-based), and text before voice — the DM never speaks aloud.
+Settled since this list was first written: the form factor (diegetic tabletop), skill advancement (authored into the campaign, not XP and not use-based), text before voice — the DM never speaks aloud — and the Impact die exploding on a max roll (it does; pacing, not power).
 
 ## Assets
 
