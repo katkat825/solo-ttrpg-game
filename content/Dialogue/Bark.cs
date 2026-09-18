@@ -14,6 +14,18 @@ namespace Content.Dialogue
         // two or more, a real consequence
         Trouble,
 
+        // one die on its top face - the mirror of a Snag, and about as common
+        Maxed,
+
+        // every die on its top face. The rare one, and the reason Maxed is not enough on its own
+        Perfect,
+
+        // a die landed cocked and the companion is nosing it flat. The throw you made is kept
+        Nudge,
+
+        // walked into a place where a quest you accepted can be moved on
+        Nearby,
+
         // a Nerve spent, or committed; the companion has an opinion about being pushed
         Nerve,
 

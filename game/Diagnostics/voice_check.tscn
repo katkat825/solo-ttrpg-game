@@ -1,0 +1,17 @@
+[gd_scene load_steps=2 format=3]
+
+; The second-person check. The base game addresses YOU and never gives you a gender (CONVENTIONS
+; section 7, ACCESSIBILITY section 2) - a standing rule that until now had nothing holding it.
+;
+; BaseGame is the whole of the Workshop exemption: a campaign named here is the developer's own
+; writing and is held to the rule; anything else on the shelf is a player's and is not. The packs
+; are in it too, because the wolf's barks live in hearthguard and a bark is the companion talking
+; straight to you.
+;
+; Run it with check-voice.ps1.
+
+[ext_resource type="Script" path="res://Diagnostics/VoiceCheck.cs" id="1_check"]
+
+[node name="VoiceCheck" type="Node"]
+script = ExtResource("1_check")
+BaseGame = Array[String](["ashfall", "greyhollow", "saltmarch", "hearthguard", "ashen_minis"])

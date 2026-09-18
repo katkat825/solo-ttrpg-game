@@ -107,6 +107,12 @@ namespace Game.Fight
 
         Game.Dm.Dm _dm;
 
+        // and optional in the same way. The room owns the saves folder and the shelf; a fight
+        // opened on table.tscn by itself still plays, and simply writes nothing down
+        [Export] public NodePath RoomPath { get; set; }
+
+        Game.Room.Room _room;
+
         // and optional in exactly the same way (W1/W2). The companion is never in the fight - it is
         // told what the table did and has opinions about it. It has no turn, no square and no
         // statblock, and there is nowhere in this file that could give it one.
@@ -237,10 +243,17 @@ namespace Game.Fight
 
             Today = new Content.Dialogue.Day(_hero);
 
+            // looked up before the observers are built, not after: the table's observer hands the
+            // fallen to the companion, and one resolved a few lines later is one that was null
+            // at the moment the first foe went down
+            _friend = CompanionPath != null && !CompanionPath.IsEmpty
+                ? GetNodeOrNull<Game.Companion.Companion>(CompanionPath)
+                : null;
+
             // table and transcript both watch, so a mismatch between them is visible; the day
             // watches too, and learns what tonight's camp is about without a second source of truth
             _watching = new CompositeCombatObserver(
-                new TableObserver(_board, _pieces) { Loot = Drops },
+                new TableObserver(_board, _pieces, _friend) { Loot = Drops },
                 Today,
                 new RecordingCombatObserver(GD.Print));
 
@@ -265,9 +278,14 @@ namespace Game.Fight
 
             _dm = DmPath != null && !DmPath.IsEmpty ? GetNodeOrNull<Game.Dm.Dm>(DmPath) : null;
 
-            _friend = CompanionPath != null && !CompanionPath.IsEmpty
-                ? GetNodeOrNull<Game.Companion.Companion>(CompanionPath)
+            _room = RoomPath != null && !RoomPath.IsEmpty
+                ? GetNodeOrNull<Game.Room.Room>(RoomPath)
                 : null;
+
+            // the room does the writing and owns the folder; the fight is only what there is to
+            // write. Handing over a snapshot rather than a save means the door and the book get
+            // the state as it is when THEY ask, not as it was when the fight started
+            if (_room != null) _room.Snapshot = Save;
 
             _board.Claims = OnClick;
             _tray.Resolved += OnThrown;
@@ -311,7 +329,7 @@ namespace Game.Fight
             // a save from before the fight still starts one on the real tray
             if (!Resuming.MidFight) { RollTheOrder(); return; }
 
-            _order.Write(_fight.Order, _board.Metrics);
+            _order.Write(_fight.Order, _board.Metrics, _hero);
 
             GD.Print("");
             GD.Print($"resumed round {_fight.Round}, {_fight.Acting?.DebugName} to act with " +
@@ -360,7 +378,11 @@ namespace Game.Fight
             _rollingOrder = false;
 
             _fight.Begin(heroInitiative);
-            _order.Write(_fight.Order, _board.Metrics);
+            _order.Write(_fight.Order, _board.Metrics, _hero);
+
+            // there is a game on the table now, and that alone is worth writing down: a player who
+            // closes the door one turn into a fight should not come back to the corridor outside it
+            _room?.Happened();
 
             // no campaign means no plan and the DM does nothing, which is correct not a gap
             _dm?.Perform(_board.Plan, Content.Places.When.Entered, _board.Campaign);
@@ -1059,6 +1081,7 @@ namespace Game.Fight
             // an ability reads its own outcome, but damage is still _impact.Total, the same as a swing
             if (ability != null)
             {
+                _room?.Happened();
                 Apply(ability, target, damage, reaction);
                 return;
             }
@@ -1066,6 +1089,9 @@ namespace Game.Fight
             // a reaction costs a reaction and nobody's turn; a strike costs the actor's action
             if (reaction) _fight.React(_hero, target, _roll, damage);
             else _fight.Strike(target, _roll, damage);
+
+            // the fight has moved on, so a save taken now would be a different save
+            _room?.Happened();
 
             ReadItBack(target, damage);
 
@@ -1161,6 +1187,11 @@ namespace Game.Fight
         // bark." Which one is content: a companion whose bark bank says reads_the_throw takes it,
         // and otherwise the DM does exactly what it did before W. The one thing that must never
         // happen is that these numbers reach the player as a HUD panel (THE_TABLE.md section 6).
+        //
+        // The throw itself is atmosphere and is still said out loud. What used to be said out loud
+        // and is NOT any more is the foe's Defence: a voice announcing the same number on every
+        // swing that beat it grated by the second fight. It is a persistent known, so it goes on
+        // the foe's card and stays there to be glanced at.
         void ReadItBack(Actor target, int impact)
         {
             if (target == null || _roll == null) return;
@@ -1168,14 +1199,9 @@ namespace Game.Fight
             int against = target.Defense;
             bool beat = _roll.Beats(against);
 
-            // numbered names carry their own {0}; use Format not Get, or the braces show
-            string named = target.Ordinal > 0
-                ? _text.Format(target.NameKey, target.Ordinal)
-                : _text.Get(target.NameKey);
-
             // the first time its guard is cleared, and never again: a number you already know is
             // not a reveal
-            bool reveal = beat && _guardsSeen.Add(target);
+            if (beat && _guardsSeen.Add(target)) _order?.Reveal(target, against);
 
             if (Reader() is { } voice)
             {
@@ -1184,20 +1210,12 @@ namespace Game.Fight
                            beat ? new object[] { _roll.Total, against, impact }
                                 : new object[] { _roll.Total, against });
 
-                if (reveal)
-                    voice.Line(Content.Dialogue.DialogueKeys.Readout(_friend.Speaker, Readout.Guard),
-                               named, against);
-
                 return;
             }
 
-            if (_dm == null) return;
-
-            _dm.Says(beat ? Game.Dm.DmLines.Hit : Game.Dm.DmLines.Miss,
-                     beat ? new object[] { _roll.Total, against, impact }
-                          : new object[] { _roll.Total, against });
-
-            if (reveal) _dm.Says(Game.Dm.DmLines.Guard, named, against);
+            _dm?.Says(beat ? Game.Dm.DmLines.Hit : Game.Dm.DmLines.Miss,
+                      beat ? new object[] { _roll.Total, against, impact }
+                           : new object[] { _roll.Total, against });
         }
 
         // the companion, but only where its own bank says it does this job
@@ -1250,6 +1268,11 @@ namespace Game.Fight
 
                 // the beat every companion at this table has its own phrasing of (W5)
                 Prompt(Content.Places.When.Cleared);
+
+                // and the game writes itself down. A fight is the longest thing that happens
+                // between two of these, so it is the one a player would most resent replaying
+                if (_room?.Wrote(Game.Saves.Autosave.When.Fought) is { } box)
+                    GD.Print($"save    the fight ended and {box.File} went on the shelf");
             }
 
             // only at an idle table: a rattle on top of a swing is a sound effect, not a tell

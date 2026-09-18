@@ -782,9 +782,9 @@ namespace Game.Diagnostics
 
             foreach (Actor actor in fight.Order)
             {
-                Label3D line = margin.LineFor(actor);
+                Card card = margin.CardFor(actor);
 
-                if (line == null)
+                if (card == null)
                 {
                     Problem($"{actor.DebugName} is in the order and not in the margin");
                     continue;
@@ -797,17 +797,71 @@ namespace Game.Diagnostics
                 if (words == actor.NameKey)
                     Problem($"'{actor.NameKey}' has no words in the locale - the margin would read the key");
 
-                if (line.Text != words)
-                    Problem($"the margin reads '{line.Text}' for {actor.DebugName} and the localizer " +
+                if (card.Named != words)
+                    Problem($"the margin reads '{card.Named}' for {actor.DebugName} and the localizer " +
                             $"says '{words}'");
 
                 // a numbered line must carry its number, or four Rabble are four identical words
-                if (actor.Ordinal > 0 && !line.Text.Contains(actor.Ordinal.ToString()))
+                if (actor.Ordinal > 0 && !card.Named.Contains(actor.Ordinal.ToString()))
                     Problem($"{actor.DebugName} is numbered {actor.Ordinal} and the margin reads " +
-                            $"'{line.Text}' - the ordinal never reached the string");
+                            $"'{card.Named}' - the ordinal never reached the string");
+
+                Readout(card, actor);
             }
 
             GD.Print($"order   {margin}");
+        }
+
+        // THE CARD SAYS WHAT THE FIGHT SAYS, AND NOT A NUMBER MORE.
+        //
+        // Two failures are worth a machine rather than an eye. The first is drift: the card claims a
+        // band or a Defence the rules disagree with. The second is the one the whole readout was
+        // shaped around - a foe's exact Vigor reaching the player as a number, which is the health
+        // bar this game does not have, arriving by the back door.
+        void Readout(Card card, Actor actor)
+        {
+            bool yours = ReferenceEquals(actor, _fight?.Hero);
+
+            Health band = Healths.Of(actor);
+
+            if (card.Band != band)
+                Problem($"{actor.DebugName} is {band.Word()} and its card reads {card.Band.Word()}");
+
+            if (card.Says.Length == 0)
+                Problem($"{actor.DebugName}'s card says nothing about how it is doing");
+
+            if (card.Says.StartsWith("ui.", System.StringComparison.Ordinal))
+                Problem($"{actor.DebugName}'s card reads the key '{card.Says}' - the band has no words " +
+                        "in the locale");
+
+            if (yours)
+            {
+                if (!card.Says.Contains(actor.Vigor.ToString()))
+                    Problem($"your own card reads '{card.Says}' and you have {actor.Vigor} vigor - " +
+                            "your health is a number on your own card, so you never stop to look it up");
+
+                if (card.Guard.Length > 0)
+                    Problem($"your own card carries a Defence ('{card.Guard}') - that field is a foe's");
+
+                return;
+            }
+
+            // the coarse band said again as a count of notches, so nothing here is carried by colour
+            if (!actor.IsDown && card.Cut != Card.Notches(band))
+                Problem($"{actor.DebugName} is {band.Word()} and its card cuts {card.Cut} notch(es) " +
+                        $"where the band is {Card.Notches(band)}");
+
+            if (actor.Tier.HasHealthTrack() && actor.Vigor != actor.MaxVigor &&
+                card.Says.Contains(actor.Vigor.ToString()))
+                Problem($"{actor.DebugName}'s card reads '{card.Says}' and its vigor is " +
+                        $"{actor.Vigor} - a foe's health is a word, never a number");
+
+            if (card.Known >= 0 && card.Known != actor.Defense)
+                Problem($"{actor.DebugName} guards at {actor.Defense} and its card says {card.Known}");
+
+            if (card.Known >= 0 && !card.Guard.Contains(actor.Defense.ToString()))
+                Problem($"{actor.DebugName}'s Defence is known and its card reads '{card.Guard}' - " +
+                        "the number never reached the string");
         }
 
         // the script passes only what it was given, so every default lives here and the two cannot drift
@@ -1027,7 +1081,7 @@ namespace Game.Diagnostics
 
             // AND IT IS ON ITS WAY OFF. A body left lying where it fell is what the 2026-09-16 eye
             // check found: by the third round the board was more bodies than squares.
-            if (!piece.BeingSweptUp && piece.Visible)
+            if (!piece.BeingCleared && piece.Visible)
                 Problem($"{actor.DebugName} went down and its piece is not being taken off the " +
                         "board - it will lie there for the rest of the fight");
         }

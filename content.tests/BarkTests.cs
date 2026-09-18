@@ -83,7 +83,7 @@ namespace Content.Tests
         }
 
         [Fact]
-        public void A_voice_that_reads_the_throw_owes_three_more_keys_and_all_of_them_take_a_number()
+        public void A_voice_that_reads_the_throw_owes_two_more_keys_and_both_of_them_take_a_number()
         {
             BarkBank bank = Bank(@"{
                 ""speaker"": ""wolf"",
@@ -94,10 +94,25 @@ namespace Content.Tests
             Assert.True(bank.ReadsTheThrow);
             Assert.Contains("dialogue.wolf.readout.hit", bank.Keys());
             Assert.Contains("dialogue.wolf.readout.miss", bank.Keys());
-            Assert.Contains("dialogue.wolf.readout.guard", bank.Keys());
 
             Assert.True(bank.TakesAnArgument("dialogue.wolf.readout.hit"));
+            Assert.True(bank.TakesAnArgument("dialogue.wolf.readout.miss"));
             Assert.False(bank.TakesAnArgument("dialogue.wolf.bark.snag.001"));
+        }
+
+        // the Defence reveal used to be a third readout. It is on the foe's initiative card now,
+        // and a voice that still owed a key for it would be asking campaigns to translate a line
+        // nothing will ever say
+        [Fact]
+        public void No_voice_reads_a_foes_Defence_aloud_any_more()
+        {
+            BarkBank bank = Bank(@"{
+                ""speaker"": ""wolf"",
+                ""banks"": { ""snag"": 2 },
+                ""reads_the_throw"": true
+            }");
+
+            Assert.DoesNotContain(bank.Keys(), k => k.Contains("guard"));
         }
 
         [Fact]

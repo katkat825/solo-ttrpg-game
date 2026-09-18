@@ -161,58 +161,76 @@ namespace Game.Board
         // fell for the rest of the fight - "freed from the grid but left toppled where it fell" -
         // and by the third round the board was more bodies than squares.
         //
-        // The fall still registers: it topples, it LIES there for a beat, and then it is lifted
-        // away, because that is what happens at a table. A real GM scoops the dead off as they go,
-        // and the floor of a dungeon is not a diorama of everything you have ever killed.
+        // The fall still registers: it topples, it LIES there for a beat, and then it goes. What
+        // changed is WHO takes it: nothing lifts itself off the table any more, and the DM's hand
+        // never sweeps (five deaths in a round is five queued gestures). The companion huffs at it
+        // and it SKITTERS - away from the creature, off the edge of the mat, gone. A body that
+        // slides away from something that just barked at it reads as cleared; a body that rises
+        // straight up reads as a bug.
         //
         // It is HIDDEN rather than freed. A Piece holds this node and a save rebuilds the fight
         // from the actors, so freeing it here would leave a dangling reference for the sake of one
         // object that costs nothing to keep.
 
-        // toppled and left there, so the fall is seen before the hand comes for it
-        public const double SweptAfter = 0.8;
+        // toppled and left there, so the fall is seen before the huff comes for it
+        public const double ClearedAfter = 0.8;
 
-        // and then off, in one unhurried movement
-        public const double SweptOver = 0.35;
+        // and then away, quicker than a hand would have been, because nothing is carrying it
+        public const double ClearedOver = 0.3;
 
-        double _sweeping = -1.0;
+        // how far it slides before it is out of sight, in figure heights
+        public const float SkitterReach = 2.2f;
 
-        Vector3 _sweptFrom;
+        double _clearing = -1.0;
 
-        public bool BeingSweptUp => _sweeping >= 0.0;
+        Vector3 _clearedFrom;
 
-        public void SweepUp()
+        Vector3 _skitter = Vector3.Zero;
+
+        public bool BeingCleared => _clearing >= 0.0;
+
+        // away from whatever huffed at it, flat across the felt; straight back when nothing did
+        public void Skitter(Vector3 shooedFrom)
         {
-            if (!_toppled || _sweeping >= 0.0 || !Visible) return;
+            if (!_toppled || _clearing >= 0.0 || !Visible) return;
 
-            _sweeping = SweptAfter + SweptOver;
-            _sweptFrom = Position;
+            Vector3 away = Position - shooedFrom;
+            away.Y = 0f;
+
+            _skitter = away.LengthSquared() < 0.000001f
+                ? Vector3.Forward
+                : away.Normalized();
+
+            _clearing = ClearedAfter + ClearedOver;
+            _clearedFrom = Position;
         }
 
         // counted down in _Process rather than ended with a tween callback, for the reason
         // Bubble.cs spells out at its own line: a Callable.From(...) holds a C# delegate alive on
         // Godot's side, and one per piece killed is one per piece leaked
-        void Sweeping(double delta)
+        void Clearing(double delta)
         {
-            _sweeping -= delta;
+            _clearing -= delta;
 
-            if (_sweeping <= 0.0)
+            if (_clearing <= 0.0)
             {
-                _sweeping = -1.0;
+                _clearing = -1.0;
                 Visible = false;
                 return;
             }
 
-            if (_sweeping >= SweptOver) return;
+            if (_clearing >= ClearedOver) return;
 
-            float gone = 1f - (float)(_sweeping / SweptOver);
+            float gone = 1f - (float)(_clearing / ClearedOver);
 
-            Position = _sweptFrom + new Vector3(0f, gone * FigureHeight * 1.4f, 0f);
+            // it goes fast at first and then is simply not there; a piece that decelerates to a
+            // stop off the mat is a piece you watched being deleted
+            Position = _clearedFrom + _skitter * (gone * FigureHeight * SkitterReach);
         }
 
         public override void _Process(double delta)
         {
-            if (_sweeping >= 0.0) { Sweeping(delta); return; }
+            if (_clearing >= 0.0) { Clearing(delta); return; }
 
             if (_step == null) return;
 

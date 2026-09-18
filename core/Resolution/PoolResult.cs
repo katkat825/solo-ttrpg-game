@@ -48,6 +48,15 @@ namespace Core.Resolution
 
         public bool Trouble => Ones >= 2;
 
+        // THE OTHER END OF THE SAME STICK. There is no d20 here, so the "nat 20" moment has to be
+        // built out of the dice the game does have: one die on its top face is roughly as common as
+        // a Snag, and a whole handful on their top faces is the rare one. Counted rather than
+        // stored, for the same reason Ones is the only tally that is: a handful of dice already
+        // knows everything about itself.
+        public bool Maxed => Rolls.Any(r => r.Value >= r.Die.Sides());
+
+        public bool Perfect => Rolls.Count > 0 && Rolls.All(r => r.Value >= r.Die.Sides());
+
         public bool Beats(int difficulty) => Total >= difficulty;
 
 
@@ -83,6 +92,7 @@ namespace Core.Resolution
         public override string ToString() =>
             string.Join(", ", Rolls.Select(r => r.ToString())) +
             $" | total {Total} | impact {Impact.Label()}" +
-            (Trouble ? " | TROUBLE" : Snag ? " | snag" : "");
+            (Trouble ? " | TROUBLE" : Snag ? " | snag" : "") +
+            (Perfect ? " | PERFECT" : Maxed ? " | maxed" : "");
     }
 }

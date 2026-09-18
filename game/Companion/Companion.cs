@@ -302,6 +302,53 @@ namespace Game.Companion
 
         public void SeesTheRoomCleared() { Feel(Mood.Pleased); Say(Bark.Victory); }
 
+        // A DIE LANDED COCKED, AND IT IS THE CREATURE THAT PUTS IT RIGHT.
+        //
+        // The recovery is the tray's and has not changed: nudge it flat and keep the number you
+        // threw. What changed is that the player watches something DO it. A die that rights itself
+        // is the table admitting it is a physics simulation; a wolf shoving it over with its nose
+        // is the table being a table.
+        public void NosesACockedDie()
+        {
+            Feel(Mood.Alert);
+
+            LookAt(_tray);
+
+            Lean(_tray);
+
+            Say(Bark.Nudge);
+        }
+
+        // A FOE IS ON THE FLOOR AND THE COMPANION CLEARS IT OFF.
+        //
+        // This used to be the DM's hand, and before that the piece lifted itself away. The hand was
+        // the wrong tool - five deaths in one round is five queued gestures, and the DM's vocabulary
+        // is deliberately small - and a piece that rises on its own belongs to nobody. A huff is
+        // free, repeats without looking queued, and is the one creature at this table that is
+        // allowed to interfere with it.
+        //
+        // Wordless on purpose: a bark bank for this would be a line on every kill, which is the
+        // thing the spoken Defence read-back was removed for.
+        public void HuffsAtTheFallen(Node3D at)
+        {
+            Feel(Mood.Alert);
+
+            LookAt(at);
+
+            Lean(at);
+        }
+
+        // walked into somewhere an accepted quest can be moved on. It reads the log and the place
+        // off the fact store; nothing here knows what a quest is
+        public void SeesAQuestNearby()
+        {
+            Feel(Mood.Alert);
+
+            LookAt(null);
+
+            Say(Bark.Nearby);
+        }
+
         // looks at YOU, which is the reaction THE_TABLE.md asks for before an unwise move
         public void LooksAtYou()
         {
@@ -400,6 +447,32 @@ namespace Game.Companion
 
         // toward the player is straight up the table, which from this head is a tilt and not a yaw
         void Straighten() => Swing(0f);
+
+        // A SHORT LUNGE AND BACK. The head turn says "I am looking at that"; this says "I did
+        // something to that", which is what a nudge and a huff both need and an idle cannot carry.
+        // It rides on the same held tween as Breathe, so the idles take the body back afterwards
+        // and there is never more than one of these alive.
+        void Lean(Node3D at)
+        {
+            if (_body == null) return;
+
+            Vector3 toward = at == null
+                ? new Vector3(0f, 0f, LungeReach)
+                : ToLocal(at.GlobalPosition).Normalized() * LungeReach;
+
+            _shifting?.Kill();
+            _shifting = CreateTween();
+            _shifting.SetTrans(Tween.TransitionType.Back);
+            _shifting.SetEase(Tween.EaseType.Out);
+            _shifting.TweenProperty(_body, "position", new Vector3(toward.X, 0f, toward.Z), LungeSeconds);
+            _shifting.TweenProperty(_body, "position", Vector3.Zero, LungeSeconds * 1.6);
+        }
+
+        // 12 mm is a head's worth at this scale: enough to read as a shove, small enough that the
+        // creature never leaves the spot it sits in
+        public const float LungeReach = 0.012f;
+
+        public const double LungeSeconds = 0.12;
 
         void Swing(float to)
         {

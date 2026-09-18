@@ -26,14 +26,23 @@ namespace Game.Companion
     // Godot-free, so what the creature reacts to is testable without a creature.
     public static class TableCues
     {
-        // a Snag is exactly one 1 and is cosmetic; Trouble is two or more and is a real consequence
+        // A Snag is exactly one 1 and is cosmetic; Trouble is two or more and is a real consequence.
+        // Maxed and Perfect are the same ladder read from the other end, and the order matters:
+        // Trouble outranks everything because it is the only one of the four with consequences, and
+        // a whole handful on its top faces outranks one die on its own. Nothing can be both Perfect
+        // and a Snag, so the only real collision is a 1 and a top face in the same throw - and a
+        // creature that says "careful" there is right, where one that cheers is not.
         public static Bark? For(PoolResult roll)
         {
             if (roll == null) return null;
 
             if (roll.Trouble) return Bark.Trouble;
 
-            return roll.Snag ? Bark.Snag : (Bark?)null;
+            if (roll.Perfect) return Bark.Perfect;
+
+            if (roll.Snag) return Bark.Snag;
+
+            return roll.Maxed ? Bark.Maxed : (Bark?)null;
         }
 
         public static Mood MoodFor(Bark situation) => situation switch
@@ -43,8 +52,11 @@ namespace Game.Companion
             Bark.Nerve => Mood.Alert,
             Bark.Down => Mood.Quiet,
             Bark.Victory => Mood.Pleased,
+            Bark.Perfect => Mood.Pleased,
             Bark.Camp => Mood.Calm,
             Bark.Overasked => Mood.Alert,
+            Bark.Nudge => Mood.Alert,
+            Bark.Nearby => Mood.Alert,
             _ => Mood.Watching,
         };
 

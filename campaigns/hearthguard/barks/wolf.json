@@ -4,6 +4,10 @@
   "banks": {
     "snag": 40,
     "trouble": 10,
+    "maxed": 10,
+    "perfect": 5,
+    "nudge": 5,
+    "nearby": 4,
     "nerve": 6,
     "secret": 5,
     "overasked": 4,

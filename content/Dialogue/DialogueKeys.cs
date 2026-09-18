@@ -54,16 +54,17 @@ namespace Content.Dialogue
         public static string YarnIdFor(string local) => YarnPrefix + local;
     }
 
-    // what a voice can read back off the felt; closed, because each one takes its own numbers
+    // What a voice can read back off the felt; closed, because each one takes its own numbers.
+    //
+    // A third member used to say a foe's Defence aloud the first time you beat it. Hearing the
+    // same number every swing wore thin, so the known Defence is printed on the foe's initiative
+    // card instead and the voice keeps the part that is atmosphere.
     public enum Readout
     {
         // "best two, eleven - through its guard, and it bites for three"
         Hit,
 
         Miss,
-
-        // said once, the first throw that clears a foe's Defence
-        Guard,
     }
 
     public static class Readouts

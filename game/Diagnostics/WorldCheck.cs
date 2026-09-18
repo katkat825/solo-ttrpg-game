@@ -143,9 +143,47 @@ namespace Game.Diagnostics
             foreach (Exit exit in world.Ways)
                 GD.Print($"      way out - {exit}");
 
+            // WHAT THE COMPANION WOULD MENTION ON THE WAY IN. Derived from the log and the place,
+            // so nothing an author wrote says "nudge here" and nothing can be spelled wrong. The
+            // creature that says it is presentation and lands with the table's half of this phase;
+            // what is checked here is that the right errand is found, and that a finished one is
+            // not brought up again.
+            foreach (string quest in arrival.Nearby)
+            {
+                GD.Print($"      nearby  '{quest}' can be moved on here");
+
+                if (world.Quests.Of(quest) is not { } one)
+                {
+                    Problem($"the nudge names '{quest}' and this campaign has no such quest");
+                    continue;
+                }
+
+                if (one.StateIn(world.Facts) != QuestState.Active)
+                    Problem($"'{quest}' would be mentioned on the way in and it is " +
+                            $"{one.StateIn(world.Facts).Word()} - only an accepted, unfinished " +
+                            "errand is worth stopping somebody for");
+            }
+
             Handle(package, world);
 
+            Accept(world);
+
             Fight(package, world, place);
+        }
+
+        // a walk-through takes the errands it is offered, the way a player would. Without it the
+        // log never leaves 'offered' and the nearby-quest nudge above has nothing to find
+        void Accept(Exploring world)
+        {
+            foreach ((Quest quest, QuestState state) in world.Log.ToArray())
+            {
+                if (state != QuestState.Offered || !world.Accept(quest.Id)) continue;
+
+                GD.Print($"      took on '{quest.Id}'");
+
+                if (quest.StateIn(world.Facts) == QuestState.Offered)
+                    Problem($"'{quest.Id}' was accepted and is still only offered");
+            }
         }
 
         void Handle(Package package, Exploring world)

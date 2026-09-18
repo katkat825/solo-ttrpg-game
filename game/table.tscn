@@ -212,6 +212,10 @@ BoardPath = NodePath("../Board")
 TrayPath = NodePath("../DiceTray")
 DmPath = NodePath("../Dm")
 CompanionPath = NodePath("../Companion")
+; the room the table is standing in, when it is standing in one: the room owns the saves folder and
+; does the writing. Opened on its own this resolves to the scene tree's root, which is not a Room,
+; and the fight plays exactly as it always has with nothing written down
+RoomPath = NodePath("../..")
 RivalPiece = ExtResource("6_rival")
 RabblePiece = ExtResource("8_rabble")
 DreadPiece = ExtResource("9_dread")

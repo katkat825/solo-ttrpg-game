@@ -169,6 +169,14 @@ namespace Game.Tray
             // one handler for all dice: each reports for itself and the handler asks whether the whole throw is done, so there's no per-die state
             foreach (DieBody die in _dice) die.Settled += _ => TryResolve();
 
+            // THE COCKED DIE IS THE COMPANION'S JOB. The recovery itself is unchanged and is still
+            // IDieRecovery's - nudge it flat, keep the number you actually threw, rethrow only when
+            // nudging has run out. What is new is who the player sees doing it: the creature leans
+            // over and noses the die down, with something to say about it, instead of the die
+            // appearing to right itself.
+            foreach (DieBody die in _dice)
+                die.Nudged += (_, attempt) => Nudged(attempt);
+
             // developer diagnostic, not player-facing text
             GD.Print($"dice tray M9 - space throws, {(char)KeyToCycle} changes the shapes, " +
                      $"{(char)KeyToSwitchTray} changes the tray, {(char)KeyToSwitchLocale} switches language");
@@ -411,13 +419,25 @@ namespace Game.Tray
         // installed - a tray with nobody at it still counts its Snags and still prints the key
         private Content.Dialogue.BarkBank Bank()
         {
-            if (CompanionPath == null || CompanionPath.IsEmpty) return null;
-
-            var friend = GetNodeOrNull<Game.Companion.Companion>(CompanionPath);
+            Game.Companion.Companion friend = Friend();
 
             return friend == null || friend.Speaker.Length == 0
                 ? null
                 : Game.Campaigns.Library.Load(quiet: true).BarksFor(friend.Speaker);
+        }
+
+        private Game.Companion.Companion Friend() =>
+            CompanionPath == null || CompanionPath.IsEmpty
+                ? null
+                : GetNodeOrNull<Game.Companion.Companion>(CompanionPath);
+
+        // only the first nudge of a die. A die that needs two is not twice as interesting, and a
+        // creature commenting on every shove reads as a stuck line rather than as a character
+        private void Nudged(int attempt)
+        {
+            if (attempt > 1) return;
+
+            Friend()?.NosesACockedDie();
         }
 
         // labels and sizes are tracked apart because they change apart: a board pool sets both, but D changes only the sizes

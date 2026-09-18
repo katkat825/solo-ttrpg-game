@@ -6,6 +6,7 @@ using Godot;
 using Content.Saves;
 using Core.Localization;
 using Game.Localization;
+using Game.Saves;
 
 namespace Game.Room
 {
@@ -45,8 +46,10 @@ namespace Game.Room
 
         [Signal] public delegate void TouchedEventHandler(int prop);
 
-        // the door is the quit, and quitting asks - it is the one irreversible object in the room
-        [Signal] public delegate void LeavingEventHandler();
+        // the door is the quit, and quitting asks - it is the one irreversible object in the room.
+        // It carries whether anything was left unwritten, so whatever asks can say so rather than
+        // asking a room-shaped question the player has no way to answer
+        [Signal] public delegate void LeavingEventHandler(bool unsaved);
 
         readonly List<Furniture> _furniture = new List<Furniture>();
 
@@ -63,6 +66,22 @@ namespace Game.Room
         public IReadOnlyList<Furniture> Furnishings => _furniture;
 
         public SaveShelf Shelf => _shelf;
+
+        // WHAT TO WRITE DOWN WHEN SOMETHING ASKS.
+        //
+        // The room owns the folder and the shelf; it does not own the game. Whatever is being
+        // played - the fight today, a place being walked tomorrow - hands over a way to take a
+        // snapshot, and everything that saves goes through this one seam. With nothing set the
+        // room still opens and the door still works; there is simply nothing to write.
+        public Func<SaveGame> Snapshot { get; set; }
+
+        public Autosave Saving { get; } = new Autosave();
+
+        // something happened that a save would want to have caught
+        public void Happened() => Saving.Happened();
+
+        // whether closing now would lose something. The door asks this, and so will the book
+        public bool Unsaved => Snapshot != null && Saving.Dirty;
 
         // which box the player last took down, so a resumed game knows what it resumed
         public Box Held { get; private set; }
@@ -202,9 +221,19 @@ namespace Game.Room
             Stand();
         }
 
-        // THE SHELF ACCUMULATES (R4). Every save on disk is a box, and a finished one carries its
-        // trophy. Nothing here is a separate cosmetic store: the boxes ARE the files, re-read from
-        // the folder each time, so the room cannot claim a campaign the save folder does not have.
+        // THE SHELF ACCUMULATES (R4). Every save on disk stands on it, and a finished one carries
+        // its trophy. Nothing here is a separate cosmetic store: the objects ARE the files,
+        // re-read from the folder each time, so the room cannot claim a campaign the save folder
+        // does not have.
+        //
+        // A CAMPAIGN IS A BOOK. R4 stood a boxed game up here, and a box is what a board game comes
+        // in rather than what a campaign IS - you do not read a box, and everything this game does
+        // with a campaign (open it, go back through it, find your place) is something you do with a
+        // book. Nothing under this changed: the versioned JSON is still what stands there, and
+        // SaveShelf, Box and the writer are untouched. What changed is its face.
+        //
+        // The book it grows into - a contents page, the story so far, the bookcase it lives on when
+        // you are not playing - is a build of its own. This is the spine of it, on the shelf.
         void Stand()
         {
             Furniture shelf = _furniture.FirstOrDefault(f => f.Is == Prop.Shelf);
@@ -212,31 +241,49 @@ namespace Game.Room
             if (shelf == null) return;
 
             foreach (Node standing in shelf.GetChildren())
-                if (standing.Name.ToString().StartsWith("Box", StringComparison.Ordinal))
+                if (standing.Name.ToString().StartsWith(Standing, StringComparison.Ordinal))
                     standing.QueueFree();
 
             float along = -shelf.Size.X * 0.5f + 0.06f;
 
-            foreach (Box box in _shelf.Boxes)
+            foreach (Box book in _shelf.Boxes)
             {
                 if (along > shelf.Size.X * 0.5f - 0.04f) break;
 
                 var spine = new MeshInstance3D
                 {
-                    Name = "Box" + box.File,
-                    Mesh = new BoxMesh { Size = new Vector3(0.035f, 0.22f, 0.17f) },
+                    Name = Standing + book.File,
+                    Mesh = new BoxMesh { Size = new Vector3(Thickness, Tall, Deep) },
                     MaterialOverride = new StandardMaterial3D
                     {
-                        AlbedoColor = Colour(box),
+                        AlbedoColor = Colour(book),
                         Roughness = 0.95f,
                     },
-                    Position = new Vector3(along, 0.14f, 0f),
+                    Position = new Vector3(along, Tall * 0.5f, 0f),
                 };
 
                 shelf.AddChild(spine);
 
-                // the trophy lands on the box, not beside it - it belongs to that campaign
-                if (box.Finished)
+                // THE PAGES. One paler slab, a hair narrower and shorter than the covers and
+                // sitting proud of the fore edge - which is the whole difference between a book
+                // seen from the side and a painted block, and what a row of boxes was missing.
+                spine.AddChild(new MeshInstance3D
+                {
+                    Name = "Pages",
+                    Mesh = new BoxMesh
+                    {
+                        Size = new Vector3(Thickness * 0.72f, Tall * 0.94f, Deep * 0.96f),
+                    },
+                    MaterialOverride = new StandardMaterial3D
+                    {
+                        AlbedoColor = new Color("#d8cdb4"),
+                        Roughness = 1.0f,
+                    },
+                    Position = new Vector3(0f, 0f, Deep * 0.035f),
+                });
+
+                // the trophy lands on the book, not beside it - it belongs to that campaign
+                if (book.Finished)
                     spine.AddChild(new MeshInstance3D
                     {
                         Name = "Trophy",
@@ -247,15 +294,25 @@ namespace Game.Room
                             Metallic = 0.8f,
                             Roughness = 0.35f,
                         },
-                        Position = new Vector3(0f, 0.13f, 0f),
+                        Position = new Vector3(0f, Tall * 0.5f + 0.02f, 0f),
                     });
 
-                along += 0.042f;
+                along += Thickness + 0.007f;
             }
         }
 
-        // each campaign's boxes look alike on the shelf, so a row of them reads as a row of one
-        // campaign's chapters rather than as a colour chart
+        // the node name every campaign on the shelf carries, so a re-read clears exactly what it
+        // put there and nothing else standing on the shelf
+        public const string Standing = "Book";
+
+        public const float Thickness = 0.035f;
+
+        public const float Tall = 0.22f;
+
+        public const float Deep = 0.17f;
+
+        // each campaign's books look alike on the shelf, so a row of them reads as one campaign's
+        // volumes rather than as a colour chart
         static Color Colour(Box box)
         {
             int hash = 17;
@@ -297,7 +354,7 @@ namespace Game.Room
                 return null;
             }
 
-            GD.Print($"room    a box goes on the shelf - {file}");
+            GD.Print($"room    a book goes on the shelf - {file}");
 
             Reread();
 
@@ -306,6 +363,37 @@ namespace Game.Room
 
         // sortable and human-readable, so the folder reads in the order the shelf stands in
         static string Stamp() => DateTime.Now.ToString("yyyyMMdd_HHmmss");
+
+
+        // ---- saving as you play --------------------------------------------------------------
+
+        // AUTOSAVE IS EVENT-BASED AND FIRST-CLASS. Until this, the only production write was a
+        // finished campaign, which meant a player who closed the game mid-dungeon had played for
+        // nothing. The events are the seams the game already has - a place entered, a fight ended,
+        // a scene closed - plus the door, which never skips.
+        //
+        // Each write is its own file, so snapshots accumulate and an earlier one is still there to
+        // go back to. Nothing is pruned: how many to keep is a question for when somebody has
+        // measured what keeping them costs.
+        public Box Wrote(Autosave.When moment)
+        {
+            if (Snapshot == null || !Saving.Worth(moment)) return null;
+
+            SaveGame save = Snapshot();
+
+            if (save == null) return null;
+
+            Box box = Keep(save, Autosave.FileName(save.Campaign, moment, DateTime.Now) +
+                                 SaveShelf.Extension);
+
+            if (box != null) Saving.Wrote(moment);
+
+            return box;
+        }
+
+        // the player asked. It is the same call - if a manual save were a different write from an
+        // automatic one, one of the two would be the one that had the bug
+        public Box SaveNow() => Wrote(Autosave.When.Manual);
 
 
         // ---- touching things ---------------------------------------------------------------
@@ -322,7 +410,7 @@ namespace Game.Room
             switch (which)
             {
                 case Prop.Shelf:
-                    // a save is a box you pick up, not a slot you select (R4)
+                    // a save is a book you pick up, not a slot you select (R4)
                     Held = _shelf.Boxes.FirstOrDefault();
 
                     GD.Print(Held == null
@@ -336,8 +424,19 @@ namespace Game.Room
                     break;
 
                 case Prop.Door:
-                    // the one irreversible object in the room, so it asks
-                    EmitSignal(SignalName.Leaving);
+                    // the one irreversible object in the room, so it asks - and it writes on the
+                    // way out first. Closing the door on an unwritten game is the one way this
+                    // room could lose somebody's evening, and asking them to remember to save is
+                    // a menu habit, not a table one
+                    bool unsaved = Unsaved;
+
+                    if (Wrote(Autosave.When.Quit) is { } onTheWayOut)
+                        GD.Print($"        wrote {onTheWayOut.File} on the way out");
+                    else if (unsaved)
+                        GD.PushWarning("room: the door was opened with something unsaved and " +
+                                       "nothing could be written - say so before it closes");
+
+                    EmitSignal(SignalName.Leaving, unsaved);
                     break;
 
                 default:
@@ -347,8 +446,8 @@ namespace Game.Room
             EmitSignal(SignalName.Touched, prop);
         }
 
-        // take a box down and put what is inside it on the table. The versioned JSON P6 writes is
-        // what is in the box; there is no second record of "campaigns you finished" to drift from it
+        // take a campaign down and put what is inside it on the table. The versioned JSON P6
+        // writes is what is in it; there is no second record of "campaigns you finished" to drift
         public Box TakeDown(string file)
         {
             Box box = _shelf.Of(file) ?? _shelf.Boxes.FirstOrDefault();
@@ -422,6 +521,6 @@ namespace Game.Room
 
         // developer only, not localized, never reaches the screen
         public override string ToString() =>
-            $"room: {_furniture.Count} objects, {_shelf?.Count ?? 0} boxes on the shelf";
+            $"room: {_furniture.Count} objects, {_shelf?.Count ?? 0} on the shelf, {Saving}";
     }
 }

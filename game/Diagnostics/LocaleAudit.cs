@@ -106,6 +106,14 @@ namespace Game.Diagnostics
             foreach (string key in room) keys.Add(key);
 
             GD.Print($"room        {string.Join(", ", Game.Room.Props.Words)}");
+
+            // and what is printed on an initiative card: the bands a foe's health is said in, and
+            // the two numbers that go on a card rather than into a voice
+            var cards = new SortedSet<string>(Game.Fight.CardKeys.All());
+
+            foreach (string key in cards) keys.Add(key);
+
+            GD.Print($"cards       {string.Join(", ", cards)}");
             GD.Print("");
 
             return keys;
@@ -326,6 +334,7 @@ namespace Game.Diagnostics
                 bool needsOne = EngineKeys.TakesAnArgument(row.Key) ||
                                 Game.Dm.DmLines.TakesAnArgument(row.Key) ||
                                 Game.Sheet.SheetKeys.TakesAnArgument(row.Key) ||
+                                Game.Fight.CardKeys.TakesAnArgument(row.Key) ||
                                 Reads(shelf, row.Key);
                 bool hasOne = row.Value.Contains("{0}");
 

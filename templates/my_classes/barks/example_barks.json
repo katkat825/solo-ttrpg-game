@@ -27,6 +27,10 @@
   "banks": {
     "snag":      4,   // exactly one 1 on the felt - 33% of early rolls, cosmetic
     "trouble":   2,   // two or more 1s - a real consequence
+    "maxed":     2,   // one die on its top face. The mirror of a snag, about as common
+    "perfect":   1,   // EVERY die on its top face. Rare; one line is a fine bank
+    "nudge":     1,   // a die landed cocked and your creature noses it flat
+    "nearby":    1,   // walked in where an accepted quest can be moved on
     "nerve":     2,   // a Nerve spent or committed
     "secret":    2,   // a rattle behind the DM's screen
     "overasked": 2,   // asked for a hint once too often. Needed if you ship hints
@@ -36,10 +40,11 @@
   },
 
   // [OPTIONAL] reads_the_throw - true and THIS voice, rather than the DM, says
-  //            what the dice came to. It then owes three more keys, each of
-  //            which formats numbers in:
+  //            what the dice came to. It then owes two more keys, both of
+  //            which format numbers in:
   //              dialogue.<speaker>.readout.hit    {0} total {1} defence {2} impact
   //              dialogue.<speaker>.readout.miss   {0} total {1} defence
-  //              dialogue.<speaker>.readout.guard  {0} name  {1} defence
+  //            A foe's Defence is NOT read out. It goes on the foe's
+  //            initiative card the first time you beat it and stays there.
   "reads_the_throw": false
 }

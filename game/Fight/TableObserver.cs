@@ -12,10 +12,16 @@ namespace Game.Fight
 
         readonly Pieces _pieces;
 
-        public TableObserver(BoardNode board, Pieces pieces)
+        // optional, like everywhere else the companion appears: a fight with nobody beside the map
+        // plays exactly as it did, and the fallen still go
+        readonly Game.Companion.Companion _friend;
+
+        public TableObserver(BoardNode board, Pieces pieces,
+                             Game.Companion.Companion friend = null)
         {
             _board = board;
             _pieces = pieces;
+            _friend = friend;
         }
 
         public System.Action<Actor> Loot { get; set; }
@@ -55,13 +61,19 @@ namespace Game.Fight
 
             if (piece == null) return;
 
-            // freed from the grid, toppled where it fell, and then taken off the table: the
+            // freed from the grid, toppled where it fell, and then cleared off the table: the
             // fall is the beat and the body is not scenery (the eye check, 2026-09-16)
             Cell? fell = _board?.CellOf(piece.Mini);
 
             _board?.Squares.Remove(piece.Mini);
             piece.Mini.Topple();
-            piece.Mini.SweepUp();
+
+            // and the companion is what takes it. It huffs, and the thing skitters away from IT -
+            // which is why the creature's position is what the piece is shooed from. With nobody
+            // at the table it still goes, straight back off the near edge.
+            _friend?.HuffsAtTheFallen(piece.Mini);
+
+            piece.Mini.Skitter(_friend?.GlobalPosition ?? piece.Mini.GlobalPosition + Vector3.Back);
 
             if (piece.Vigor != null) piece.Vigor.Visible = false;
             if (piece.Marks != null) piece.Marks.Visible = false;

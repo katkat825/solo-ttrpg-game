@@ -39,6 +39,7 @@ The PowerShell checks run headless and exit non-zero on failure. Each runs the r
 .\check-dialogue.ps1 [-ExpectSome]                       # every conversation plays, in both locales
 .\check-room.ps1                                         # the room boots, and has no menus in it
 .\check-world.ps1                                        # a whole world walked: places, verbs, a fight, a save
+.\check-voice.ps1                                        # the base game speaks to you, and never genders you
 ```
 
 ## Layout
@@ -114,19 +115,24 @@ When two implementations both work, I pick whichever feels more like sitting at 
 
 ## Where it is
 
-The dice tray works. Three dice of mixed shapes thrown together, real collisions, face reading off the resting orientation, per-skin tray physics, force-driven audio, and the outcome readable off the felt without a UI panel. Fairness is swept per shape and per tray skin, since colliding dice are a different physical system from solo throws and I didn't want to assume.
+The whole spine is built and checked headless: the dice tray, the pure rules core, the grid board with edge-based walls, the combat loop, the campaign package format and its loader, minis and classes as content, the DM behind his screen, the companion on the table, the room-with-no-menus and the character sheet, and the World layer on top — places that own maps, a durable fact store, author-permitted interactions, quests as a view over facts, roads, and exploration as a second mode. Each of those ends in a check script that runs the real thing, not a copy of it.
 
-Next is the Snag cue, then the grid and tiles, one mini moving, and the combat loop. After that comes the part I actually care about, which is writing a short campaign entirely in data with no new code. If that doesn't work then neither does the rest of the plan, so it's better to find out now than in year three.
+The part I actually cared about worked: a campaign is a folder and nothing else. Three of them now ship — greyhollow, ashfall and saltmarch — built entirely in data, with zero new engine code between them. That was the test the whole plan rested on, and passing it is what makes the next decade of campaigns cheap.
+
+The most recent work put the combat knowns on the table where a real DM keeps them: your own health as a number on your initiative card, a foe's as a single word — unharmed, wounded, badly wounded — and never a gauge, its Defence appearing on the card once you've earned it instead of being said aloud. Saving became event-based and reloadable, the door writes on the way out, and there's now a check that the game only ever speaks to *you* and never hands you a gender.
+
+What's left is the table itself — the presentation of the World layer: the map as a swappable mat, discrete props you can upgrade, a camera that leans in and picks things up, the campaign as a book you open on a bookcase, and the note-with-checkboxes you answer the DM with — plus a first-class accessibility pass (screen reader, keyboard navigation, high contrast, resizable text, player-set speech speed), and then the first full campaign.
 
 That "campaign is a folder, no new code" goal is also why I'm building this to sell: a commercial release on Steam with Steam Workshop support, so other people can build and share campaigns the same way I add them. The architecture doesn't change for that — the same engine/content boundary that lets me add campaigns for a decade is the one that lets players make their own — so the ambition grew and the plan didn't.
 
 ## Still undecided
 
-- Vigor plus Conditions, or Conditions only
+- Vigor plus Conditions, or Conditions only. The build keeps both; the pure-Conditions version is still worth prototyping
 - Gear die scaling: rarity, quality, or both
-- Skill advancement: XP or use-based
-- Whether the DM ever speaks aloud
-- Whether a d20 exists at all as a collectible. It never joins the pool either way, since it would break the difficulty ladder
+- Whether the Impact die explodes on a max roll
+- Whether a d20 exists at all as a collectible. It never joins the pool either way, since it would break the difficulty ladder — only its existence outside the pool is open
+
+Settled since this list was first written: the form factor (diegetic tabletop), skill advancement (authored into the campaign, not XP and not use-based), and text before voice — the DM never speaks aloud.
 
 ## Assets
 

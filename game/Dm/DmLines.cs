@@ -12,19 +12,16 @@ namespace Game.Dm
         // the miss line: "best two, {0} - short of {1}", no impact
         public static string Miss => KeyConventions.Key(KeyConventions.CombatNs, "throw", "miss");
 
-        // the guard reveal: "{0}'s guard is {1}", shown once when the hero first clears a foe's Defence
-        public static string Guard =>
-            KeyConventions.Key(KeyConventions.CombatNs, "defence", "revealed");
-
+        // there was a third line here, saying a foe's Defence aloud the first time you beat it.
+        // The number is printed on that foe's initiative card now, where it stays readable instead
+        // of being repeated at you every swing
         public static IEnumerable<string> All()
         {
             yield return Hit;
             yield return Miss;
-            yield return Guard;
         }
 
-        // all three format numbers in, so a translation that dropped the placeholders would silently read as complete
-        public static bool TakesAnArgument(string key) =>
-            key == Hit || key == Miss || key == Guard;
+        // both format numbers in, so a translation that dropped the placeholders would silently read as complete
+        public static bool TakesAnArgument(string key) => key == Hit || key == Miss;
     }
 }

@@ -11,6 +11,7 @@ using Core.Localization;
 using Core.Resolution;
 using Game.Localization;
 using Game.Room;
+using Game.Saves;
 using Game.Sheet;
 
 // Game.Room is both a namespace and the type; alias so Room binds to the node
@@ -81,8 +82,73 @@ namespace Game.Diagnostics
 
             TheShelf(theRoom);
 
+            SavingAsYouPlay(theRoom);
+
             GD.Print("");
             Finish();
+        }
+
+        // AUTOSAVE IS EVENT-BASED, AND CLOSING THE DOOR IS ONE OF THE EVENTS.
+        //
+        // Until this, the only production write was a finished campaign - so a player who closed
+        // the game mid-dungeon lost the evening, and the machinery to stop that was all built and
+        // unreachable. Three things are worth a machine here: that an event writes, that an event
+        // with nothing new behind it does NOT (or the shelf fills with identical files), and that
+        // the door writes whatever is in front of it on the way past.
+        void SavingAsYouPlay(RoomNode room)
+        {
+            GD.Print("");
+
+            int stood = room.Shelf.Count;
+
+            // nothing is being played yet, so there is nothing any event could write down
+            if (room.Wrote(Autosave.When.Fought) != null)
+                Problem("a fight ended with nothing on the table and the room wrote a save anyway");
+
+            if (room.Unsaved)
+                Problem("the room says there is unsaved work and nothing has been played");
+
+            // now something is
+            var played = Finished();
+
+            room.Snapshot = () => played;
+            room.Happened();
+
+            if (!room.Unsaved)
+                Problem("something happened and the room does not think there is anything to write");
+
+            Box first = room.Wrote(Autosave.When.Fought);
+
+            if (first == null)
+            {
+                Problem("a fight ended on a game in progress and nothing was written - this is the " +
+                        "evening a player loses");
+                return;
+            }
+
+            GD.Print($"saving  a fight ended and {first.File} went up");
+
+            if (room.Unsaved)
+                Problem("a save was written and the room still says there is unsaved work");
+
+            // AND THE SAME EVENT AGAIN WRITES NOTHING. A save per frame is how a folder of
+            // snapshots becomes unusable, and the reload tabs read that folder
+            if (room.Wrote(Autosave.When.Fought) != null)
+                Problem("nothing happened and a second identical save was written anyway");
+
+            // the door never skips, because it is the one that cannot be gone back for
+            Box onTheWayOut = room.SaveNow();
+
+            if (onTheWayOut == null)
+                Problem("the player asked to save with nothing new and got nothing - a manual save " +
+                        "that is sometimes a no-op is indistinguishable from a broken one");
+
+            if (room.Shelf.Count <= stood)
+                Problem($"{room.Shelf.Count - stood} campaign(s) were added by saving and the shelf " +
+                        "does not stand any more than it did - the shelf IS the folder");
+
+            GD.Print($"saving  {room.Saving}");
+            GD.Print($"shelf   {room.Shelf.Count} standing on it now");
         }
 
         Node3D Stand()

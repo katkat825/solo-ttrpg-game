@@ -86,4 +86,27 @@ The whole point is that it feels like sitting at a table. Ways to lean into that
 
 ---
 
+## More (added 2026-09-17)
+
+Parked from a design pass — deliberately future, unless they turn out trivial.
+
+**Saving and permanence**
+
+- **Ironbook mode** — a pure-permanence option: no reload, your choices stick for good. The default lets you reload earlier saves; this is the hardcore opt-in.
+- **A cap on how many saves are kept** — undecided, waiting on a look at the performance cost of keeping many snapshots. Cheap to keep them, keep more; expensive, cap them.
+- **Manual save** ships as first-class (it's the autosave on a button); this note is only the fallback, in case it turns out non-trivial.
+
+**The room and the world**
+
+- **Seasonal room dressing** — the room and the companion change with the season (a winter coat on the companion). Cheap in logic, but every bit of seasonal art is hand-made, so it waits.
+- **Holiday decor** in the room — same story: nice, and a pile of bespoke art.
+- **Weather-matched room** — matching real local weather needs a network call, which the game deliberately never makes (it plays fully offline), so this is maybe-someday at best and off by default if ever.
+- **More behind-the-screen life** — beyond the random dice rattle: a pencil scratching, pages flipping, the top of a book rising above the screen, the screen tipping toward the DM. Cheap presence flourishes for a later pass.
+
+**Player actions**
+
+- **Swap a weapon by dropping it on your mini** — a future diegetic gesture; for now you pick your weapon on the character sheet.
+
+---
+
 *Add anything. Half-formed is fine — that's what this file is for.*

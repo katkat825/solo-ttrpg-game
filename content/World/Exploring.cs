@@ -101,6 +101,10 @@ namespace Content.World
 
             Fire(going, When.Entered, arrival);
 
+            // read after the entry triggers have run, because one of them may be what makes this
+            // place the place the errand ends
+            foreach (Quest quest in TurningInHere()) arrival.Nudges(quest.Id);
+
             return arrival;
         }
 
@@ -152,6 +156,60 @@ namespace Content.World
                 _present.Add(new Present(standing.Slot, at.Value, what.Local, what,
                                          what.Offers(Facts).ToArray()));
             }
+        }
+
+        // THE NUDGE: AN ACCEPTED QUEST THIS PLACE COULD MOVE ON.
+        //
+        // A quest does not say where it is turned in and must not - it is a named view over facts
+        // and nothing else, which is the whole reason the log is never stored (Content.Quests). So
+        // "turns in here" is DERIVED, the same way every other convenience in this layer is: what
+        // can this place write, and is any quest waiting on one of those?
+        //
+        // What a place can write is a closed list because the verbs are: whatever the people
+        // standing here still offer, whatever its own triggers set, and - where it is a fight - the
+        // fact that clearing it writes. If none of those is a fact some accepted quest is waiting
+        // on, there is nothing to mention and the companion stays quiet.
+        public IEnumerable<Quest> TurningInHere()
+        {
+            if (Where == null) yield break;
+
+            var writable = new HashSet<string>(Writable(), StringComparer.Ordinal);
+
+            foreach ((Quest quest, QuestState state) in Log)
+            {
+                if (state != QuestState.Active) continue;
+
+                // only what the turn-in is waiting on. A quest's other clauses are how it was
+                // offered and how it fails, and neither is a reason to stop somebody in a doorway
+                foreach (string fact in quest.Done.Facts)
+                {
+                    if (!writable.Contains(fact) || Facts.Is(fact)) continue;
+
+                    yield return quest;
+                    break;
+                }
+            }
+        }
+
+        IEnumerable<string> Writable()
+        {
+            foreach (Present present in _present)
+            {
+                if (present.IsAFoe) continue;
+
+                foreach (Interaction verb in present.Offers)
+                {
+                    string writes = verb.Writes(present.What.Local);
+
+                    if (writes.Length > 0) yield return writes;
+                }
+            }
+
+            foreach (Trigger trigger in Where.Triggers)
+                if (trigger.ThenDo == Then.Set && trigger.Sets.Length > 0)
+                    yield return trigger.Sets;
+
+            if (Where.IsAFight) yield return FactName.Cleared(Where.Id);
         }
 
         public Present At(Cell cell) => _present.Find(p => p.At == cell);

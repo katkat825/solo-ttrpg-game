@@ -128,6 +128,31 @@ namespace Game.Tests
             Assert.Equal(Bark.Trouble, TableCues.For(Roll(1, 1, 1)));
         }
 
+        // there is no d20 here, so the good end of the ladder has to be built out of top faces
+        [Fact]
+        public void One_die_on_its_top_face_is_maxed_and_the_whole_handful_is_perfect()
+        {
+            Assert.Equal(Bark.Maxed, TableCues.For(Roll(6, 4, 3)));
+            Assert.Equal(Bark.Perfect, TableCues.For(Roll(6, 6, 6)));
+            Assert.Null(TableCues.For(Roll(3, 4, 5)));
+        }
+
+        [Fact]
+        public void A_throw_that_is_both_a_top_face_and_a_1_is_the_1_that_gets_spoken_about()
+        {
+            // a creature that cheers a throw that also cost you something is a creature that
+            // is not watching; Trouble is the only one of the four with consequences
+            Assert.Equal(Bark.Snag, TableCues.For(Roll(6, 4, 1)));
+            Assert.Equal(Bark.Trouble, TableCues.For(Roll(6, 1, 1)));
+        }
+
+        [Fact]
+        public void Perfect_outranks_maxed_because_a_handful_is_not_one_die()
+        {
+            Assert.Equal(Bark.Perfect, TableCues.For(Roll(6, 6)));
+            Assert.Equal(Bark.Maxed, TableCues.For(Roll(6, 5)));
+        }
+
         [Fact]
         public void Nothing_at_all_is_a_quiet_throw_and_not_a_crash()
         {

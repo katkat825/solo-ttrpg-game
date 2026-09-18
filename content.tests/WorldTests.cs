@@ -329,6 +329,56 @@ namespace Content.Tests
         static QuestState State(Exploring world) =>
             world.Quests.Of("the_rock").StateIn(world.Facts);
 
+        // THE NEARBY-QUEST NUDGE. What the companion needs to know on the way in is derived, not
+        // authored: a quest says which facts finish it, a place says what it can write, and the
+        // overlap is the errand that ends here. Nothing in either file mentions the other.
+        [Fact]
+        public void AnAcceptedQuestThatCanBeFinishedHereIsWorthMentioningOnTheWayIn()
+        {
+            Exploring world = Walking(World());
+
+            world.Enter("square");
+            world.Accept("the_rock");
+
+            Assert.Equal(new[] { "the_rock" }, world.TurningInHere().Select(q => q.Id).ToArray());
+
+            // the arrival carries it, because walking in is the only moment worth saying it
+            Assert.Contains("the_rock", world.Enter("square").Nearby);
+        }
+
+        [Fact]
+        public void AQuestYouHaveNotAcceptedIsNotSomethingToBeStoppedAbout()
+        {
+            Exploring world = Walking(World());
+
+            Assert.Empty(world.Enter("square").Nearby);
+        }
+
+        [Fact]
+        public void NothingIsSaidInAPlaceThatCannotMoveTheQuestOn()
+        {
+            Exploring world = Walking(World());
+
+            world.Enter("square");
+            world.Accept("the_rock");
+
+            // the cellar has two rats in it and nothing the turn-in is waiting on
+            Assert.Empty(world.Enter("cellar").Nearby);
+        }
+
+        [Fact]
+        public void AFinishedErrandIsNotMentionedAgainNextTimeYouWalkIn()
+        {
+            Exploring world = Walking(World());
+
+            world.Enter("square");
+            world.Accept("the_rock");
+            world.Do(world.Standing(2), Interaction.Search);
+
+            Assert.Equal(QuestState.Done, State(world));
+            Assert.Empty(world.Enter("square").Nearby);
+        }
+
         [Fact]
         public void AnExitLeadsSomewhereAndYouArriveWhereItSaid()
         {

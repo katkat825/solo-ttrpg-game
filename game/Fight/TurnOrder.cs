@@ -8,25 +8,27 @@ namespace Game.Fight
 {
     public partial class TurnOrder : Node3D
     {
-        // THE INITIATIVE LIST, AS A THING ON THE TABLE.
+        // THE INITIATIVE STAND, AS A THING ON THE TABLE.
         //
         // It used to lie FLAT against the felt in 8 mm type. From the fixed camera - 60 degrees
         // down, a metre and a half away - that is nine pixels of text squashed to half height, and
         // the eye check said what you would expect: "there are words next to the map on the upper
         // left. I can't read them."
         //
-        // So it stands up instead, the way a DM's initiative card stands at the side of the mat:
-        // one small card at the far corner of the left edge, tilted toward the player, with the
-        // names stacked UP it rather than down the table. It is still an object and not a panel -
-        // THE_TABLE.md section 6 is a hard rule - it is just an object you can read.
+        // So it stands up instead, the way a DM's initiative cards stand at the side of the mat:
+        // one small stack at the far corner of the left edge, tilted toward the player, growing UP
+        // it rather than down the table. It is still an object and not a panel - THE_TABLE.md
+        // section 6 is a hard rule - it is just an object you can read.
+        //
+        // What stands here is a stack of CARDS now rather than a list of names, and what each one
+        // carries is Card's business. This file owns the stack: who is in it, how tall each card
+        // came out, and which one has the turn.
 
         // off the mat edge, clear of the board and inside the camera frame
         public const float Margin = 0.055f;
 
-        // 16 mm of cap height, square-on to the camera; roughly twice what a mini is wide
-        public const float LineHeight = 0.016f;
-
-        public const float LineGap = 0.006f;
+        // one card's worth of air before the next one, so a stack reads as cards and not as a list
+        public const float CardGap = 0.006f;
 
         public const float Lift = 0.004f;
 
@@ -34,7 +36,7 @@ namespace Game.Fight
 
         public const float MarkerSize = 0.007f;
 
-        // where the card stands along the mat's left edge: the FAR corner, because the near one is
+        // where the stack stands along the mat's left edge: the FAR corner, because the near one is
         // where the companion sits with its chin on the map (table.tscn places it there)
         public const float FromTheFarEdge = 0.02f;
 
@@ -48,20 +50,22 @@ namespace Game.Fight
 
         readonly List<Actor> _order = new List<Actor>();
 
-        readonly Dictionary<Actor, Label3D> _lines = new Dictionary<Actor, Label3D>();
+        readonly Dictionary<Actor, Card> _cards = new Dictionary<Actor, Card>();
+
+        // a Defence you have beaten, and therefore know. Nothing else puts a number on a foe's card
+        readonly Dictionary<Actor, int> _guards = new Dictionary<Actor, int>();
 
         MeshInstance3D _marker;
 
-        Actor _up;
-
-        const int GlyphResolution = 64;
-
         public IReadOnlyList<Actor> Listed => _order;
 
-        public Label3D LineFor(Actor actor) =>
-            actor != null && _lines.TryGetValue(actor, out Label3D line) ? line : null;
+        public Card CardFor(Actor actor) =>
+            actor != null && _cards.TryGetValue(actor, out Card card) ? card : null;
 
-        public void Write(IReadOnlyList<Actor> order, BoardMetrics metrics)
+        // whether this foe's Defence is on its card yet; the fight decides when, this remembers
+        public bool Knows(Actor actor) => actor != null && _guards.ContainsKey(actor);
+
+        public void Write(IReadOnlyList<Actor> order, BoardMetrics metrics, Actor yours = null)
         {
             foreach (Node child in GetChildren())
             {
@@ -69,27 +73,38 @@ namespace Game.Fight
                 child.QueueFree();
             }
 
-            _lines.Clear();
+            _cards.Clear();
             _order.Clear();
+            _guards.Clear();
             _marker = null;
 
             if (order == null || metrics == null) return;
 
             _order.AddRange(order);
 
-            // the card stands at the far corner of the mat's left edge, and the names stack up
-            // it from the table, so the one at the top of the list is the one highest off the felt
+            // the stack stands at the far corner of the mat's left edge and grows up from the
+            // table, so the one at the top of the order is the one highest off the felt
             Position = new Vector3(-metrics.HalfWidth - Margin, Lift,
                                    -metrics.HalfDepth + FromTheFarEdge);
 
-            for (int i = 0; i < _order.Count; i++)
+            foreach (Actor actor in _order)
             {
-                Label3D line = Write(_order[i]);
+                var card = new Card
+                {
+                    Name = actor.DebugName,
+                    Ink = Ink,
+                    Up = Up,
+                    Fallen = Fallen,
+                };
 
-                line.Position = new Vector3(0f, (_order.Count - 1 - i) * (LineHeight + LineGap), 0f);
+                AddChild(card);
 
-                _lines[_order[i]] = line;
+                card.Write(actor, ReferenceEquals(actor, yours), Text);
+
+                _cards[actor] = card;
             }
+
+            Stack();
 
             // tilted toward the player, like every other thing on this table with words on it
             Game.Room.TableView.Face(this);
@@ -97,7 +112,7 @@ namespace Game.Fight
             AddChild(_marker = new MeshInstance3D
             {
                 Name = "Marker",
-                // standing with the list now, so it is a square pip beside the name and not a
+                // standing with the stack now, so it is a square pip beside the name and not a
                 // tile lying on the felt
                 Mesh = new BoxMesh { Size = new Vector3(MarkerSize, MarkerSize, 0.0008f) },
                 MaterialOverride = Unshaded(Up),
@@ -106,66 +121,69 @@ namespace Game.Fight
             });
         }
 
-        Label3D Write(Actor actor)
+        // the first throw that clears a foe's guard puts the number on its card, and there it stays
+        public bool Reveal(Actor foe, int defence)
         {
-            var line = new Label3D
-            {
-                Name = actor.DebugName,
+            if (foe == null || _guards.ContainsKey(foe)) return false;
 
-                // the key until the localizer is asked, so a skipped lookup shows the key not a blank
-                Text = actor.NameKey,
+            _guards[foe] = defence;
 
-                FontSize = GlyphResolution,
-                PixelSize = LineHeight / GlyphResolution,
-                Modulate = Ink,
-                OutlineSize = 0,
-                Billboard = BaseMaterial3D.BillboardModeEnum.Disabled,
-                DoubleSided = false,
-                AlphaCut = Label3D.AlphaCutMode.Discard,
-
-                // right-aligned so the edge stays straight whatever a translated name's length
-                HorizontalAlignment = HorizontalAlignment.Right,
-
-                // Godot would translate the Label3D itself, a second place a key becomes words
-                AutoTranslateMode = AutoTranslateModeEnum.Disabled,
-            };
-
-            AddChild(line);
-
-            Inscribe(actor, line);
-
-            return line;
+            return true;
         }
 
-        // numbered key takes the ordinal as {0}; never name + space + n
-        void Inscribe(Actor actor, Label3D line)
-        {
-            if (Text == null) return;
-
-            line.Text = actor.Ordinal > 0
-                ? Text.Format(actor.NameKey, actor.Ordinal)
-                : Text.Get(actor.NameKey);
-        }
-
+        // told every frame, like the pips and the marks: state changed outside the fight still shows
         public void Mark(Actor acting)
         {
-            _up = acting;
+            float was = _height;
 
-            foreach (KeyValuePair<Actor, Label3D> line in _lines)
-                line.Value.Modulate = line.Key.IsDown ? Fallen
-                    : ReferenceEquals(line.Key, acting) ? Up
-                    : Ink;
+            foreach (KeyValuePair<Actor, Card> card in _cards)
+                card.Value.Show(ReferenceEquals(card.Key, acting),
+                                _guards.TryGetValue(card.Key, out int guard) ? guard : -1);
+
+            // a card grows the first time it has something new to say; re-stack only then
+            if (!Mathf.IsEqualApprox(was, Measured())) Stack();
 
             if (_marker == null) return;
 
-            if (acting == null || !_lines.TryGetValue(acting, out Label3D at))
+            Card at = CardFor(acting);
+
+            if (acting == null || at == null)
             {
                 _marker.Visible = false;
                 return;
             }
 
             _marker.Visible = true;
-            _marker.Position = at.Position + new Vector3(MarkerGap, LineHeight * 0.4f, 0f);
+            _marker.Position = at.Position + new Vector3(MarkerGap, at.NameRow, 0f);
+        }
+
+        float _height;
+
+        float Measured()
+        {
+            float total = 0f;
+
+            foreach (Actor actor in _order)
+                if (_cards.TryGetValue(actor, out Card card)) total += card.Height;
+
+            return total;
+        }
+
+        // the last in the order stands lowest, so the top of the stack is whose turn comes first
+        void Stack()
+        {
+            float up = 0f;
+
+            for (int i = _order.Count - 1; i >= 0; i--)
+            {
+                if (!_cards.TryGetValue(_order[i], out Card card)) continue;
+
+                card.Position = new Vector3(0f, up, 0f);
+
+                up += card.Height + CardGap;
+            }
+
+            _height = Measured();
         }
 
         static StandardMaterial3D Unshaded(Color colour) => new StandardMaterial3D
@@ -182,11 +200,19 @@ namespace Game.Fight
 
         public void Retranslate()
         {
-            foreach (KeyValuePair<Actor, Label3D> line in _lines) Inscribe(line.Key, line.Value);
+            foreach (KeyValuePair<Actor, Card> card in _cards) card.Value.Retranslate();
+
+            Stack();
         }
 
         // developer only, not localized, never reaches the screen
+        // the height is here because it is the one number that can put this off the top of the
+        // picture: cards grow as the fight wears on, and the eye check has caught the initiative
+        // list being unreadable once already
         public override string ToString() =>
-            _order.Count == 0 ? "no order yet" : string.Join(" > ", _order.ConvertAll(a => a.DebugName));
+            _order.Count == 0
+                ? "no order yet"
+                : string.Join(" > ", _order.ConvertAll(a => a.DebugName)) +
+                  $" ({_height * 1000f:0} mm of cards)";
     }
 }
