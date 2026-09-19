@@ -64,7 +64,7 @@ roughness = 1.0
 
 [node name="Board" type="Node3D"]
 script = ExtResource("1_board")
-Mat = SubResource("Mat_map")
+Parchment = SubResource("Mat_map")
 Lines = SubResource("Mat_lines")
 Wall = SubResource("Mat_wall")
 Door = SubResource("Mat_door")

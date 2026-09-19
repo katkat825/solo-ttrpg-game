@@ -16,14 +16,22 @@ namespace Content.Companions
 
         public const int MostIdles = 64;
 
+        // wolf-sized, because the wolf is the one the table was built around
+        public const float NormalSize = 1f;
+
+        public const float Smallest = 0.2f;
+
+        public const float Largest = 3f;
+
         public CompanionCard(string id, Perch perch, string voice = null, string mini = null,
-                             int idles = IdlesByDefault)
+                             int idles = IdlesByDefault, float size = NormalSize)
         {
             Id = id;
             Perch = perch;
             Voice = string.IsNullOrEmpty(voice) ? id : voice;
             Mini = mini ?? "";
             Idles = idles;
+            Size = size;
         }
 
         // pack-scoped, like every other content id, so two strangers' ravens do not collide
@@ -40,9 +48,16 @@ namespace Content.Companions
 
         public int Idles { get; }
 
+        // HOW BIG IT IS, because a wolf, a raven and a reliquary are not the same creature at the
+        // same scale. It is identity and not decoration - a raven rendered wolf-sized is a
+        // different animal - and it is still nothing a rule ever reads: there is no Vigor on this
+        // card and a big companion is not a strong one.
+        public float Size { get; }
+
         public override string ToString() =>
             $"{Id} on the {Perch.Word()}, speaks as {Voice}" +
             (Mini.Length > 0 ? $", stands as {Mini}" : "") +
-            $", {Idles} idles";
+            $", {Idles} idles" +
+            (Size == NormalSize ? "" : $", {Size:0.##} size");
     }
 }

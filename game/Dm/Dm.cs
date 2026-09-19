@@ -43,6 +43,8 @@ namespace Game.Dm
 
         Game.Companion.Bubble _note;
 
+        Note _asking;
+
         // transcript of what the DM did, for a headless check; developer diagnostics, not localized
         readonly List<string> _performed = new List<string>();
 
@@ -98,8 +100,60 @@ namespace Game.Dm
                 AddChild(_note);
             }
 
+            _asking = GetNodeOrNull<Note>("Asking");
+
+            if (_asking == null)
+            {
+                // THE OTHER PIECE OF PAPER. The one above carries what the DM SAID; this one
+                // carries what they are asking, and the difference is that this one has boxes on
+                // it and comes back. It lands a little nearer than the said note so the two are
+                // never on top of each other when a question follows a line.
+                _asking = new Note
+                {
+                    Name = "Asking",
+                    Position = NoteLands + new Vector3(0f, 0.001f, 0.06f),
+                };
+
+                AddChild(_asking);
+            }
+
             _secret = new SecretRoll(new SeededRng(Seed != 0 ? Seed : (int)Time.GetTicksMsec()),
                                      RollsForNothingEvery, RollsForNothingChance);
+        }
+
+        // ---- asking ---------------------------------------------------------------------------
+
+        // THE NOTE WITH THE BOXES ON IT. The DM writes the options down and slides it across; you
+        // tick one and it goes back on the pad. Whoever asked owns what the answer means.
+        public Note Asking => _asking;
+
+        public bool Asks(IReadOnlyList<string> lines, IReadOnlyList<bool> open = null)
+        {
+            if (_asking == null || lines == null || lines.Count == 0) return false;
+
+            _asking.Push(lines, open);
+
+            _hands?.Perform(Gesture.Push);
+
+            _performed.Add($"push - a note with {lines.Count} box(es)");
+
+            GD.Print($"dm      a note comes across with {lines.Count} option(s)");
+
+            foreach (string line in lines) GD.Print($"        [ ] {line}");
+
+            return true;
+        }
+
+        // ticked, read, and taken away. The gesture is the same one that takes anything back
+        public void TakesItBack()
+        {
+            if (_asking == null || !_asking.Showing) return;
+
+            _asking.Withdraw();
+
+            _hands?.Perform(Gesture.Withdraw);
+
+            _performed.Add("withdraw - the note goes back");
         }
 
         public void Perform(Content.Places.Place plan, When moment, string campaign)

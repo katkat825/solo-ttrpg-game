@@ -49,16 +49,18 @@ namespace Content.Companions
                 string voice = Voice(root, local, file, problems);
                 string mini = Mini(root, file, problems);
                 int idles = Idles(root, file, problems);
+                float size = Size(root, file, problems);
 
                 if (problems.Count > 0) return Read<CompanionCard>.Bad(problems);
 
                 string id = ContentId.IsCampaign(pack) ? ContentId.Scoped(pack, local) : local;
 
-                return Read<CompanionCard>.Good(new CompanionCard(id, perch, voice, mini, idles));
+                return Read<CompanionCard>.Good(
+                    new CompanionCard(id, perch, voice, mini, idles, size));
             }
         }
 
-        static readonly string[] Fields = { "id", "perch", "voice", "mini", "idles" };
+        static readonly string[] Fields = { "id", "perch", "voice", "mini", "idles", "size" };
 
         static string Id(JsonElement root, string file, List<ContentProblem> problems)
         {
@@ -142,6 +144,27 @@ namespace Content.Companions
             }
 
             return idles;
+        }
+
+        // HOW BIG IT IS. Left out, it is wolf-sized, because that is the creature the table was
+        // built around and every campaign that shipped before this field said nothing.
+        static float Size(JsonElement root, string file, List<ContentProblem> problems)
+        {
+            if (!root.TryGetProperty("size", out JsonElement value)) return CompanionCard.NormalSize;
+
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetSingle(out float size) ||
+                size < CompanionCard.Smallest || size > CompanionCard.Largest)
+            {
+                problems.Add(new ContentProblem(
+                    file, "size",
+                    $"'{Shown(value)}' is not a size - {CompanionCard.Smallest} to " +
+                    $"{CompanionCard.Largest}, where 1 is the house wolf. A raven is about a third " +
+                    "of it and a reliquary about a fifth. It changes how big the thing beside the " +
+                    "table looks and nothing else: there are no numbers on this card"));
+                return CompanionCard.NormalSize;
+            }
+
+            return size;
         }
 
         static string Shown(JsonElement value) => value.ValueKind switch

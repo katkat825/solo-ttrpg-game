@@ -66,54 +66,34 @@ namespace Game.Diagnostics
             GD.Print($"roster      {engine.GetType().Name}, " +
                      $"{engine.Ids.Count} archetypes: {string.Join(", ", engine.Ids)}");
 
+            // WHAT THE PRESENTATION LAYER EMITS, ASKED FOR RATHER THAN RE-LISTED.
+            //
+            // This was rebuilt here a set at a time - skins, minis, abilities, the DM's lines, the
+            // sheet, the cards - which is a second description of GameKeys.All() and free to fall
+            // behind it. It did: three sets of Phase T strings sat in the file with an audit that
+            // had never heard of them, and every one of them read back as an orphan.
+            //
+            // One list, derived at its own end. A new thing the game can say fails this check the
+            // moment GameKeys knows about it, which is the only place it should have to be said.
+            foreach (string key in GameKeys.All()) keys.Add(key);
+
+            // asked separately, because a skin with no NameKey is a thing to REPORT and GameKeys
+            // can only leave it out
             SortedDictionary<string, string> skins = GameKeys.TrayNameKeys();
 
             foreach (KeyValuePair<string, string> skin in skins)
-            {
                 if (string.IsNullOrWhiteSpace(skin.Value))
-                {
                     Problem($"tray skin '{skin.Key}' has no NameKey, so it can never be named on screen");
-                    continue;
-                }
-
-                keys.Add(skin.Value);
-            }
 
             GD.Print($"tray skins  {string.Join(", ", skins.Keys)}");
-
-            var minis = new SortedSet<string>(GameKeys.MiniNameKeys());
-
-            foreach (string key in minis) keys.Add(key);
-
-            GD.Print($"minis       {string.Join(", ", minis)}");
-
-            var kit = new SortedSet<string>(GameKeys.AbilityKeys());
-
-            foreach (string key in kit) keys.Add(key);
-
+            GD.Print($"minis       {string.Join(", ", GameKeys.MiniNameKeys())}");
             GD.Print($"kit         {string.Join(", ", Content.Kits.SharedKit.All.Select(a => a.Id))}");
-
-            // DM lines live under combat.*, not dialogue.dm.*: the DM is the voice, the rules the author
-            var dm = new SortedSet<string>(Game.Dm.DmLines.All());
-
-            foreach (string key in dm) keys.Add(key);
-
-            GD.Print($"dm          {string.Join(", ", dm)}");
-
-            // the sheet's printed labels and the room's objects (Phase R)
-            var room = new SortedSet<string>(Game.Sheet.SheetKeys.All());
-
-            foreach (string key in room) keys.Add(key);
-
+            GD.Print($"dm          {string.Join(", ", Game.Dm.DmLines.All())}");
             GD.Print($"room        {string.Join(", ", Game.Room.Props.Words)}");
-
-            // and what is printed on an initiative card: the bands a foe's health is said in, and
-            // the two numbers that go on a card rather than into a voice
-            var cards = new SortedSet<string>(Game.Fight.CardKeys.All());
-
-            foreach (string key in cards) keys.Add(key);
-
-            GD.Print($"cards       {string.Join(", ", cards)}");
+            GD.Print($"table       {string.Join(", ", Game.Room.TableProps.Words)}");
+            GD.Print($"verbs       {string.Join(", ", Game.Explore.VerbKeys.All())}");
+            GD.Print($"checks      {string.Join(", ", Content.Sheet.Checks.Words)}");
+            GD.Print($"cards       {string.Join(", ", Game.Fight.CardKeys.All())}");
             GD.Print("");
 
             return keys;

@@ -1,0 +1,21 @@
+[gd_scene load_steps=3 format=3]
+
+; The table check, holding the SHIPPED table inside it - the board, the tray, the DM, the companion
+; and the sheet, exactly as they are played.
+;
+; check-world.ps1 walks a world with no table at all, which is the proof the World layer is
+; Godot-free. This is the other half of that claim: the same world, laid out as mats that the DM's
+; hands swap, with everybody present standing on them as figures, cards beside them to answer with,
+; and a fight begun and left on the same map.
+;
+; It does not play the fight. check-fight.ps1 does that properly on the real felt; what this
+; asserts is the transition either way.
+;
+; Run it with check-table.ps1.
+
+[ext_resource type="Script" path="res://Diagnostics/TableCheck.cs" id="1_check"]
+[ext_resource type="PackedScene" path="res://table.tscn" id="2_table"]
+
+[node name="TableCheck" type="Node"]
+script = ExtResource("1_check")
+TheTable = ExtResource("2_table")

@@ -38,6 +38,17 @@ namespace Game.Companion
 
         [Export] public NodePath TrayPath { get; set; }
 
+        // the map's edge, for a companion whose perch is beside it. Unset leaves the perch
+        // unhonoured and the scene's own placement standing, which is what every table did before
+        [Export] public NodePath BoardPath { get; set; }
+
+        // WHERE EACH PERCH ACTUALLY IS, relative to the object it is a perch on. Exported because
+        // the only way to place a creature at a table is to sit at the table and move the number,
+        // and these are the numbers the eye check settled on when the wolf was placed by hand.
+        [Export] public Vector3 AtTheTrayRim { get; set; } = new Vector3(0f, -0.013f, -0.36f);
+
+        [Export] public Vector3 BesideTheMap { get; set; } = new Vector3(-0.09f, 0f, 0.04f);
+
         [Export] public int Seed { get; set; }
 
         [Export] public Color Coat { get; set; } = new Color("#6a6258");
@@ -151,8 +162,62 @@ namespace Game.Companion
 
             _speaking = OpenTheBank();
 
+            Sized();
+
+            Perched();
+
             GD.Print($"companion {(Card == null ? "(placeholder)" : Card.ToString())}" +
                      (CanSpeak ? "" : " - no bark bank, so it watches and says nothing"));
+        }
+
+        // ITS SIZE IS PART OF ITS IDENTITY. A wolf, a raven and a reliquary are not the same
+        // creature at the same scale, and a raven rendered wolf-sized is a different animal.
+        //
+        // The BODY is scaled and not this node, because the bubble hangs off this node too and
+        // words are words: a raven's line is not a third the size of a wolf's, it is the same
+        // sentence said by something smaller.
+        void Sized()
+        {
+            float size = Card?.Size ?? CompanionCard.NormalSize;
+
+            if (_body != null) _body.Scale = Vector3.One * size;
+
+            if (_bubble == null) return;
+
+            // the card still sits above whatever is speaking, so it rides up with a big one and
+            // down with a small one rather than floating over a raven's head at a wolf's height
+            _bubble.Position = new Vector3(_bubble.Position.X,
+                                           _bubble.Position.Y * size,
+                                           _bubble.Position.Z);
+        }
+
+        // A PERCH IS A PLACE ON THE TABLE, and until now the scene put the creature down by hand
+        // and the card said where it was meant to be - two descriptions of one thing, free to
+        // disagree, and they did have to be moved together. Given the object a perch is ON, this
+        // derives the placement instead. Without that object it leaves the scene's own placement
+        // alone, which is every table that has not been rewired.
+        void Perched()
+        {
+            Perch perch = Card?.Perch ?? Perch.MapEdge;
+
+            if (perch.NeedsTheTray() && _tray != null)
+            {
+                GlobalPosition = _tray.GlobalPosition + AtTheTrayRim;
+
+                GD.Print($"companion sits at the tray rim, {AtTheTrayRim}");
+                return;
+            }
+
+            if (!perch.NeedsTheBoard() || BoardPath == null || BoardPath.IsEmpty) return;
+
+            var board = GetNodeOrNull<Game.Board.Board>(BoardPath);
+
+            if (board?.Metrics == null) return;
+
+            GlobalPosition = board.ToGlobal(
+                new Vector3(-board.Metrics.HalfWidth, 0f, 0f) + BesideTheMap);
+
+            GD.Print($"companion lies alongside the map, {BesideTheMap} off its western edge");
         }
 
         CompanionCard Look()

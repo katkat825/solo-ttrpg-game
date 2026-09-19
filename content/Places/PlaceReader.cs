@@ -45,10 +45,12 @@ namespace Content.Places
                 IReadOnlyList<Exit> exits = Exits(root, file, problems);
                 IReadOnlyList<Trigger> triggers = Triggers(root, file, problems);
                 IReadOnlyList<Cue> cues = Cues(root, file, problems);
+                IReadOnlyDictionary<Content.Sheet.Check, int> checks = Checks(root, file, problems);
 
                 Unknown(root, file, problems);
 
-                if (standing.Count == 0 && exits.Count == 0 && triggers.Count == 0)
+                if (standing.Count == 0 && exits.Count == 0 && triggers.Count == 0 &&
+                    checks.Count == 0)
                     problems.Add(new ContentProblem(
                         file, "",
                         "nobody stands in this place, there is no way out of it and nothing " +
@@ -57,7 +59,8 @@ namespace Content.Places
 
                 if (problems.Exists(p => p.IsAFault)) return Read<Place>.Bad(problems);
 
-                return Read<Place>.Good(new Place(id, map, standing, exits, triggers, cues));
+                return Read<Place>.Good(
+                    new Place(id, map, standing, exits, triggers, cues, checks));
             }
         }
 
@@ -66,8 +69,75 @@ namespace Content.Places
 
         static readonly string[] Fields =
         {
-            "id", "map", "standing", Placements, "exits", "triggers", "cues",
+            "id", "map", "standing", Placements, "exits", "triggers", "cues", "checks",
         };
+
+        // WHAT YOU MAY TRY HERE, OFF YOUR OWN SHEET, AND HOW HARD THE SCENE MAKES IT.
+        //
+        // { "checks": { "persuade": 11, "perception": 9 } } and nothing more. A check left out is
+        // one this place does not offer, which is the author saying there is nobody here to try
+        // it on - and a check listed is the kit's own check primitive against that number, so
+        // allowing one is a line of data and never a line of engine.
+        static IReadOnlyDictionary<Content.Sheet.Check, int> Checks(
+            JsonElement root, string file, List<ContentProblem> problems)
+        {
+            var allowed = new Dictionary<Content.Sheet.Check, int>();
+
+            if (!root.TryGetProperty("checks", out JsonElement value)) return allowed;
+
+            if (value.ValueKind != JsonValueKind.Object)
+            {
+                problems.Add(new ContentProblem(
+                    file, "checks",
+                    $"'checks' is a {Named(value.ValueKind)} and it is an object of " +
+                    $"{Vocabulary.Offer(Content.Sheet.Checks.Words)} against a difficulty - " +
+                    @"{ ""persuade"": 11 }"));
+                return allowed;
+            }
+
+            foreach (JsonProperty property in value.EnumerateObject())
+            {
+                if (!Content.Sheet.Checks.TryWord(property.Name, out Content.Sheet.Check check))
+                {
+                    problems.Add(new ContentProblem(
+                        file, "checks." + property.Name,
+                        $"'{property.Name}' is not something you can try - it is one of " +
+                        $"{Vocabulary.Offer(Content.Sheet.Checks.Words)}. They are the three a " +
+                        "character reaches for off their own sheet; a fourth is engine work, the " +
+                        "same as a sixth verb is"));
+                    continue;
+                }
+
+                if (property.Value.ValueKind != JsonValueKind.Number ||
+                    !property.Value.TryGetInt32(out int against) ||
+                    against < Core.Resolution.Difficulty.Easy ||
+                    against > Core.Resolution.Difficulty.Legendary)
+                {
+                    problems.Add(new ContentProblem(
+                        file, "checks." + property.Name,
+                        $"'{Shown(property.Value)}' is not a difficulty - " +
+                        $"{Core.Resolution.Difficulty.Easy} to " +
+                        $"{Core.Resolution.Difficulty.Legendary}, where " +
+                        $"{Core.Resolution.Difficulty.Standard} is standard and " +
+                        $"{Core.Resolution.Difficulty.Formidable} is a gate a starting hero " +
+                        "cannot pass"));
+                    continue;
+                }
+
+                if (allowed.ContainsKey(check))
+                {
+                    problems.Add(new ContentProblem(
+                        file, "checks." + property.Name,
+                        $"'{property.Name}' is allowed twice here, at two difficulties - one of " +
+                        "the two would never be the one used"));
+                    continue;
+                }
+
+                allowed[check] = against;
+            }
+
+            return allowed;
+        }
 
         static void Unknown(JsonElement root, string file, List<ContentProblem> problems)
         {

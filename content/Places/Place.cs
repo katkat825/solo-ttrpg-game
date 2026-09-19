@@ -11,7 +11,8 @@ namespace Content.Places
     {
         public Place(string id, string map, IReadOnlyList<Standing> standings,
                      IReadOnlyList<Exit> exits, IReadOnlyList<Trigger> triggers,
-                     IReadOnlyList<Cue> cues)
+                     IReadOnlyList<Cue> cues,
+                     IReadOnlyDictionary<Sheet.Check, int> checks = null)
         {
             Id = id;
             Map = map;
@@ -19,6 +20,7 @@ namespace Content.Places
             Exits = exits ?? Array.Empty<Exit>();
             Triggers = triggers ?? Array.Empty<Trigger>();
             Cues = cues ?? Array.Empty<Cue>();
+            Checks = checks ?? new Dictionary<Sheet.Check, int>();
         }
 
         public string Id { get; }
@@ -33,6 +35,22 @@ namespace Content.Places
         public IReadOnlyList<Trigger> Triggers { get; }
 
         public IReadOnlyList<Cue> Cues { get; }
+
+        // WHAT YOU MAY TRY HERE, AND HOW HARD IT IS. The verbs on this place's people are the
+        // author's offer; these are the things you may reach for yourself off your own sheet, and
+        // the number beside each is what the scene makes of it. A check this place does not list
+        // is one there is nobody here to try it on, so the sheet does not offer it.
+        //
+        // It is a difficulty and nothing else, because each of them is the check primitive the kit
+        // already runs. That is what keeps "the guard can be leaned on, and he is stubborn" a
+        // number in a campaign file rather than a line of engine.
+        public IReadOnlyDictionary<Sheet.Check, int> Checks { get; }
+
+        public bool Allows(Sheet.Check check) => Checks.ContainsKey(check);
+
+        // the scene's number, or Standard where the place said nothing
+        public int Against(Sheet.Check check) =>
+            Checks.TryGetValue(check, out int against) ? against : Core.Resolution.Difficulty.Standard;
 
         // a place with a foe on it is somewhere a fight is waiting; one without is somewhere to be
         public bool IsAFight => Standings.Any(s => s.IsAFoe);
@@ -107,6 +125,10 @@ namespace Content.Places
         // debug only, never localized
         public override string ToString() =>
             $"{Id} on {Map}: {Standings.Count} standing, {Exits.Count} exits, " +
-            $"{Triggers.Count} triggers, {Cues.Count} cues";
+            $"{Triggers.Count} triggers, {Cues.Count} cues" +
+            (Checks.Count > 0
+                ? ", you may try " + string.Join(", ", Checks.Select(
+                      c => $"{Sheet.Checks.Word(c.Key)} vs {c.Value}"))
+                : "");
     }
 }

@@ -50,6 +50,9 @@ namespace Game.Sheet
         // 'Written' would collide with the signal member Godot's generator emits for it
         [Signal] public delegate void MarkedEventHandler();
 
+        // one of the three you reach for yourself was touched, by its place in the Check enum
+        [Signal] public delegate void CheckedEventHandler(int which);
+
         readonly ILocalizer _text = new GodotLocalizer();
 
         readonly Dictionary<Line, Label3D> _lines = new Dictionary<Line, Label3D>();
@@ -57,6 +60,17 @@ namespace Game.Sheet
         readonly List<MeshInstance3D> _pips = new List<MeshInstance3D>();
 
         readonly List<MeshInstance3D> _wear = new List<MeshInstance3D>();
+
+        readonly Dictionary<Check, Row> _checks = new Dictionary<Check, Row>();
+
+        // one of the three printed on the paper: what it says, what you touch, and whether this
+        // scene allows it at all
+        sealed class Row
+        {
+            public Label3D Text;
+            public StaticBody3D Touch;
+            public bool Allowed;
+        }
 
         StaticBody3D _touch;
 
@@ -167,6 +181,38 @@ namespace Game.Sheet
                 _pips.Add(pip);
                 AddChild(pip);
             }
+
+            // THE THREE YOU REACH FOR YOURSELF. Printed on the paper rather than offered on a
+            // card, because a card is the moment offering you something and these are yours -
+            // nobody hands you the idea of leaning on somebody, you have it.
+            y -= 0.055f;
+
+            foreach (Check check in Content.Sheet.Checks.All)
+            {
+                var written = Printed(check.NameKey(), y, Ink, FontSize, -Width * 0.5f + 0.02f,
+                                      HorizontalAlignment.Left);
+
+                AddChild(written);
+
+                var touch = new StaticBody3D
+                {
+                    Name = "Try" + check.Word(),
+                    Position = new Vector3(0f, y, 0f),
+                };
+
+                touch.AddChild(new CollisionShape3D
+                {
+                    Shape = new BoxShape3D { Size = new Vector3(Width, 0.030f, 0.004f) },
+                });
+
+                AddChild(touch);
+
+                _checks[check] = new Row { Text = written, Touch = touch, Allowed = false };
+
+                y -= 0.032f;
+            }
+
+            Nowhere();
 
             // a thing you touch, so it has a body like the Nerve tokens and the choice cards
             _touch = new StaticBody3D { Name = "Touch" };
@@ -382,6 +428,86 @@ namespace Game.Sheet
             };
 
         public bool Owns(GodotObject what) => _touch != null && ReferenceEquals(_touch, what);
+
+
+        // ---- the three you reach for yourself -------------------------------------------------
+
+        // WHAT THIS SCENE LETS YOU TRY. A check the place did not list is one there is nobody here
+        // to try it on, so it is printed and plainly not available rather than disappearing - the
+        // same call the choice cards made, and for the same reason.
+        public void Allows(IReadOnlyDictionary<Check, int> here)
+        {
+            foreach (KeyValuePair<Check, Row> row in _checks)
+            {
+                row.Value.Allowed = here != null && here.ContainsKey(row.Key);
+
+                row.Value.Text.Modulate = row.Value.Allowed ? Ink : Smudge;
+            }
+        }
+
+        // nowhere in particular: none of them is on offer
+        public void Nowhere() => Allows(null);
+
+        public bool Allowed(Check check) =>
+            _checks.TryGetValue(check, out Row row) && row.Allowed;
+
+        public IReadOnlyCollection<Check> Trying
+        {
+            get
+            {
+                var open = new List<Check>();
+
+                foreach (KeyValuePair<Check, Row> row in _checks)
+                    if (row.Value.Allowed) open.Add(row.Key);
+
+                return open;
+            }
+        }
+
+        // touched, from outside: what a keyboard walk and a headless check use
+        public bool Try(Check check)
+        {
+            if (!Allowed(check)) return false;
+
+            GD.Print($"sheet   you try to {check.Word()}");
+
+            EmitSignal(SignalName.Checked, (int)check);
+
+            return true;
+        }
+
+        public override void _UnhandledInput(InputEvent @event)
+        {
+            if (_checks.Count == 0) return;
+
+            if (!@event.IsActionPressed("place_piece") || @event is not InputEventMouse mouse) return;
+
+            Camera3D camera = GetViewport()?.GetCamera3D();
+
+            if (camera == null) return;
+
+            var query = PhysicsRayQueryParameters3D.Create(
+                camera.ProjectRayOrigin(mouse.Position),
+                camera.ProjectRayOrigin(mouse.Position) + camera.ProjectRayNormal(mouse.Position) * 8f);
+
+            query.CollideWithAreas = false;
+
+            Godot.Collections.Dictionary hit = GetWorld3D()?.DirectSpaceState?.IntersectRay(query);
+
+            if (hit == null || hit.Count == 0) return;
+
+            var what = hit["collider"].As<GodotObject>();
+
+            foreach (KeyValuePair<Check, Row> row in _checks)
+            {
+                if (!ReferenceEquals(row.Value.Touch, what) || !row.Value.Allowed) continue;
+
+                GetViewport().SetInputAsHandled();
+
+                Try(row.Key);
+                return;
+            }
+        }
 
         // developer only, not localized, never reaches the screen
         public override string ToString() => $"sheet: {Character}";

@@ -13,6 +13,12 @@
     { "slot": 4, "to": "the_weir", "arriving": 4, "road": "the_causeway" }
   ],
 
+  // WHAT YOU MAY TRY HERE, off your own sheet, that nobody offered you. Norrel is a man on a
+  // quay: you can read him, and you can talk him round, and neither is easy. Each is the check
+  // primitive the kit already runs against the number on this line, which is the whole of what
+  // allowing one costs an author.
+  "checks": { "persuade": 11, "perception": 9 },
+
   "cues": [
     { "when": "entered", "cue": "the_quay_at_low_tide" },
 

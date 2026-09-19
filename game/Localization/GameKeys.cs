@@ -24,6 +24,14 @@ namespace Game.Localization
 
             // and the words printed on an initiative card, for the same reason
             foreach (string key in Game.Fight.CardKeys.All()) yield return key;
+
+            // Phase T. The words on a card the moment lays out, the names of the objects ON the
+            // table as against the ones in the room, and the three checks you reach for yourself
+            foreach (string key in Game.Explore.VerbKeys.All()) yield return key;
+
+            foreach (string key in Game.Room.TableProps.Keys()) yield return key;
+
+            foreach (string key in Content.Sheet.Checks.Keys()) yield return key;
         }
 
         // the base game's shared abilities only; a pack's abilities are named in the pack's own locale

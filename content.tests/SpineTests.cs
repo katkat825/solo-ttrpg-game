@@ -324,5 +324,61 @@ namespace Content.Tests
             Assert.False(read.Ok);
             Assert.Contains(read.Problems, p => p.Where == "vigor");
         }
+
+
+        // A COMPANION'S SIZE IS PART OF ITS IDENTITY (Phase T). A wolf, a raven and a reliquary are
+        // not the same creature at the same scale, and a raven rendered wolf-sized is a different
+        // animal. It is still nothing a rule ever reads.
+        [Fact]
+        public void A_companion_that_says_nothing_about_its_size_is_wolf_sized()
+        {
+            Read<CompanionCard> read = CompanionReader.Parse(
+                @"{ ""id"": ""wolf"", ""perch"": ""map_edge"" }", "wolf.json", "hearthguard");
+
+            Assert.True(read.Ok);
+            Assert.Equal(CompanionCard.NormalSize, read.Value.Size);
+        }
+
+        [Fact]
+        public void A_raven_is_a_third_of_a_wolf_and_says_so_on_its_card()
+        {
+            Read<CompanionCard> read = CompanionReader.Parse(
+                @"{ ""id"": ""raven"", ""perch"": ""tray_rim"", ""size"": 0.35 }",
+                "raven.json", "hearthguard");
+
+            Assert.True(read.Ok);
+            Assert.Equal(0.35f, read.Value.Size, 4);
+        }
+
+        [Fact]
+        public void A_size_nothing_could_be_is_refused_and_the_range_is_offered()
+        {
+            foreach (string absurd in new[] { "0", "-2", "40" })
+            {
+                Read<CompanionCard> read = CompanionReader.Parse(
+                    $@"{{ ""id"": ""wolf"", ""perch"": ""map_edge"", ""size"": {absurd} }}",
+                    "wolf.json", "hearthguard");
+
+                Assert.False(read.Ok);
+                Assert.Contains(read.Problems, p => p.Where == "size");
+            }
+        }
+
+        // SIZE IS NOT A NUMBER A RULE READS. The type is still the guarantee it was: a companion
+        // that is bigger is bigger, and there is nowhere on the card to say it is stronger
+        [Fact]
+        public void A_bigger_companion_is_not_a_stronger_one()
+        {
+            Read<CompanionCard> read = CompanionReader.Parse(
+                @"{ ""id"": ""bear"", ""perch"": ""map_edge"", ""size"": 2.5 }",
+                "bear.json", "hearthguard");
+
+            Assert.True(read.Ok);
+            Assert.Equal(2.5f, read.Value.Size, 4);
+
+            Assert.Null(typeof(CompanionCard).GetProperty("Vigor"));
+            Assert.Null(typeof(CompanionCard).GetProperty("Defense"));
+            Assert.Null(typeof(CompanionCard).GetProperty("Tier"));
+        }
     }
 }

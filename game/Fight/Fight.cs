@@ -56,6 +56,16 @@ namespace Game.Fight
         [Export] public string HeroArmour { get; set; } = "";
 
         // one id per spawn slot, in order; empty falls back to the squares above
+        // SOMETHING ELSE DECIDES WHEN THIS FIGHT STARTS. A walk puts its own fight on the board
+        // the moment you swing at somebody, so the one standing in the scene - which is there for
+        // a table that boots straight into a fight - is switched off rather than raced.
+        [Export] public bool Waits { get; set; }
+
+        // A FIGHT THAT BEGAN OUT OF A WALK. Set before AddChild, like Resuming: the roster is
+        // whoever was standing in the place when you swung, which the world worked out, and the
+        // slots it names are the same spawn slots the map already has.
+        public Content.World.Episode Episode { get; set; }
+
         [Export] public Godot.Collections.Array<string> Spawns { get; set; } =
             new Godot.Collections.Array<string>();
 
@@ -204,12 +214,23 @@ namespace Game.Fight
 
         public bool Unwatch(ICombatObserver observer) => _watching != null && _watching.Remove(observer);
 
+        // THE FIGHT IS OVER, AND SOMETHING OUTSIDE IT WANTS TO KNOW. A walk that started this
+        // fight has facts to write down and a place to rebuild, and polling for it would miss a
+        // fight that began and ended between two samples.
+        [Signal] public delegate void EndedEventHandler(bool won);
+
         public bool Settled =>
             _swingingAt == null && !_rollingOrder && _felt == null && _beat <= 0.0
             && !_pieces.All.Any(p => p.Mini.IsMoving);
 
         public override void _Ready()
         {
+            if (Waits)
+            {
+                GD.Print("fight   waiting - something else at this table decides when it starts");
+                return;
+            }
+
             _board = GetNodeOrNull<BoardNode>(BoardPath);
             _tray = GetNodeOrNull<DiceTray>(TrayPath);
 
@@ -396,6 +417,12 @@ namespace Game.Fight
 
         public override void _ExitTree()
         {
+            // the order stand belongs to this fight, not to the board it was put on. Left behind,
+            // a second fight in the same place stands a second one beside it
+            if (_order != null && IsInstanceValid(_order)) _order.QueueFree();
+
+            _order = null;
+
             if (_board != null && _board.Claims == OnClick) _board.Claims = null;
 
             if (_tray != null)
@@ -472,6 +499,10 @@ namespace Game.Fight
 
         IReadOnlyList<string> Roster()
         {
+            // the episode first: a place's own roster is who STARTS there, and a fight begun by
+            // swinging at somebody is against who is standing there now
+            if (Episode != null) return Episode.Roster;
+
             if (_board.Plan != null) return _board.Plan.Roster(_board.Campaign);
 
             return Spawns ?? (IReadOnlyList<string>)System.Array.Empty<string>();
@@ -1262,6 +1293,8 @@ namespace Game.Fight
             {
                 _cleared = true;
                 _dm?.Perform(_board.Plan, Content.Places.When.Cleared, _board.Campaign);
+
+                EmitSignal(SignalName.Ended, !_hero.IsDown);
 
                 if (_hero.IsDown) _friend?.SeesTheHeroDown();
                 else _friend?.SeesTheRoomCleared();

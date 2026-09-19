@@ -29,7 +29,9 @@ namespace Game.Board
 
         [Export] public float CellSize { get; set; } = 0.06f;
 
-        [Export] public Material Mat { get; set; }
+        // the mat's own surface. Named for what it is rather than for the object it covers: Mat
+        // is the node the whole map hangs off since the place became a thing you lay down
+        [Export] public Material Parchment { get; set; }
 
         [Export] public Material Lines { get; set; }
 
@@ -105,6 +107,15 @@ namespace Game.Board
         Mini _piece;
 
         CellFlash _refused;
+
+        Mat _mat;
+
+        // THE MAT THE MAP IS DRAWN ON. Everything a place draws hangs off it, so a place change is
+        // this one object being carried away and another laid down.
+        public Mat Laid => _mat;
+
+        // fired when a new place has been laid out on the table and may be stood on
+        public event Action LaidOut;
 
         public BoardMetrics Metrics => _metrics;
 
@@ -310,7 +321,9 @@ namespace Game.Board
         }
 
         // the encounter's roster, read here because the room is chosen here; the fight musters from it
-        public Content.Places.Place Plan { get; private set; }
+        // settable since the board learned to be re-laid: walking into a place hands the board
+        // the place it is now, and the fight reads its cues and roster off it as it always has
+        public Content.Places.Place Plan { get; set; }
 
         string Chosen()
         {
@@ -413,17 +426,26 @@ namespace Game.Board
 
         void Build()
         {
-            var under = new Node3D { Name = "Surface" };
-            AddChild(under);
+            // EVERYTHING A MAP DRAWS HANGS OFF THE MAT, and nothing else does. That is what makes
+            // a place change one object being carried away rather than a scene being rebuilt.
+            if (_mat == null)
+            {
+                _mat = new Mat { Name = "Mat" };
+                AddChild(_mat);
+                _mat.Laid += OnLaid;
+            }
 
-            if (Mat == null || Lines == null)
+            var under = new Node3D { Name = "Surface" };
+            _mat.AddChild(under);
+
+            if (Parchment == null || Lines == null)
                 GD.PushError("board: the mat or the grid lines have no material - the board will be untextured");
 
             under.AddChild(new MeshInstance3D
             {
                 Name = "Mat",
                 Mesh = new BoxMesh { Size = new Vector3(_metrics.Width, MatThickness, _metrics.Depth) },
-                MaterialOverride = Mat,
+                MaterialOverride = Parchment,
                 Position = new Vector3(0f, -MatThickness * 0.5f, 0f),
             });
 
@@ -440,7 +462,7 @@ namespace Game.Board
                     new Vector3(0f, LineRise, y * _metrics.CellSize - _metrics.HalfDepth)));
 
             _terrain = new Node3D { Name = "Terrain" };
-            AddChild(_terrain);
+            _mat.AddChild(_terrain);
 
             _tiles = new BoardTiles(_metrics)
             {
@@ -454,7 +476,7 @@ namespace Game.Board
             };
             _tiles.Build(_terrain, _map);
 
-            AddChild(_refused = new CellFlash
+            _mat.AddChild(_refused = new CellFlash
             {
                 Name = "Refused",
                 Tint = RefusedTint,
@@ -464,6 +486,120 @@ namespace Game.Board
                 },
             });
         }
+
+        // ---- laying a different place on the table -------------------------------------------
+
+        // A PLACE CHANGE IS A MAT SWAP, and the hands do it. The caller passes what the hands are,
+        // because the board has never known there is a DM across the table from it.
+        public void Relay(MapLayout map, Cell? at = null, Action<Content.Places.Gesture> hands = null,
+                          string where = null)
+        {
+            // no mat to carry: lay it straight down and say so, so whatever was waiting for the
+            // swap to finish is not left waiting for a swap that never started
+            if (map == null || _mat == null)
+            {
+                LayOut(map, at, where);
+                OnLaid();
+                return;
+            }
+
+            // the piece comes off the table while the mat is carried. Leaving it standing would
+            // have it hanging over a map that is half way across the table on its way to the DM
+            if (_piece != null)
+            {
+                _grid.Remove(_piece);
+                _piece.Visible = false;
+            }
+
+            _mat.SwapFor(() => LayOut(map, at, where), hands);
+        }
+
+        // rebuilds the board for a different map. Metrics, grid and terrain all come off the map
+        // together, exactly as they do at boot, so the three can never end up describing two places
+        public bool LayOut(MapLayout map, Cell? at = null, string where = null)
+        {
+            if (map == null)
+            {
+                GD.PushError("board: there is no map to lay out - the mat stays as it is");
+                return false;
+            }
+
+            Sweep();
+
+            _map = map;
+            _metrics = new BoardMetrics(_map.Columns, _map.Rows, Usable(CellSize));
+            _grid = new Grid<Mini>(_map.Columns, _map.Rows);
+
+            _door = null;
+            _opening = null;
+            _opened = null;
+            _wreckage = null;
+            _checking = false;
+
+            if (where != null)
+            {
+                Where = where;
+
+                // what is on the table now, so a fight mustering on this mat does not report the
+                // map the board happened to boot with
+                Loaded = where;
+            }
+
+            Build();
+
+            Cell start = at ?? _map.Start;
+
+            if (_piece != null)
+            {
+                if (!_grid.Place(_piece, start))
+                {
+                    GD.PushError($"board: {start} is not a square on a {_metrics} - the piece " +
+                                 "stands on the map's own start instead");
+
+                    start = _map.Start;
+                    _grid.Place(_piece, start);
+                }
+
+                _piece.Visible = true;
+                _piece.PlaceAt(_metrics.Centre(start));
+            }
+
+            GD.Print($"mat     {(where == null ? "a new map" : where)} laid out - {_metrics}, " +
+                     $"the piece on {start}");
+
+            return true;
+        }
+
+        // everything the last place put on the table, taken off. The mat's own children go with
+        // it; a mini standing on the mat belongs to whoever put it there and is lifted by name
+        void Sweep()
+        {
+            foreach (Node child in _mat?.GetChildren() ?? new Godot.Collections.Array<Node>())
+                child.QueueFree();
+
+            _terrain = null;
+            _tiles = null;
+            _refused = null;
+
+            foreach (Mini standing in Standing())
+            {
+                _grid.Remove(standing);
+                standing.QueueFree();
+            }
+        }
+
+        // every mini on this board but the hero's own piece; the piece is picked up and set down
+        List<Mini> Standing()
+        {
+            var minis = new List<Mini>();
+
+            foreach (Node child in GetChildren())
+                if (child is Mini mini && !ReferenceEquals(mini, _piece)) minis.Add(mini);
+
+            return minis;
+        }
+
+        void OnLaid() => LaidOut?.Invoke();
 
         MeshInstance3D Line(string name, Mesh mesh, Vector3 at) => new MeshInstance3D
         {

@@ -327,6 +327,28 @@ namespace Game.Tray
             }
         }
 
+        // WEARING A NAMED SKIN, from outside. CycleSkin is the developer's key; this is what a
+        // loadout chosen off the table calls, and both end in the same ApplySkin so a felt picked
+        // deliberately and one cycled through cannot differ.
+        public bool Wear(string name)
+        {
+            TraySkin wearing = TraySkin.Load(name);
+
+            if (wearing == null)
+            {
+                GD.PushWarning($"dice tray: there is no skin called '{name}' in {TraySkin.Folder} " +
+                               $"- the tray keeps {SkinName}");
+                return false;
+            }
+
+            Skin = wearing;
+            ApplySkin();
+
+            GD.Print($"tray    {SkinName}");
+
+            return true;
+        }
+
         private void CycleSkin()
         {
             var skins = TraySkin.All().ToList();

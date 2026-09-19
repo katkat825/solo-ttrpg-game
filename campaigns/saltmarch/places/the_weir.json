@@ -13,6 +13,10 @@
     { "slot": 4, "to": "the_quay", "arriving": 4, "road": "the_causeway" }
   ],
 
+  // there is nobody at the weir to talk round, and the jacks do not frighten - what is worth
+  // trying here is noticing what the water is doing
+  "checks": { "perception": 9 },
+
   "triggers": [
     { "when": "fact", "fact": "the_sluice_gate.open", "then": "set", "sets": "the_weir.raised" }
   ],

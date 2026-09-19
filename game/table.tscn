@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=22 format=3]
 
 ; THE TABLE. The game's main scene from B0 onward, and the shipped view of it.
 ;
@@ -28,6 +28,11 @@
 [ext_resource type="Script" path="res://Dialogue/Talk.cs" id="13_talk"]
 [ext_resource type="Script" path="res://Camp/Camp.cs" id="14_camp"]
 [ext_resource type="Script" path="res://Sheet/Sheet.cs" id="15_sheet"]
+[ext_resource type="Script" path="res://Explore/Walkabout.cs" id="16_walk"]
+[ext_resource type="Script" path="res://Explore/Response.cs" id="17_response"]
+[ext_resource type="Script" path="res://Loot/Stack.cs" id="18_loot"]
+[ext_resource type="Script" path="res://Room/Leaning.cs" id="19_leaning"]
+[ext_resource type="Script" path="res://Room/Dressed.cs" id="20_dressed"]
 [ext_resource type="Texture2D" path="res://textures/tray_wood/color.jpg" id="3_color"]
 [ext_resource type="Texture2D" path="res://textures/tray_wood/roughness.jpg" id="4_rough"]
 [ext_resource type="Texture2D" path="res://textures/tray_wood/normalgl.jpg" id="5_normal"]
@@ -149,9 +154,13 @@ BoardPath = NodePath("../Board")
 ; the table just behind the tray, where it can watch the dice come down - which is what most of its
 ; idles are about, and the tray is where the thing it reacts to actually happens.
 ;
-; That is Perch.TrayRim rather than Perch.MapEdge, and hearthguard's wolf card says so. NOTHING
-; PLACES BY THE PERCH YET - the field is carried and reported and this scene is what actually puts
-; it down - so the card and this line have to be moved together until Companion honours it.
+; That is Perch.TrayRim rather than Perch.MapEdge, and hearthguard's wolf card says so. THE PERCH IS
+; NOW HONOURED: handed the tray and the board, the companion places itself off whichever of them its
+; card names, so the card and this transform can no longer disagree. The transform below is what it
+; lands on and is left here for a table opened with neither wired up.
+;
+; ITS SIZE IS THE CARD'S TOO. A wolf is 1; a raven or a reliquary ships a smaller one and the thing
+; beside the table reads at its own scale without a line of this scene changing.
 ;
 ; The map's left edge is now clear for the initiative list and the hint cord, which were crowding
 ; the wolf there anyway.
@@ -166,6 +175,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3, -0.013, -0.27)
 CompanionId = "hearthguard.wolf"
 ScreenPath = NodePath("../Dm")
 TrayPath = NodePath("../DiceTray")
+BoardPath = NodePath("../Board")
 
 ; THE HINT CORD (W4). Pulled, never pushed: the player asks, and the companion never volunteers the
 ; solution. Three rungs on repeat asks, then it notices it is being over-asked and says so in
@@ -201,6 +211,73 @@ DmPath = NodePath("../Dm")
 script = ExtResource("14_camp")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.02, -0.038, 0.22)
 CompanionPath = NodePath("../Companion")
+
+; WALKING A PLACE (Phase T). The board has only ever known a fight; this is the second mode it
+; runs, on the same mat, with the same hero and the same click. Asleep unless a campaign is asked
+; for - with CampaignId empty and no --campaign= on the command line this node does nothing at all,
+; and the table boots straight into a fight exactly as it has since B0.
+;
+; LISTED ABOVE THE FIGHT ON PURPOSE. Siblings enter the tree in this order, so this is the last
+; instant the fight standing below can be told to stand down - and it is told, rather than raced,
+; when a walk is the thing being played. It also reads its figures off that fight, so the minis a
+; fight uses are still named in exactly one place and it is this scene.
+[node name="Walkabout" type="Node3D" parent="."]
+script = ExtResource("16_walk")
+BoardPath = NodePath("../Board")
+DmPath = NodePath("../Dm")
+CompanionPath = NodePath("../Companion")
+TalkPath = NodePath("../Talk")
+LootPath = NodePath("../Loot")
+SheetPath = NodePath("../Sheet")
+TrayPath = NodePath("../DiceTray")
+FightPath = NodePath("../Fight")
+RoomPath = NodePath("../..")
+CampaignId = ""
+StartAt = ""
+
+; HOW YOU ANSWER A MOMENT. Cards in front of the board for the things you could do to what is
+; standing there; the DM's note, pushed across, for a set of options somebody wrote down. Neither
+; stands between moments - an offer is made, answered and swept.
+[node name="Response" type="Node3D" parent="Walkabout"]
+script = ExtResource("17_response")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, -0.036, 0.34)
+DmPath = NodePath("../../Dm")
+
+; THE STACK OF CARDS BESIDE YOU, which is the whole inventory. Anything you gain is dealt across as
+; a card and goes on it; turning one over reads it. Near the player's own edge of the table, left of
+; the sheet, where you would keep what you are carrying.
+[node name="Loot" type="Node3D" parent="."]
+script = ExtResource("18_loot")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.30, -0.036, 0.62)
+DmPath = NodePath("../Dm")
+
+; THE CAMERA, LEANING IN. It does not replace the fixed 60 degrees - it reads it at boot and goes
+; back to it - it adds leaning over a thing to read it, picking a handheld thing up, and the mat's
+; own pan and zoom for a place bigger than the table. Escape sits back; - and = are how close; the
+; arrows move your head across a big mat.
+[node name="Leaning" type="Node3D" parent="."]
+script = ExtResource("19_leaning")
+CameraPath = NodePath("../Camera3D")
+BoardPath = NodePath("../Board")
+
+; THE PROPS, DISCRETE (Phase T). None of the things on this table is welded to it: the mat swaps
+; every time you walk somewhere, and the tray, the screen, the sheet, the turn order and the dice
+; can each be swapped for another version of themselves. The tray already wears its own felts; the
+; rest are pointed at here and wait on art, which is what the empty Wardrobe means.
+;
+; COSMETIC, ALWAYS. A finer tray is finer, never better - the moment a prop is mechanically better,
+; every session becomes a question about your inventory instead of the dungeon.
+[node name="Dressed" type="Node3D" parent="."]
+script = ExtResource("20_dressed")
+TrayPath = NodePath("../DiceTray")
+Props = {
+"dice": NodePath("../DiceTray"),
+"initiative": NodePath("../Board"),
+"mat": NodePath("../Board"),
+"screen": NodePath("../Dm"),
+"sheet": NodePath("../Sheet"),
+"tray": NodePath("../DiceTray")
+}
 
 ; THE FIGHT (COMBAT_LOOP.md C0). It needs the board and the tray both, and the table is the one
 ; place that knows both are standing on it - the same reason the board's TrayPath is set here and
