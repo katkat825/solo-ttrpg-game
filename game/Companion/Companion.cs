@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Godot;
 using Content.Companions;
 using Content.Dialogue;
@@ -362,6 +362,13 @@ namespace Game.Companion
         }
 
         public void SeesNerveSpent() { Feel(Mood.Alert); Say(Bark.Nerve); }
+
+        // THE TURN HAS RUN OUT OF ACTIONS AND STILL BELONGS TO YOU, and the DM is about to push a
+        // note asking whether you push on. No new Bark for it: the enum is closed and every pack
+        // on the shelf would owe a bank and a locale row for a thirteenth, while the one it
+        // already has - "a Nerve spent, or committed; the companion has an opinion about being
+        // pushed" - is this moment written down in advance.
+        public void SeesTheTurnRunOut() { Feel(Mood.Alert); Say(Bark.Nerve); }
 
         public void SeesTheHeroDown() { Feel(Mood.Quiet); Say(Bark.Down); }
 

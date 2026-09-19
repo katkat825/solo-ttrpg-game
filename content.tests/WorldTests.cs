@@ -329,6 +329,114 @@ namespace Content.Tests
         static QuestState State(Exploring world) =>
             world.Quests.Of("the_rock").StateIn(world.Facts);
 
+        // AN ERRAND SOMEBODY SET IS ONE YOU CAN HAND BACK (Phase BK4), and which errands those are
+        // is derived from the clause that already says it rather than from a new field every author
+        // would have to learn: a quest that waits to be OFFERED was put in front of you, and a quest
+        // on from the moment the campaign opened is the story you are in.
+        [Fact]
+        public void AnErrandYouWereOfferedCanBeHandedBackAndTakenOnAgain()
+        {
+            Exploring world = Walking(World());
+
+            world.Enter("square");
+
+            Assert.True(world.Quests.Of("the_rock").IsSide);
+
+            world.Accept("the_rock");
+            Assert.Equal(QuestState.Active, State(world));
+
+            Assert.True(world.Abandon("the_rock"));
+            Assert.Equal(QuestState.Offered, State(world));
+            Assert.False(world.Facts.Is("the_rock.accepted"));
+
+            // and it is still there to take on, because handing an errand back is not refusing it
+            Assert.True(world.Accept("the_rock"));
+            Assert.Equal(QuestState.Active, State(world));
+        }
+
+        [Fact]
+        public void AnErrandYouAreNotCarryingCannotBeHandedBack()
+        {
+            Exploring world = Walking(World());
+
+            world.Enter("square");
+
+            Assert.False(world.Abandon("the_rock"));
+            Assert.False(world.Abandon("no_such_quest"));
+            Assert.False(world.Abandon(null));
+        }
+
+        // done is done. You cannot un-happen a finished errand by taking a pin out of a corkboard,
+        // and a failed one has failed - both are things the world already knows about
+        [Fact]
+        public void AFinishedErrandCannotBeHandedBack()
+        {
+            Exploring world = Walking(World());
+
+            world.Enter("square");
+            world.Accept("the_rock");
+            world.Do(world.Standing(2), Interaction.Search);
+
+            Assert.Equal(QuestState.Done, State(world));
+            Assert.False(world.Abandon("the_rock"));
+            Assert.Equal(QuestState.Done, State(world));
+        }
+
+        // THE STORY YOU ARE IN IS NOT AN ERRAND. A quest with no 'offered' clause is on from the
+        // start, nobody asked you, and there is nobody to give it back to.
+        [Fact]
+        public void TheStoryYouAreInCannotBeHandedBack()
+        {
+            Package package = World("quests/the_tide.json|" + @"{
+                ""id"": ""the_tide"",
+                ""done"": { ""when"": [ ""chest.looted"" ] }
+            }");
+
+            Assert.True(package.Clean, Said(package));
+
+            Exploring world = Walking(package);
+
+            world.Enter("square");
+
+            Assert.False(world.Quests.Of("the_tide").IsSide);
+            Assert.True(world.Accept("the_tide"));
+            Assert.False(world.Abandon("the_tide"));
+            Assert.True(world.Facts.Is("the_tide.accepted"));
+        }
+
+        // HANDING IT BACK REBUILDS THE PLACE, which is the whole reason this lives on Exploring
+        // rather than in the book: a standing gated on '<quest>.accepted' has to go away with the
+        // fact, and a caller that cleared the fact itself would leave it standing there.
+        [Fact]
+        public void HandingAnErrandBackRebuildsWhatWasWaitingOnIt()
+        {
+            Package package = World("places/square.json|" + @"{
+                ""id"": ""square"",
+                ""map"": ""square"",
+                ""standing"": [
+                    { ""slot"": 1, ""entity"": ""bob"" },
+                    { ""slot"": 2, ""entity"": ""chest"" },
+                    { ""slot"": 3, ""entity"": ""bobs_grave"",
+                      ""when"": [ ""the_rock.accepted"" ] }
+                ],
+                ""exits"": [ { ""slot"": 4, ""to"": ""cellar"", ""arriving"": 1 } ]
+            }");
+
+            Assert.True(package.Clean, Said(package));
+
+            Exploring world = Walking(package);
+
+            world.Enter("square");
+
+            Assert.Null(world.Standing(3));
+
+            world.Accept("the_rock");
+            Assert.NotNull(world.Standing(3));
+
+            world.Abandon("the_rock");
+            Assert.Null(world.Standing(3));
+        }
+
         // THE NEARBY-QUEST NUDGE. What the companion needs to know on the way in is derived, not
         // authored: a quest says which facts finish it, a place says what it can write, and the
         // overlap is the errand that ends here. Nothing in either file mentions the other.

@@ -175,6 +175,11 @@ namespace Game.Explore
 
             if (_sheet != null) _sheet.Checked += OnChecked;
 
+            // THE BOOK'S LOG IS FED FROM HERE, because this is what actually happens at the table:
+            // a line spoken and a verb done to somebody. The bubbles fade on purpose and the book is
+            // where they went, so a log nothing writes to would be a re-readable record of nothing.
+            if (_talk != null) _talk.Said += OnSaid;
+
             _response = GetNodeOrNull<Response>(ResponsePath);
 
             if (_response == null)
@@ -206,6 +211,20 @@ namespace Game.Explore
                 Campaign = _campaign.Id,
             };
 
+            // WHERE THE ROOM READS THE FACTS FROM. The world being walked owns them; the room keeps
+            // no copy, because a second fact store is a second answer to "is Bob dead" - so the
+            // corkboard and the book read this one through a delegate, the same way saving does.
+            if (_room != null)
+            {
+                _room.Remembering = () => _world?.Facts;
+
+                // AND WHERE YOU ARE STANDING (AX5), the same seam and for the same reason: the room
+                // keeps no copy, so "where are we" cannot be answered with a place you have left
+                _room.Where = () => _world?.Where?.NameKey(_campaign.Id);
+
+                _room.Plays(_campaign.Id);
+            }
+
             _board.Campaign = _campaign.Id;
             _board.Claims = Touch;
 
@@ -236,6 +255,8 @@ namespace Game.Explore
             if (_response != null) _response.Answered -= OnAnswered;
 
             if (_sheet != null) _sheet.Checked -= OnChecked;
+
+            if (_talk != null) _talk.Said -= OnSaid;
 
             if (_tray != null) _tray.Resolved -= OnTried;
 
@@ -284,6 +305,10 @@ namespace Game.Explore
             GD.Print("");
             GD.Print($"walk    \"{_text.Get(arrival.Place.NameKey(_campaign.Id))}\" - {arrival}");
 
+            // ARRIVING SOMEWHERE IS SAID (AX2). A sighted player sees the mat change; there is
+            // nothing else that would tell anybody else the place is a different place
+            Aloud(arrival.Place.NameKey(_campaign.Id));
+
             return true;
         }
 
@@ -321,6 +346,10 @@ namespace Game.Explore
 
             _room?.Happened();
             _room?.Wrote(Game.Saves.Autosave.When.Arrived);
+
+            // the corkboard's folder, re-read: walking in may have finished an errand, and the pin
+            // comes out of a finished one by itself
+            _room?.Reconsider();
 
             Nudge(arrival);
 
@@ -457,6 +486,26 @@ namespace Game.Explore
             }
         }
 
+        // A LINE WENT PAST. It is kept by key rather than by words, so re-reading the log in another
+        // language reads in that language rather than in the one it happened in - and it is said out
+        // loud on the way past, because a conversation a blind player cannot hear is a conversation
+        // they are not in (AX2).
+        void OnSaid(string speaker, string key)
+        {
+            _room?.Story.Said(speaker, key);
+
+            Aloud(key);
+        }
+
+        // whatever just appeared in words, said as well. Urgent, because something you did outranks
+        // whatever was still being read out
+        void Aloud(string key)
+        {
+            if (_room?.Reach == null || string.IsNullOrEmpty(key)) return;
+
+            _room.Reach.Announce(Game.Access.Spoken.Urgently(_text.Get(key)));
+        }
+
         void Do(Interaction verb)
         {
             if (_facing == null) return;
@@ -467,7 +516,7 @@ namespace Game.Explore
 
             if (did.Refused) return;
 
-            if (did.Line.Length > 0) _dm?.Says(did.Line);
+            if (did.Line.Length > 0) { _dm?.Says(did.Line); Aloud(did.Line); }
 
             if (did.Node.Length > 0) _talk?.Begin(_campaign.Dialogue, did.Node);
 
@@ -476,6 +525,11 @@ namespace Game.Explore
             foreach (Cue cue in did.Cues) _dm?.Perform(cue, _campaign.Id);
 
             _room?.Happened();
+
+            // written down in the book before anything else happens to the place, because what you
+            // did to somebody is worth re-reading whether or not it started a fight
+            _room?.Story.Did(verb, _facing.Id, _facing.What?.NameKey);
+            _room?.Reconsider();
 
             if (did.Fight != null) { Begin(did.Fight); return; }
 

@@ -53,6 +53,10 @@ campaigns/<id>/
   sheet/backgrounds/*.json   and the background blank.
 ```
 
+A **mini pack** also has a `models/` folder for the `.glb` files themselves — a figure, a prop or a
+building is a model in there plus a manifest in `minis/` (see `my_minis/models/README.md`). A mini
+that only re-dresses a figure the game already ships needs nothing in it.
+
 A **pack** (`my_classes`, `my_minis`) uses `pack.json` instead of `campaign.json`, sets a `kind`,
 and has **no** chapters. A campaign can depend on a pack via `dependencies`.
 

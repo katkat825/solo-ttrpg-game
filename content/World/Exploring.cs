@@ -390,7 +390,11 @@ namespace Content.World
             return going;
         }
 
-        // the quest log is a view, so accepting one is just a fact and nothing else happens
+        // the quest log is a view, so accepting one is just a fact and no quest state is written
+        // anywhere. It does rebuild, though: '<quest>.accepted' is a fact like any other, so an
+        // author may hang a standing or an exit on it, and until Phase BK added the symmetric
+        // Abandon this did not - which meant the man who appears once you agree to help appeared
+        // the next time you walked in rather than while you were standing there.
         public bool Accept(string quest)
         {
             Quest one = _quests.Of(quest);
@@ -399,6 +403,28 @@ namespace Content.World
 
             Facts.Set(one.AcceptedFact);
 
+            Rebuild();
+            React(null);
+
+            return true;
+        }
+
+        // HANDING A SIDE ERRAND BACK, which is the symmetric half of Accept and is here rather than
+        // in the book for the reason accepting is: a standing, an exit or a cue gated on
+        // '<quest>.accepted' has to be rebuilt when that fact goes away, and a caller that cleared
+        // the fact itself would leave the place showing a world that had moved on without it.
+        //
+        // Only a side errand, and only one you are carrying. A quest already done or already failed
+        // has happened, and you cannot un-happen it by taking a pin out of a corkboard.
+        public bool Abandon(string quest)
+        {
+            Quest one = _quests.Of(quest);
+
+            if (one == null || !one.IsSide || one.StateIn(Facts) != QuestState.Active) return false;
+
+            if (!Facts.Clear(one.AcceptedFact)) return false;
+
+            Rebuild();
             React(null);
 
             return true;

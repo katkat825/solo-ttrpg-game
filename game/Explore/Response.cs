@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Godot;
 using Core.Localization;
 using Game.Dialogue;
@@ -68,7 +68,7 @@ namespace Game.Explore
 
             for (int at = 0; at < Offered.Answers.Count; at++)
             {
-                words[at] = _text.Get(Offered.Answers[at].Key);
+                words[at] = Said(Offered.Answers[at]);
                 open[at] = Offered.Answers[at].Open;
             }
 
@@ -88,6 +88,11 @@ namespace Game.Explore
 
             return true;
         }
+
+        string Said(Answer answer) =>
+            answer.Counting.Count > 0
+                ? _text.Format(answer.Key, System.Linq.Enumerable.ToArray(answer.Counting))
+                : _text.Get(answer.Key);
 
         void Deal(IReadOnlyList<string> words, IReadOnlyList<bool> open)
         {

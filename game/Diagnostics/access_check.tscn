@@ -1,0 +1,24 @@
+[gd_scene load_steps=3 format=3]
+
+; The accessibility check, holding the SHIPPED room inside it - which holds the shipped table, which
+; holds the board, the tray, the DM, the companion and the sheet. Same shape as the room check and for
+; the same reason: the thing measured has to be the thing played.
+;
+; It boots the room and then plays it with no mouse, no eyes and no ears. Every reachable thing is
+; named, bodied and big enough to hit; the hand walks the whole ring and comes round; nothing said out
+; loud is still a key; every dial on the settings page turns, means something and survives being
+; written down; every act has a key and no two share one; every coloured cue has a twin that is not a
+; colour; every sound has words; and the room is dark at midnight in December and is not at noon in
+; June.
+;
+; What it cannot check is whether any of it actually READS well aloud, or whether high contrast is
+; contrast - that is an ear-and-eye check a person does, like the rest of the presentation layer.
+;
+; Run it with check-access.ps1.
+
+[ext_resource type="Script" path="res://Diagnostics/AccessCheck.cs" id="1_check"]
+[ext_resource type="PackedScene" path="res://room.tscn" id="2_room"]
+
+[node name="AccessCheck" type="Node"]
+script = ExtResource("1_check")
+TheRoom = ExtResource("2_room")

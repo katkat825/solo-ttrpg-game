@@ -58,14 +58,26 @@ namespace Game.Room
 
             _touch = new StaticBody3D { Name = "Touch" };
 
-            _touch.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = Size } });
+            // never smaller than a fingertip, whatever the prop is drawn at
+            Span = Access.Hitbox.Around(Size);
+
+            _touch.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = Span } });
 
             AddChild(_touch);
 
             Called = _text.Get(Props.NameKey(Is));
         }
 
+        public Vector3 Span { get; private set; }
+
         public bool Owns(GodotObject what) => _touch != null && ReferenceEquals(_touch, what);
+
+        // WHAT THIS OBJECT LOOKS LIKE TO A HAND, whichever hand is reaching (AX1). The object says so
+        // itself, so the room's list of what is reachable is a concatenation rather than a second
+        // description of the furniture - and a mouse, a keyboard, a screen reader and the hitbox sweep
+        // all read the one description.
+        public Access.Reachable Reach() =>
+            new Access.Reachable(Called, Touch, _touch, Span, lit: Light);
 
         public void Light(bool lit)
         {

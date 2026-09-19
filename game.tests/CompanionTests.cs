@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using Content.Dialogue;
 using Core.Characters;
@@ -145,6 +145,61 @@ namespace Game.Tests
             Assert.Equal(Bark.Snag, TableCues.For(Roll(6, 4, 1)));
             Assert.Equal(Bark.Trouble, TableCues.For(Roll(6, 1, 1)));
         }
+
+        // ---- and the words it says are looked up, never printed -----------------------------
+
+        // THE DEFERRAL V2 CLOSES. Snag and Trouble barks were PRINTED at the table until the
+        // companion existed to say them - a line of English inside the engine, which is the one
+        // thing CONVENTIONS section 7 does not allow. This walks the whole route: a handful of
+        // dice, the situation the table read out of it, and the key the voice comes back with.
+        // Nowhere in it is there an English word.
+        static BarkBank Bank() => new BarkBank("wolf", new Dictionary<Bark, int>
+        {
+            [Bark.Snag] = 40,
+            [Bark.Trouble] = 12,
+            [Bark.Nerve] = 6,
+        });
+
+        [Theory]
+        [InlineData(1, 4, 5, "dialogue.wolf.bark.snag.")]
+        [InlineData(1, 1, 5, "dialogue.wolf.bark.trouble.")]
+        public void A_snag_and_a_trouble_come_back_as_dialogue_keys_and_not_as_sentences(
+            int a, int b, int c, string block)
+        {
+            Speaking speaking = Bank().Open(new SeededRng(4242));
+
+            Bark? situation = TableCues.For(Roll(a, b, c));
+
+            Assert.NotNull(situation);
+
+            string key = speaking.Next(situation.Value);
+
+            Assert.StartsWith(block, key);
+            Assert.True(Core.Localization.KeyConventions.IsWellFormed(key), key);
+        }
+
+        [Fact]
+        public void Every_situation_the_table_can_raise_is_one_a_voice_can_be_asked_for()
+        {
+            // a bank with no line for a situation is silence rather than a missing key, so the
+            // route cannot put a raw key on the screen whatever the throw was
+            Speaking speaking = Bank().Open(new SeededRng(7));
+
+            Assert.Null(speaking.Next(Bark.Victory));
+            Assert.NotNull(speaking.Next(Bark.Snag));
+        }
+
+        [Fact]
+        public void A_turn_running_out_of_actions_reuses_the_bark_the_enum_already_has()
+        {
+            // the DM's push-or-stop note is a Nerve moment, and Bark.Nerve is already "a Nerve
+            // spent, or committed; the companion has an opinion about being pushed". A
+            // thirteenth member would owe every pack on the shelf a bank and a locale row.
+            Speaking speaking = Bank().Open(new SeededRng(11));
+
+            Assert.StartsWith("dialogue.wolf.bark.nerve.", speaking.Next(Bark.Nerve));
+        }
+
 
         [Fact]
         public void Perfect_outranks_maxed_because_a_handful_is_not_one_die()

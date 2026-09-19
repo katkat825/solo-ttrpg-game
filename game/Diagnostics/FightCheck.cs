@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using Core.Characters;
@@ -93,6 +93,18 @@ namespace Game.Diagnostics
         bool _spentOnReroll;
 
         bool _spentOnPush;
+
+        // THE PUSH-OR-STOP NOTE (V2), read and answered rather than stepped around. The rows are
+        // in the order the fight writes them and there are only ever two, so they are named here
+        // instead of being searched for by their words - a check that matched on text would be
+        // the one place in this project that parses a key's English.
+        const int PushRow = 0;
+
+        const int StopRow = 1;
+
+        int _notesAnswered;
+
+        bool _noteChecked;
 
         bool _shrugged;
 
@@ -963,14 +975,27 @@ namespace Game.Diagnostics
             // the fight drives the foes itself: that is watched, not driven
             if (!fight.AwaitingHero) return;
 
-            // out of actions but still holding the turn: the push, and the proof the turn waited for a Nerve
+            // OUT OF ACTIONS AND STILL HOLDING THE TURN (V2). The push-or-stop used to be a line
+            // printed to the console, which is to say nobody was asked anything. It is a note the
+            // DM pushes across now, so this answers it the way a player does - by ticking a row -
+            // rather than by calling the method behind it.
             if (fight.ActionsLeft <= 0)
             {
-                if (!Plain && !_spentOnPush && _hero.Nerve > 0)
-                {
-                    int nerve = _hero.Nerve;
+                CheckTheNote();
 
-                    _fight.NerveClicked();
+                bool pushing = !Plain && !_spentOnPush && _hero.Nerve > 0;
+                int nerve = _hero.Nerve;
+
+                if (!Answer(pushing ? PushRow : StopRow))
+                {
+                    // no note on the table at all: the fight still has to be able to end a turn
+                    _fight.Done();
+                    _waited = 0.0;
+                    return;
+                }
+
+                if (pushing)
+                {
                     _spentOnPush = true;
 
                     if (fight.ActionsLeft != 1)
@@ -978,12 +1003,8 @@ namespace Game.Diagnostics
 
                     if (_hero.Nerve != nerve - 1)
                         Problem($"pushing took {nerve - _hero.Nerve} nerve rather than one");
-
-                    _waited = 0.0;
-                    return;
                 }
 
-                _fight.Done();
                 _waited = 0.0;
                 return;
             }
@@ -998,6 +1019,85 @@ namespace Game.Diagnostics
             }
 
             Swing(fight);
+        }
+
+        // ticks a row the way a player does: through the same Take a click ends up calling, so a
+        // headless run and a cursor cannot answer the note differently
+        bool Answer(int row)
+        {
+            Game.Explore.Response asking = _fight?.Asking;
+
+            if (asking == null || !asking.Asking) return false;
+
+            if (!asking.Take(row)) return false;
+
+            _notesAnswered++;
+
+            return true;
+        }
+
+        // once per run: the marker is a thing on the table with a name, a body big enough to aim
+        // at, and a turn to end. Every one of those is what makes it reachable without a mouse.
+        void CheckTheMarker(Game.Access.Reachable marker)
+        {
+            if (_markerChecked || marker == null) return;
+
+            _markerChecked = true;
+
+            if (string.IsNullOrWhiteSpace(marker.Called) || marker.Called.StartsWith("ui."))
+                Problem($"the initiative marker reads '{marker.Called}', which is a key and not " +
+                        "words - a screen reader would say the key out loud");
+
+            if (!Game.Access.Hitbox.Generous(marker.Span))
+                Problem($"the initiative marker is {Game.Access.Hitbox.Short(marker.Span) * 1000f:0.0} mm " +
+                        "short of a fingertip - it is the smallest thing on the table and the one " +
+                        "every turn ends on");
+
+            if (marker.Body == null)
+                Problem("the initiative marker has no body, so a cursor has nothing to land on");
+
+            GD.Print($"marker  {marker} - the turn ends on it");
+        }
+
+        bool _markerChecked;
+
+        // once per run: the note says two things, the push is open exactly when there is a Nerve
+        // to spend on it, and every word on it came out of the locale
+        void CheckTheNote()
+        {
+            if (_noteChecked) return;
+
+            Game.Explore.Response asking = _fight?.Asking;
+
+            if (asking == null || !asking.Asking) return;
+
+            _noteChecked = true;
+
+            if (asking.Offered.Answers.Count != 2)
+                Problem($"the push-or-stop note has {asking.Offered.Answers.Count} row(s) and it " +
+                        "is a push and a stop");
+
+            if (asking.Offered.As != Game.Explore.Laid.Note)
+                Problem($"the push-or-stop was laid out as {asking.Offered.As} - a set of options " +
+                        "somebody wrote down is a note the DM pushes, not a fan of cards");
+
+            bool open = asking.Offered.At(PushRow)?.Open ?? false;
+
+            if (open != _hero.Nerve > 0)
+                Problem($"the push row is {(open ? "open" : "closed")} with {_hero.Nerve} nerve in " +
+                        "hand - a row you cannot take is written down and plainly closed, and one " +
+                        "you can take is not");
+
+            foreach (string said in asking.Words)
+            {
+                if (!string.IsNullOrWhiteSpace(said) && !said.StartsWith("ui.")) continue;
+
+                Problem($"a row of the push-or-stop note reads '{said}', which is a key and not " +
+                        "words - the locale has nothing behind it");
+            }
+
+            GD.Print($"note    the turn ran out and the DM pushed one across: " +
+                     string.Join(" / ", asking.Words));
         }
 
         // every standing foe must get a turn each round: a skipped turn looks exactly like a foe choosing not to move
@@ -1146,23 +1246,34 @@ namespace Game.Diagnostics
             }
 
             // ready a strike only in round one, the only round anything is still walking; later the Rabble are already in reach
+            // THE END-TURN GESTURE IS THE INITIATIVE MARKER NOW (V2), and it used to be clicking
+            // your own square - which meant the piece on the map was the control, and collided
+            // with the one thing a mini is actually for. This presses the marker through its own
+            // Reachable, which is the same description a cursor hits and a screen reader reads.
             if (!Plain && _readied == 0 && fight.Round == 1)
             {
-                Cell? here = _board.CellOf(_fight.PieceFor(_hero));
+                Game.Access.Reachable marker = _fight.EndTurnMarker;
 
-                if (here != null && _board.Claims(here.Value))
+                CheckTheMarker(marker);
+
+                if (marker is { Live: true })
                 {
+                    marker.Touch();
+
                     _readied++;
                     _waited = 0.0;
 
                     if (!fight.IsReadied(_hero))
-                        Problem("the hero clicked his own square to watch and is not readied");
+                        Problem("the hero nudged the initiative marker to watch and is not readied");
 
                     if (fight.AwaitingHero)
                         Problem("the hero readied and it is still his turn");
 
                     return;
                 }
+
+                Problem("the initiative marker is not there to be nudged on the hero's own turn - " +
+                        "there is no way left to end a turn");
             }
 
             // spend Nerve through the same call a token click makes; Fight.OnNerve's ordering decides which of the four it buys
@@ -1639,6 +1750,12 @@ namespace Game.Diagnostics
             // only when there was a casting fight: a short run is all boss, a plain run has no milestones
             if (_castingFights > 0 && _castsSeen == 0)
                 Problem("the casting fight never channelled anything - the gesture was never reached");
+            GD.Print($"note    {(_notesAnswered == 0 ? "the turn never ran out of actions, so the push-or-stop was never asked" : $"answered the push-or-stop {_notesAnswered} time(s) by ticking a row on the DM's note")}");
+
+            if (!Plain && _notesAnswered == 0)
+                Problem("no turn ran out of actions in this run, so the push-or-stop note went " +
+                        "untested - it is the one control a parked turn has");
+
             GD.Print($"        heart {(_spentOnHeart ? "yes" : "NO")}, " +
                      $"reroll {(_spentOnReroll ? "yes" : "NO")}, " +
                      $"push {(_spentOnPush ? "yes" : "NO")}, " +

@@ -1,0 +1,23 @@
+[gd_scene load_steps=3 format=3]
+
+; The book check, holding the SHIPPED room inside it - which holds the shipped table, and now the
+; bookcase in the corner of it. Same shape as the room check and for the same reason: the thing
+; measured has to be the thing played.
+;
+; It boots the room, reads the books off the bookcase, opens the campaign book at its contents page
+; and turns to every page listed on it, presses "?" and confirms the rules book lays over what you
+; were reading without losing your place, writes five characters and confirms the sixth is refused,
+; reads the tabs down the book's edge, hands a side errand back, and reads every blank object on the
+; bookcase along with the skeleton it would copy.
+;
+; What it cannot check is whether any of it LOOKS like a book, which is the actual verdict and still
+; needs a person in the editor.
+;
+; Run it with check-book.ps1.
+
+[ext_resource type="Script" path="res://Diagnostics/BookCheck.cs" id="1_check"]
+[ext_resource type="PackedScene" path="res://room.tscn" id="2_room"]
+
+[node name="BookCheck" type="Node"]
+script = ExtResource("1_check")
+TheRoom = ExtResource("2_room")

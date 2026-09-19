@@ -26,6 +26,11 @@ namespace Game.Dm
         AudioStreamPlayer3D _tone;
         AudioStreamPlayer3D _oneShot;
 
+        // the caption card, handed over by the room. Four of the game's five captioned sounds come
+        // from behind this screen, and the two that carry real information are both here: the "hm",
+        // and the rattle that says something was rolled you are not being shown
+        public Game.Access.Captioned Captions { get; set; }
+
         double _untilBusy;
         Core.Dice.IRng _rng;
 
@@ -78,24 +83,35 @@ namespace Game.Dm
 
             _untilBusy = Next();
 
-            Play(Busy, Volume);
+            if (Play(Busy, Volume)) Captions?.Says(Game.Audio.Sound.Busy);
         }
 
         // the rattle in the cup: reuses the dice audio, muffled, until a cup of its own is recorded
-        public void Rattles() =>
-            Play(ImpactPool.Has(Behind) ? Behind : ImpactPool.Default, Volume - 8f);
+        public void Rattles()
+        {
+            if (Play(ImpactPool.Has(Behind) ? Behind : ImpactPool.Default, Volume - 8f))
+                Captions?.Says(Game.Audio.Sound.Behind);
+        }
 
-        public void Reacts() => Play(Reacting, ReactVolume);
+        public void Reacts()
+        {
+            if (Play(Reacting, ReactVolume)) Captions?.Says(Game.Audio.Sound.Reacting);
+        }
 
-        void Play(string folder, float volume)
+        // CAPTIONED ONLY IF IT ACTUALLY PLAYED, which is why this reports. There are no recordings
+        // behind the screen yet, and a caption for a silence would tell a deaf player something
+        // happened that a hearing player never heard
+        bool Play(string folder, float volume)
         {
             AudioStream stream = Pick(folder);
 
-            if (stream == null || _oneShot == null) return;
+            if (stream == null || _oneShot == null) return false;
 
             _oneShot.Stream = stream;
             _oneShot.VolumeDb = volume;
             _oneShot.Play();
+
+            return true;
         }
 
         static AudioStream Pick(string folder) =>

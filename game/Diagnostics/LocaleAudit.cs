@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Godot;
@@ -94,6 +94,9 @@ namespace Game.Diagnostics
             GD.Print($"verbs       {string.Join(", ", Game.Explore.VerbKeys.All())}");
             GD.Print($"checks      {string.Join(", ", Content.Sheet.Checks.Words)}");
             GD.Print($"cards       {string.Join(", ", Game.Fight.CardKeys.All())}");
+            GD.Print($"keys        {string.Join(", ", Game.Access.Acts.Words)}");
+            GD.Print($"dials       {string.Join(", ", Game.Book.Settings.Words)}");
+            GD.Print($"captions    {string.Join(", ", Game.Audio.Sounds.Words)}");
             GD.Print("");
 
             return keys;
@@ -315,6 +318,10 @@ namespace Game.Diagnostics
                                 Game.Dm.DmLines.TakesAnArgument(row.Key) ||
                                 Game.Sheet.SheetKeys.TakesAnArgument(row.Key) ||
                                 Game.Fight.CardKeys.TakesAnArgument(row.Key) ||
+                                Game.Fight.TurnKeys.TakesAnArgument(row.Key) ||
+                                Game.Book.BookKeys.TakesAnArgument(row.Key) ||
+                                Game.Access.Acts.TakesAnArgument(row.Key) ||
+                                Game.Access.Whereabouts.TakesAnArgument(row.Key) ||
                                 Reads(shelf, row.Key);
                 bool hasOne = row.Value.Contains("{0}");
 

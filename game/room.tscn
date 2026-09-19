@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=15 format=3]
 
 ; THE ROOM. The game's main scene from R3 onward, and the shell that makes the whole thing a table
 ; you sit at rather than software you operate (ROOM_AND_SHEET.md R3, THE_TABLE.md section 6).
@@ -7,7 +7,9 @@
 ; menu, no character screen, no level-up modal, no inventory panel. Every place a normal RPG opens a
 ; panel, this has an object:
 ;
-;     the shelf      boxed campaigns          save files and campaign select
+;     the shelf      the campaign as a book   save files and campaign select
+;     the bookcase   every campaign, and the  the main menu, and the Workshop door
+;                    blanks that start one
 ;     the sheet      on the table             the character screen
 ;     the corkboard  map and pinned notes     the quest log
 ;     the dice case  what you have earned     the collection screen
@@ -29,6 +31,13 @@
 [ext_resource type="PackedScene" path="res://table.tscn" id="1_table"]
 [ext_resource type="Script" path="res://Room/Room.cs" id="2_room"]
 [ext_resource type="Script" path="res://Room/Furniture.cs" id="3_prop"]
+[ext_resource type="Script" path="res://Book/Bookcase.cs" id="4_case"]
+[ext_resource type="Script" path="res://Book/Opened.cs" id="5_open"]
+[ext_resource type="Script" path="res://Book/Help.cs" id="6_help"]
+[ext_resource type="Script" path="res://Access/Narrator.cs" id="7_reader"]
+[ext_resource type="Script" path="res://Access/Captioned.cs" id="8_caption"]
+[ext_resource type="Script" path="res://Access/Hands.cs" id="9_hands"]
+[ext_resource type="Script" path="res://Access/Reaching.cs" id="10_access"]
 
 [sub_resource type="Environment" id="Environment_room"]
 background_mode = 1
@@ -62,6 +71,12 @@ roughness = 1.0
 script = ExtResource("2_room")
 TablePath = NodePath("Table")
 SheetPath = NodePath("Table/Sheet")
+FightPath = NodePath("Table/Fight")
+BookcasePath = NodePath("Bookcase")
+OpenedPath = NodePath("Book")
+HelpPath = NodePath("Help")
+DmPath = NodePath("Table/Dm")
+ReachingPath = NodePath("Reaching")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_room")
@@ -156,3 +171,67 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.4, 1.0, 0.9)
 Is = 6
 Size = Vector3(0.06, 2.0, 0.85)
 Wood = Color(0.29, 0.22, 0.16, 1)
+
+; ---- PHASE BK: THE BOOK AND THE BOOKCASE ------------------------------------------------------
+;
+; THE BOOKCASE IS THE MAIN AREA (BK2) - a second corner of the same room, and the thing a main menu
+; would have been. Every campaign stands on it as a book, one per character; what you have collected
+; sits beside them; and a row of plain, blank objects along the bottom is the Workshop door, one per
+; content type (BK6). You WALK to it rather than opening it, which is the whole test of whether the
+; deletion is real.
+;
+; Against the far wall, at right angles to the shelf under the corkboard, so the two never read as
+; the same piece of furniture.
+[node name="Bookcase" type="Node3D" parent="."]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -2.36, 0.06, 0.55)
+script = ExtResource("4_case")
+
+; THE BOOK, LAID OPEN (BK1, BK3, BK4). Its contents page is the pause menu and is not one, because a
+; contents page is a thing a book HAS. It is hidden until a book is picked up, and it goes away when
+; the book is shut - a book that stayed open over the table would be a panel with a paper texture on
+; it, and that is the one thing this room cannot have.
+;
+; Over the near edge of the table, where you would actually hold something you were reading.
+[node name="Book" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0, 0.79, 0.62)
+script = ExtResource("5_open")
+
+; THE "?" ON THE TABLE (BK3). The one honest button in the game, and it earns it: somebody who cannot
+; find how to ask for help has no way to be told where to look. What it DOES is diegetic - the DM
+; reaches behind the screen and pushes the rules book across.
+[node name="Help" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.52, 0.755, 0.5)
+script = ExtResource("6_help")
+
+; ---- PHASE AX: THE WAY IN ----------------------------------------------------------------------
+;
+; The room has to be playable by somebody who cannot use a mouse, cannot see it, or cannot hear it,
+; and none of that is a later pass: retrofitting it is the rewrite the localization work exists as a
+; warning about. Four objects, and only two of them are visible.
+;
+; YOUR OWN HANDS, on your side of the table (AX5). The DM has had hands since D1 and you have not.
+; Placeholder geometry, the same placeholder the DM's are, in whatever colour you chose - and gone
+; entirely if you would rather they were.
+[node name="Hands" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0, 0.752, 0.78)
+script = ExtResource("9_hands")
+
+; THE SOUNDS, IN WORDS (AX4). A card at the near edge, off until asked, showing what was just heard.
+; It is a card lying on the table rather than a band across the bottom of the picture, because a band
+; across the bottom of the picture is an HUD and this room has none.
+[node name="Captions" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.30, 0.755, 0.70)
+script = ExtResource("8_caption")
+
+; THE VOICE (AX2). No geometry: it speaks through the platform's own, and keeps a transcript of
+; everything it said so a headless check can prove nothing went silent.
+[node name="Narrator" type="Node" parent="."]
+script = ExtResource("7_reader")
+
+; THE HAND, THE KEYS AND THE DIALS (AX1, AX3, AX4). Last child, so everything it sizes and everything
+; it can reach is already standing. It asks the room what there is to reach rather than keeping a list.
+[node name="Reaching" type="Node" parent="."]
+script = ExtResource("10_access")
+NarratorPath = NodePath("../Narrator")
+CaptionsPath = NodePath("../Captions")
+HandsPath = NodePath("../Hands")

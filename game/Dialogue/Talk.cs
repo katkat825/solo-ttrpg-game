@@ -40,7 +40,10 @@ namespace Game.Dialogue
 
         [Signal] public delegate void FinishedEventHandler();
 
-        [Signal] public delegate void SaidEventHandler(string key);
+        // who spoke as well as what, because whatever is keeping the log needs both and the
+        // only other way to get the speaker out of a line is to read it off the key, which is
+        // the one thing nothing is allowed to do at runtime
+        [Signal] public delegate void SaidEventHandler(string speaker, string key);
 
         Game.Companion.Companion _companion;
 
@@ -130,7 +133,7 @@ namespace Game.Dialogue
 
             _left = Reading.Time(words);
 
-            EmitSignal(SignalName.Said, saying.Key);
+            EmitSignal(SignalName.Said, saying.Speaker, saying.Key);
 
             if (_dm != null && saying.Speaker == DmSpeaker)
             {

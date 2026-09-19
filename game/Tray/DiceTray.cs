@@ -64,6 +64,9 @@ namespace Game.Tray
         // each die's voice, same order, null where none; found by type not name, so a rename keeps it and a deletion is silence, not a crash
         private readonly List<DieAudio> _voices = new();
 
+        // the caption card, handed over by the room. Null means nobody asked for captions
+        public Game.Access.Captioned Captions { get; set; }
+
         private Die[] _authored;
 
         // where in ShapeTour we are, or -1 for the authored pool
@@ -567,6 +570,11 @@ namespace Game.Tray
         {
             _awaitingSettle = true;
             _pending.Clear();
+
+            // CAPTIONED ONCE A THROW, NOT ONCE A BOUNCE (AX4). Three dice on a wooden tray strike it
+            // a dozen times between the hand and the felt; a caption per impact would be a stutter
+            // rather than a caption, and what a deaf player needs to know is that the dice went up.
+            Captions?.Says(Game.Audio.Sound.Dice);
 
             // clear the marks as the dice go up, not on resolve, so no frame has a ring round a die in the air
             _marks?.Clear();

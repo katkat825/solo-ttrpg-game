@@ -37,6 +37,12 @@ place_piece={
 ]
 }
 
+[audio]
+
+; THE SCREEN READER'S ONE PIECE OF WIRING (AX2). Godot hands back no voices at all unless this is on,
+; so without it the narrator finds nothing to speak with and says so rather than speaking.
+general/text_to_speech=true
+
 [internationalization]
 
 locale/translations=PackedStringArray("res://locale/game.en.translation")

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
@@ -11,6 +11,7 @@ using Core.Localization;
 using Core.Resolution;
 using Core.Space;
 using Game.Board;
+using Game.Explore;
 using Game.Localization;
 using Game.Tray;
 
@@ -130,6 +131,20 @@ namespace Game.Fight
 
         Game.Companion.Companion _friend;
 
+        // HOW THE TURN ASKS YOU SOMETHING (V2). The same object the walk uses, for the same
+        // reason: a set of options somebody wrote down is a note the DM pushes across and takes
+        // back, and there is exactly one thing at this table that knows how to do that. A fight
+        // with none plays as it always has and simply never asks.
+        [Export] public NodePath AskingPath { get; set; } = "Asking";
+
+        Response _asking;
+
+        // the paper, so what a Nerve is for can be printed where the Nerve already is. Optional
+        // like everything else here: a table with no sheet on it fights exactly as before
+        [Export] public NodePath SheetPath { get; set; }
+
+        Game.Sheet.Sheet _sheet;
+
         // the day watches the same fights the table does, so camp can be about them (W3)
         public Content.Dialogue.Day Today { get; private set; }
 
@@ -187,6 +202,15 @@ namespace Game.Fight
 
         public TurnOrder Order => _order;
 
+        // the note the turn pushes across, for the headless check to read and answer
+        public Response Asking => _asking;
+
+        // THE INITIATIVE MARKER, AS THE ONE DESCRIPTION OF ITSELF. A cursor finds its body, a
+        // keyboard hand walks onto it, a screen reader reads its name, and a headless check
+        // presses it - all four through this, so none of them can be reaching for something the
+        // others do not have.
+        public Game.Access.Reachable EndTurnMarker => _order?.Reach(_text, EndTheTurn);
+
         public PhaseChange Boss => _boss;
 
         public Mini PieceFor(Actor actor) => _pieces.Of(actor)?.Mini;
@@ -199,7 +223,7 @@ namespace Game.Fight
 
         public void TakeTheThrow() { if (_felt != null) Read(); }
 
-        public void Done() { if (_fight != null && _fight.AwaitingHero) Watch(); }
+        public void Done() => EndTheTurn();
 
         public void Breathe() => Breather();
 
@@ -298,6 +322,16 @@ namespace Game.Fight
             if (_boss != null) _fight.Phases(_boss);
 
             _dm = DmPath != null && !DmPath.IsEmpty ? GetNodeOrNull<Game.Dm.Dm>(DmPath) : null;
+
+            _asking = AskingPath != null && !AskingPath.IsEmpty
+                ? GetNodeOrNull<Response>(AskingPath)
+                : null;
+
+            if (_asking != null) _asking.Answered += Answered;
+
+            _sheet = SheetPath != null && !SheetPath.IsEmpty
+                ? GetNodeOrNull<Game.Sheet.Sheet>(SheetPath)
+                : null;
 
             _room = RoomPath != null && !RoomPath.IsEmpty
                 ? GetNodeOrNull<Game.Room.Room>(RoomPath)
@@ -623,17 +657,11 @@ namespace Game.Fight
 
             if (!_fight.AwaitingHero) return true;
 
-            // parked with a Nerve but no actions: without this guard a swing lands nothing and a move is a free step
-            if (_fight.ActionsLeft <= 0)
-            {
-                Piece here = _pieces.On(_board.Squares.At(cell));
-
-                if (here != null && ReferenceEquals(here.Actor, _hero)) { Watch(); return true; }
-
-                GD.Print($"        {_hero.DebugName} is out of actions - spend a Nerve to push, " +
-                         "or end the turn");
-                return true;
-            }
+            // parked with a Nerve but no actions: without this guard a swing lands nothing and a
+            // move is a free step. The note asking what to do about it is already on the table -
+            // _Process pushes it the instant the turn runs out, rather than waiting for a click
+            // on a board that has stopped answering
+            if (_fight.ActionsLeft <= 0) return true;
 
             Piece target = _pieces.On(_board.Squares.At(cell));
 
@@ -643,12 +671,10 @@ namespace Game.Fight
                 return true;
             }
 
-            // clicking your own piece means stop and take a readied strike
-            if (target != null)
-            {
-                if (ReferenceEquals(target.Actor, _hero)) Watch();
-                return true;
-            }
+            // YOUR OWN PIECE IS A PIECE AND NOT A CONTROL (V2). Tapping it used to end the turn,
+            // which is the one gesture a mini on a map should never mean - the marker on the
+            // initiative stand does it now
+            if (target != null) return true;
 
             March(cell);
             return true;
@@ -672,20 +698,38 @@ namespace Game.Fight
                 return;
             }
 
-            if (_nerve == null) return;
+            if (@event is InputEventMouseMotion motion) { Hover(motion.Position); return; }
+
             if (!@event.IsActionPressed("place_piece") || @event is not InputEventMouse mouse) return;
 
-            if (!TouchedAToken(mouse.Position)) return;
+            GodotObject touched = Under(mouse.Position);
+
+            if (touched == null) return;
+
+            // the marker is asked first: it is the smaller of the two and sits above the felt,
+            // so a ray that finds it found it on purpose
+            if (_order != null && _order.Owns(touched))
+            {
+                GetViewport().SetInputAsHandled();
+                EndTheTurn();
+                return;
+            }
+
+            if (_nerve == null || !_nerve.Owns(touched)) return;
 
             GetViewport().SetInputAsHandled();
             OnNerve();
         }
 
-        bool TouchedAToken(Vector2 at)
+        // the marker lights under the cursor the way it lights under a keyboard hand; one
+        // affordance, reached two ways
+        void Hover(Vector2 at) => _order?.Light(_order.Owns(Under(at)));
+
+        GodotObject Under(Vector2 at)
         {
             Camera3D camera = GetViewport()?.GetCamera3D();
 
-            if (camera == null) return false;
+            if (camera == null) return null;
 
             var query = PhysicsRayQueryParameters3D.Create(
                 camera.ProjectRayOrigin(at),
@@ -695,51 +739,117 @@ namespace Game.Fight
 
             Godot.Collections.Dictionary hit = GetWorld3D()?.DirectSpaceState?.IntersectRay(query);
 
-            return hit != null && hit.Count > 0 && _nerve.Owns(hit["collider"].As<GodotObject>());
+            return hit == null || hit.Count == 0 ? null : hit["collider"].As<GodotObject>();
         }
 
         const float TokenReach = 8f;
 
+        // THE END-TURN GESTURE, ONE WAY IN. A cursor on the marker, a keyboard hand on it, and
+        // FightCheck's Done() all arrive here, so a mouse and a key cannot end a turn differently.
+        void EndTheTurn()
+        {
+            if (_fight == null || _felt != null || !_fight.AwaitingHero || !Settled) return;
+
+            Watch();
+        }
+
+        // WHAT THE TURN THAT HAS RUN OUT OF ACTIONS IS ASKED (V2). It used to be a line in the
+        // console, which is to say nobody was asked anything: the player sat there with a turn
+        // that would not take a click and no object saying why.
+        //
+        // The DM writes the two answers down and pushes the note across, the same gesture the
+        // rest of the table already uses for a set of options somebody wrote - and the push row
+        // carries the Nerve you have left, so the cadence is on the paper rather than in the code.
+        // A row you cannot take is written down and plainly closed: knowing what you cannot do is
+        // information.
+        void PushOrStop()
+        {
+            if (_asking == null) return;
+
+            if (_fight.ActionsLeft > 0) { _asking.Sweep(); return; }
+
+            if (_asking.Asking) return;
+
+            _friend?.SeesTheTurnRunOut();
+
+            _asking.Ask(Offer.Written(PushOrStopAbout, new[]
+            {
+                Answer.Written(TurnKeys.Push, PushOrStopAbout, _hero.Nerve > 0, _hero.Nerve),
+                Answer.Written(TurnKeys.Stop, PushOrStopAbout),
+            }));
+        }
+
+        // what the offer is about; never read by a player, and never parsed
+        public const string PushOrStopAbout = "out_of_actions";
+
+        void Answered(int index)
+        {
+            if (_asking?.Taken is not { } answer) return;
+
+            if (answer.About != PushOrStopAbout) return;
+
+            if (answer.Key == TurnKeys.Push) { OnNerve(); return; }
+
+            EndTheTurn();
+        }
+
+        // WHAT A NERVE WOULD BUY THIS INSTANT. The ladder itself is NerveUse and is Godot-free;
+        // this asks it, and so does the sheet, so the paper and the token cannot disagree about
+        // what the resource is for.
+        public Spend Spending => _fight == null || _hero == null
+            ? Spend.Nothing
+            : NerveUse.For(_felt != null,
+                           _felt is { Result.Trouble: true },
+                           _shrugged,
+                           _fight.AwaitingHero,
+                           _heart,
+                           _fight.ActionsLeft,
+                           _hero.Nerve,
+                           CanAddHeart);
+
+        bool CanAddHeart =>
+            Nerve.CanAddHeart(_hero, _hero.BuildPool(_engine.Options.HeroAttackAttr,
+                                                     _engine.Options.HeroAttackSkill));
+
         void OnNerve()
         {
-            // shrug a Trouble before it resolves
-            if (_felt != null && _felt.Result.Trouble && !_shrugged)
+            switch (Spending)
             {
-                if (!_fight.SpendNerve(_hero)) return;
+                // shrug a Trouble before it resolves
+                case Spend.Shrug:
+                    if (!_fight.SpendNerve(_hero)) return;
 
-                _shrugged = true;
-                _friend?.SeesNerveSpent();
-                GD.Print($"        {_hero.DebugName} shrugs the Trouble off");
-                return;
-            }
+                    _shrugged = true;
+                    _friend?.SeesNerveSpent();
+                    GD.Print($"        {_hero.DebugName} shrugs the Trouble off");
+                    return;
 
-            if (_felt != null) return;
-            if (!_fight.AwaitingHero) return;
+                // the felt is open and a die may be picked up; the gesture is picking it, not this
+                case Spend.Rethrow:
+                    GD.Print($"        {_hero.DebugName} may pick a die up and throw it again");
+                    return;
 
-            // changed his mind about the Heart die
-            if (_heart)
-            {
-                _heart = false;
-                GD.Print($"        {_hero.DebugName} takes the Heart die back out of the pool");
-                return;
-            }
+                // changed his mind about the Heart die
+                case Spend.TakeItBack:
+                    _heart = false;
+                    GD.Print($"        {_hero.DebugName} takes the Heart die back out of the pool");
+                    return;
 
-            // the Heart die, for the next throw
-            if (_fight.ActionsLeft > 0 && _hero.Nerve > 0 &&
-                Nerve.CanAddHeart(_hero, _hero.BuildPool(_engine.Options.HeroAttackAttr,
-                                                         _engine.Options.HeroAttackSkill)))
-            {
-                _heart = true;
-                GD.Print($"        {_hero.DebugName} commits a Nerve - the Heart die goes in the next pool");
-                return;
-            }
+                // the Heart die, for the next throw
+                case Spend.HeartDie:
+                    _heart = true;
+                    GD.Print($"        {_hero.DebugName} commits a Nerve - the Heart die goes in the next pool");
+                    return;
 
-            // no actions left: push through for one more
-            if (_fight.Push())
-            {
-                GD.Print($"        {_hero.DebugName} pushes through - {_fight.ActionsLeft} action left, " +
-                         $"{_hero.Nerve} nerve");
-                return;
+                // no actions left: push through for one more
+                case Spend.Push:
+                    if (!_fight.Push()) break;
+
+                    _friend?.SeesNerveSpent();
+
+                    GD.Print($"        {_hero.DebugName} pushes through - {_fight.ActionsLeft} action left, " +
+                             $"{_hero.Nerve} nerve");
+                    return;
             }
 
             GD.Print($"        {_hero.DebugName} has nothing to spend a Nerve on right now");
@@ -797,6 +907,9 @@ namespace Game.Fight
         void Watch()
         {
             _heart = false;
+
+            // whatever the turn was being asked goes back with the turn
+            _asking?.Sweep();
 
             if (_fight.Ready())
             {
@@ -1234,19 +1347,37 @@ namespace Game.Fight
             // not a reveal
             if (beat && _guardsSeen.Add(target)) _order?.Reveal(target, against);
 
+            object[] numbers = beat
+                ? new object[] { _roll.Total, against, impact }
+                : new object[] { _roll.Total, against };
+
             if (Reader() is { } voice)
             {
-                voice.Line(Content.Dialogue.DialogueKeys.Readout(
-                               _friend.Speaker, beat ? Readout.Hit : Readout.Miss),
-                           beat ? new object[] { _roll.Total, against, impact }
-                                : new object[] { _roll.Total, against });
+                string line = Content.Dialogue.DialogueKeys.Readout(
+                    _friend.Speaker, beat ? Readout.Hit : Readout.Miss);
+
+                voice.Line(line, numbers);
+
+                Aloud(line, numbers);
 
                 return;
             }
 
-            _dm?.Says(beat ? Game.Dm.DmLines.Hit : Game.Dm.DmLines.Miss,
-                      beat ? new object[] { _roll.Total, against, impact }
-                           : new object[] { _roll.Total, against });
+            string said = beat ? Game.Dm.DmLines.Hit : Game.Dm.DmLines.Miss;
+
+            _dm?.Says(said, numbers);
+
+            Aloud(said, numbers);
+        }
+
+        // AND THE THROW IS SAID OUT LOUD AS WELL (AX2). Whether the number went onto the DM's note or
+        // into the companion's mouth, it is the one thing in a fight that is only ever words - so a
+        // player who cannot see the note has no other way to know whether the swing landed.
+        void Aloud(string key, params object[] numbers)
+        {
+            if (_room?.Reach == null || string.IsNullOrEmpty(key)) return;
+
+            _room.Reach.Announce(Game.Access.Spoken.Urgently(_text.Format(key, numbers)));
         }
 
         // the companion, but only where its own bank says it does this job
@@ -1327,7 +1458,10 @@ namespace Game.Fight
 
             if (!Settled) return;
 
-            if (_fight.AwaitingHero) return;
+            if (_fight.AwaitingHero) { PushOrStop(); return; }
+
+            // the paper goes back the moment the turn is not the one that ran out
+            _asking?.Sweep();
 
             TakeFoeStep();
         }
@@ -1450,6 +1584,10 @@ namespace Game.Fight
 
             _nerve?.Show(_hero.Nerve, _heart ? 1 : 0);
             _order?.Mark(_fight?.Acting);
+
+            // the paper is told rather than asked, like the pips and the marks: a cadence that
+            // changed outside this frame still shows
+            _sheet?.Spends(Spending);
         }
     }
 }

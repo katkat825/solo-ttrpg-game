@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -710,7 +710,8 @@ namespace Content.Campaigns
         // quest is either completable or explicitly allowed to fail.
         void CrossCheckFacts(List<ContentProblem> problems)
         {
-            HashSet<string> written = Written();
+            FactSources sources = FactSources.Of(Entities, Places, Quests, Roads, Maps);
+            var written = new HashSet<string>(sources.All, StringComparer.Ordinal);
 
             foreach (Place place in Places.All)
             {
@@ -755,86 +756,27 @@ namespace Content.Campaigns
 
                 if (quest.CanFail) Reachable(quest.Failed.Facts, written, file, "failed", problems);
 
-                // THE WARNING SECTION 6 ASKS FOR BY NAME, and it is a warning: if the author wants
-                // that consequence, wonderful. It is only that nobody should find out by playing.
-                foreach (string fact in quest.Done.Unless)
-                {
-                    string subject = Content.World.FactName.SubjectOf(
-                        fact, Content.World.FactName.DeadAspect);
-
-                    if (subject.Length == 0) continue;
-
-                    Entity entity = Entities.Of(subject);
-
-                    if (entity == null || !entity.Allows(Content.Entities.Interaction.Attack))
-                        continue;
-
-                    problems.Add(ContentProblem.Caution(
-                        file, "done.unless",
-                        $"this quest cannot be finished once '{subject}' is dead, and '{subject}' " +
-                        "is attackable - killing them may make it impossible. That is allowed, " +
-                        (quest.CanFail
-                            ? "and this quest says what failing looks like, so the log will say so"
-                            : "but this quest has no 'failed' clause, so the log will sit there " +
-                              "forever telling the player to go back to somebody who is dead")));
-                }
-
-                if (!quest.CanFail) continue;
+                // THE SOFT-LOCK WARNING, and it is a warning: if the author wants that
+                // consequence, wonderful. It is only that nobody should find out by playing.
+                foreach (Strandable stranded in Strandable.In(quest, Entities, sources))
+                    problems.Add(ContentProblem.Caution(file, stranded.Where, Told(stranded)));
             }
         }
 
-        // every fact anything in this campaign can ever make true: the ones the engine derives
-        // from what it is asked to do, and the ones an author writes by hand
-        HashSet<string> Written()
+        static string Told(Strandable stranded)
         {
-            var written = new HashSet<string>(StringComparer.Ordinal);
+            string who = stranded.Entity;
 
-            foreach (Entity entity in Entities.All)
-                foreach (Content.Entities.Interaction verb in entity.Verbs)
-                {
-                    string writes = verb.Writes(entity.Local);
+            string said = stranded.Told
+                ? $"this quest cannot be finished once '{who}' is dead, and '{who}' is attackable"
+                : $"nothing but '{who}' can ever make '{stranded.Fact}' true, and '{who}' is " +
+                  "attackable - a dead entity stands in no place and offers no verbs";
 
-                    if (writes.Length > 0) written.Add(writes);
-                }
-
-            foreach (Place place in Places.All)
-            {
-                written.Add(Content.World.FactName.Visited(place.Id));
-
-                if (place.IsAFight) written.Add(Content.World.FactName.Cleared(place.Id));
-
-                // a standing that is somebody the author let you kill dies as a durable fact
-                foreach (Standing standing in place.Standings)
-                {
-                    if (standing.IsAFoe) continue;
-
-                    Entity entity = Entities.Of(standing.Entity);
-
-                    if (entity != null && entity.Fights)
-                        written.Add(Content.World.FactName.Dead(entity.Local));
-                }
-
-                foreach (Trigger trigger in place.Triggers)
-                    if (trigger.Sets.Length > 0) written.Add(trigger.Sets);
-
-                // a door an author opens with a fact; derived at both ends so they cannot disagree
-                if (Maps.TryGetValue(place.Map, out MapLayout map))
-                    foreach (Border border in map.Borders)
-                        if (map.At(border) == Edge.Door)
-                            written.Add(Content.World.Exploring.DoorFact(place.Id, border));
-            }
-
-            foreach (Quest quest in Quests.All) written.Add(quest.AcceptedFact);
-
-            foreach (Road road in Roads.All)
-                foreach (Happening happening in road.Wayside)
-                {
-                    if (happening.Once) written.Add(happening.HappenedFact);
-
-                    if (happening.Sets.Length > 0) written.Add(happening.Sets);
-                }
-
-            return written;
+            return said + " - killing them may make it impossible. That is allowed, " +
+                   (stranded.SaysHowItFails
+                       ? "and this quest's 'failed' clause reads that death, so the log will say so"
+                       : "but no 'failed' clause of this quest reads that death, so the log will " +
+                         "sit there forever telling the player to go back to somebody who is dead");
         }
 
         void Reachable(IEnumerable<string> facts, HashSet<string> written, string file,

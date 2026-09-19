@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Content.Minis;
 using Game.Tray;
 
@@ -25,6 +25,10 @@ namespace Game.Localization
             // and the words printed on an initiative card, for the same reason
             foreach (string key in Game.Fight.CardKeys.All()) yield return key;
 
+            // V2. The turn itself: the marker you nudge to end yours, the note asking whether you
+            // push on, and what a Nerve buys this instant, pencilled on the sheet
+            foreach (string key in Game.Fight.TurnKeys.All()) yield return key;
+
             // Phase T. The words on a card the moment lays out, the names of the objects ON the
             // table as against the ones in the room, and the three checks you reach for yourself
             foreach (string key in Game.Explore.VerbKeys.All()) yield return key;
@@ -32,6 +36,20 @@ namespace Game.Localization
             foreach (string key in Game.Room.TableProps.Keys()) yield return key;
 
             foreach (string key in Content.Sheet.Checks.Keys()) yield return key;
+
+            // Phase BK. The two books - their contents pages, the rules chapters, the settings
+            // headings - the bookcase they stand on, the blank objects that are the Workshop door,
+            // and how a line of the story so far reads
+            foreach (string key in Game.Book.BookKeys.All()) yield return key;
+
+            // Phase AX. What every key on the keyboard does, said in words on the page where you
+            // rebind it; what the sounds are, for a player who cannot hear them; and the answer to
+            // "where are we", which is the same sentences whether it is read out or written down
+            foreach (string key in Game.Access.Acts.Keys()) yield return key;
+
+            foreach (string key in Game.Audio.Sounds.Keys()) yield return key;
+
+            foreach (string key in Game.Access.Whereabouts.Keys()) yield return key;
         }
 
         // the base game's shared abilities only; a pack's abilities are named in the pack's own locale

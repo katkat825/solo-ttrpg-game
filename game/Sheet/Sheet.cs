@@ -1,10 +1,11 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using Content.Sheet;
 using Core.Characters;
 using Core.Localization;
+using Game.Fight;
 using Game.Localization;
 
 namespace Game.Sheet
@@ -77,6 +78,9 @@ namespace Game.Sheet
         Label3D _nerve;
 
         Label3D _vigor;
+
+        // what a Nerve would buy this instant, pencilled under the pips
+        Label3D _spending;
 
         MeshInstance3D _paper;
 
@@ -181,6 +185,18 @@ namespace Game.Sheet
                 _pips.Add(pip);
                 AddChild(pip);
             }
+
+            // WHAT THE PIPS ARE FOR, UNDER THE PIPS (V2). The count was on the paper and what the
+            // count bought was in nobody's head but the code's, so a player learned the cadence by
+            // pressing a token and watching what happened. It is in pencil rather than print,
+            // because it is a thing that is true this instant and not a thing the sheet says
+            // always - the DM's own hand, noting what you could do with what you are holding.
+            y -= 0.022f;
+
+            _spending = Printed(TurnKeys.Of(Game.Fight.Spend.Nothing), y, Pencil, FontSize - 4,
+                                -Width * 0.5f + 0.02f, HorizontalAlignment.Left);
+
+            AddChild(_spending);
 
             // THE THREE YOU REACH FOR YOURSELF. Printed on the paper rather than offered on a
             // card, because a card is the moment offering you something and these are yours -
@@ -311,6 +327,21 @@ namespace Game.Sheet
             EmitSignal(SignalName.Marked);
         }
 
+        // TOLD, NEVER POLLED. The sheet has no idea a fight exists and must not: what a Nerve
+        // buys is the fight's to know and the paper's to print, so the fight says so and the
+        // paper writes it down. A sheet on a table with no fight on it shows Nothing, which is
+        // exactly right - there is nothing to spend one on.
+        public Spend Spending { get; private set; } = Spend.Nothing;
+
+        public void Spends(Spend spend)
+        {
+            if (Spending == spend) return;
+
+            Spending = spend;
+
+            Redraw();
+        }
+
         public bool Grew(string step)
         {
             if (!Character.Grew(step)) return false;
@@ -335,6 +366,8 @@ namespace Game.Sheet
 
             if (_nerve != null)
                 _nerve.Text = _text.Format(SheetKeys.Nerve, Character.Nerve, Pips);
+
+            if (_spending != null) _spending.Text = _text.Get(TurnKeys.Of(Spending));
 
             if (_vigor != null)
                 _vigor.Text = Character.Vigor < 0 ? "" : _text.Format(SheetKeys.Vigor, Character.Vigor);

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using Content.Entities;
 using Content.World;
@@ -170,6 +170,38 @@ namespace Game.Tests
 
             Assert.Equal(2, offer.Answers.Count);
             Assert.False(offer.Answers[1].Open);
+        }
+
+        // V2. The turn that has run out of actions asks two written questions and one of them has
+        // to say how much Nerve is in hand. A count glued onto the end of a sentence is a sentence
+        // that cannot be translated, so the number travels with the answer and whatever lays it
+        // out formats it in.
+        [Fact]
+        public void AnAnswerCarriesItsNumberRatherThanHavingOneGluedOnTheEnd()
+        {
+            Answer pushing = Answer.Written("ui.turn.push", "out_of_actions", open: true, 2);
+
+            Assert.Equal(new object[] { 2 }, pushing.Counting);
+
+            Answer stopping = Answer.Written("ui.turn.stop", "out_of_actions");
+
+            Assert.Empty(stopping.Counting);
+        }
+
+        // two things somebody wrote down go on the DM's note, and the note is the one object at
+        // this table that is not a menu wearing a costume
+        [Fact]
+        public void ThePushOrStopIsANoteAndNotAFanOfCards()
+        {
+            Offer offer = Offer.Written("out_of_actions", new[]
+            {
+                Answer.Written("ui.turn.push", "out_of_actions", open: false, 0),
+                Answer.Written("ui.turn.stop", "out_of_actions"),
+            });
+
+            Assert.Equal(Laid.Note, offer.As);
+            Assert.False(offer.At(0).Open);
+            Assert.True(offer.At(1).Open);
         }
 
         [Fact]

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Godot;
 using Core.Characters;
 using Core.Localization;
@@ -35,6 +35,16 @@ namespace Game.Fight
         public const float MarkerGap = 0.010f;
 
         public const float MarkerSize = 0.007f;
+
+        // THE MARKER IS THE END-TURN GESTURE (V2). It used to be tapping your own mini, which is a
+        // piece on a map saying "the thing I am standing on is the control" - and it collided with
+        // the one gesture a mini actually wants, which is going somewhere. A DM ends a turn by
+        // moving the marker down the initiative stack, so you do.
+        //
+        // It is 7 mm of pip and a fingertip is 24, so the body it is touched by is Hitbox's floor
+        // and not the pip's own size.
+        public static readonly Vector3 MarkerReach =
+            Game.Access.Hitbox.Around(new Vector3(MarkerSize, MarkerSize, 0.0008f));
 
         // where the stack stands along the mat's left edge: the FAR corner, because the near one is
         // where the companion sits with its chin on the map (table.tscn places it there)
@@ -77,6 +87,9 @@ namespace Game.Fight
             _order.Clear();
             _guards.Clear();
             _marker = null;
+            _nudge = null;
+            _pip = null;
+            Marking = null;
 
             if (order == null || metrics == null) return;
 
@@ -115,11 +128,45 @@ namespace Game.Fight
                 // standing with the stack now, so it is a square pip beside the name and not a
                 // tile lying on the felt
                 Mesh = new BoxMesh { Size = new Vector3(MarkerSize, MarkerSize, 0.0008f) },
-                MaterialOverride = Unshaded(Up),
+                MaterialOverride = _pip = Unshaded(Up),
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                 Visible = false,
             });
+
+            // its own body, so a nudge at the marker is not read as a click on whatever is behind it
+            _marker.AddChild(_nudge = new StaticBody3D { Name = "Nudge" });
+
+            _nudge.AddChild(new CollisionShape3D
+            {
+                Name = "Reach",
+                Shape = new BoxShape3D { Size = MarkerReach },
+            });
         }
+
+        StaticBody3D _nudge;
+
+        StandardMaterial3D _pip;
+
+        // whose turn the marker is standing beside, which is the only turn it can end
+        public Actor Marking { get; private set; }
+
+        public bool Owns(GodotObject collider) =>
+            _nudge != null && collider != null && ReferenceEquals(_nudge, collider);
+
+        // under your hand, or under the cursor: the pip brightens, which is the affordance the
+        // object has rather than a rectangle drawn around it
+        public void Light(bool lit)
+        {
+            if (_pip != null) _pip.AlbedoColor = lit ? Up.Lightened(0.45f) : Up;
+        }
+
+        // WHAT IT IS, for the hand that reaches with no mouse and the voice that reads it out.
+        // One description, so a keyboard, a cursor and a screen reader cannot disagree about what
+        // this is or what pressing it does.
+        public Game.Access.Reachable Reach(ILocalizer text, System.Action press) =>
+            new Game.Access.Reachable(
+                text == null ? TurnKeys.EndTurn : text.Get(TurnKeys.EndTurn),
+                press, _nudge, MarkerReach, live: _marker is { Visible: true }, lit: Light);
 
         // the first throw that clears a foe's guard puts the number on its card, and there it stays
         public bool Reveal(Actor foe, int defence)
@@ -149,10 +196,12 @@ namespace Game.Fight
 
             if (acting == null || at == null)
             {
+                Marking = null;
                 _marker.Visible = false;
                 return;
             }
 
+            Marking = acting;
             _marker.Visible = true;
             _marker.Position = at.Position + new Vector3(MarkerGap, at.NameRow, 0f);
         }

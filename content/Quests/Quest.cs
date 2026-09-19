@@ -27,6 +27,16 @@ namespace Content.Quests
 
         public bool CanFail => Failed != null;
 
+        // AN ERRAND YOU WERE OFFERED IS ONE YOU CAN HAND BACK, and that is derived rather than
+        // declared. A quest on from the moment the campaign opens is the story you are in: nobody
+        // asked you and there is nobody to tell you are done with it. A quest that waits on a fact
+        // was put in front of you by something that happened, which is the same thing as being
+        // offered an errand - and an errand can be given up and taken on again.
+        //
+        // No new field, because a new field is a thing every author has to learn and every
+        // validator has to check, and the clause that already says it is right there.
+        public bool IsSide => !Offered.IsAlways;
+
         // accepted is a fact like everything else; a conversation sets it and nothing special happens
         public string AcceptedFact => FactName.Accepted(Id);
 
