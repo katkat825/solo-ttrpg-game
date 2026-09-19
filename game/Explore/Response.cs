@@ -21,9 +21,20 @@ namespace Game.Explore
         // because a note that arrives by itself is a panel
         [Export] public NodePath DmPath { get; set; }
 
-        [Export] public Vector3 CardsAt { get; set; } = new Vector3(0f, 0.002f, 0.20f);
+        // WHERE THE TOP CARD LIES, and the column runs from here toward the player. It used to be
+        // 20 cm nearer the player than this node stands, which put the first card 4 cm past the
+        // bottom of the picture and every card after it further out again - so the only way to act
+        // on anything while exploring was off the side of the screen, and had been since it was
+        // built. Pinned at the far end now, in front of the board's near edge.
+        [Export] public Vector3 CardsAt { get; set; } = new Vector3(0f, 0.002f, -0.05f);
 
         [Export] public float CardGap { get; set; } = 0.058f;
+
+        // HOW MUCH TABLE THE COLUMN MAY TAKE before the cards start to overlap. The frame narrows
+        // toward the player, so a list long enough to reach the near edge has to squeeze rather
+        // than run off it - which is also what a hand of cards does. Five is the whole interaction
+        // vocabulary, so nothing shipped can need more than this holds.
+        [Export] public float CardsRun { get; set; } = 0.16f;
 
         // which answer was taken, by its index in the offer that was made
         [Signal] public delegate void AnsweredEventHandler(int index);
@@ -96,6 +107,10 @@ namespace Game.Explore
 
         void Deal(IReadOnlyList<string> words, IReadOnlyList<bool> open)
         {
+            float gap = words.Count > 1
+                ? Mathf.Min(CardGap, CardsRun / (words.Count - 1))
+                : CardGap;
+
             for (int at = 0; at < words.Count; at++)
             {
                 var card = new ChoiceCard
@@ -103,7 +118,7 @@ namespace Game.Explore
                     Name = "Answer" + at,
 
                     // a shade of height per card so a row of them never z-fights on the table
-                    Position = CardsAt + new Vector3(0f, 0.0004f * at, CardGap * at),
+                    Position = CardsAt + new Vector3(0f, 0.0004f * at, gap * at),
                 };
 
                 AddChild(card);

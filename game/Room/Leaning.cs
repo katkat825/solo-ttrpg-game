@@ -219,8 +219,26 @@ namespace Game.Room
         // your head, and none of them opens anything
         public override void _UnhandledInput(InputEvent @event)
         {
-            if (_camera == null || @event is not InputEventKey { Pressed: true, Echo: false } key)
+            if (_camera == null) return;
+
+            // THE WHEEL, because it is the first thing anybody tries and it did nothing. Leaning in
+            // is how everything on this table with words on it is meant to be read, and the only
+            // ways to ask for it were two keys nothing in the game mentions - so from outside the
+            // game simply had unreadable text and no zoom.
+            if (@event is InputEventMouseButton { Pressed: true } wheel)
+            {
+                switch (wheel.ButtonIndex)
+                {
+                    case MouseButton.WheelUp: Zoom(ZoomStep); break;
+                    case MouseButton.WheelDown: Zoom(-ZoomStep); break;
+                    default: return;
+                }
+
+                GetViewport().SetInputAsHandled();
                 return;
+            }
+
+            if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
 
             switch (key.Keycode)
             {

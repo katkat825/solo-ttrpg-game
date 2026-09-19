@@ -42,6 +42,19 @@ namespace Game.Fight
 
         public const float NotchPitch = 0.0062f;
 
+        // HOW WIDE THE CARD IS. A card is a fixed-size object - that is most of what makes it read
+        // as a card rather than as words hanging in the air, which is what these were: three
+        // Label3Ds and three notches, no paper behind them, floating over the felt at the side of
+        // the mat. "The initiative cards aren't cards, they're still floating HUD" was exactly
+        // right, and it was right because there was no card.
+        public const float Wide = 0.115f;
+
+        // the paper standing a hair behind the writing on it
+        public const float Behind = 0.0012f;
+
+        // air above the top row and below the bottom one, so the writing is ON the card
+        public const float Padding = 0.005f;
+
         const int GlyphResolution = 64;
 
         public Color Ink { get; set; } = new Color(0.72f, 0.66f, 0.54f);
@@ -49,6 +62,12 @@ namespace Game.Fight
         public Color Up { get; set; } = new Color(1.00f, 0.86f, 0.45f);
 
         public Color Fallen { get; set; } = new Color(0.38f, 0.34f, 0.30f, 0.55f);
+
+        // the card stock. The same off-white the character sheet is, because they are the same
+        // paper on the same table
+        public Color Paper { get; set; } = new Color(0.90f, 0.88f, 0.81f, 0.96f);
+
+        public Color Dealt { get; set; } = new Color(0.62f, 0.60f, 0.57f, 0.55f);
 
         public ILocalizer Text { get; set; }
 
@@ -60,8 +79,46 @@ namespace Game.Fight
         // how tall this card is with the rows it is currently showing; the stand reads it to stack
         public float Height { get; private set; }
 
+        // THE BOX THE WRITING ON THIS CARD OCCUPIES, in world space, for whoever has to keep it
+        // inside the picture.
+        //
+        // The rows are right-aligned, which puts the card's own origin at the RIGHT-HAND edge of
+        // the writing and runs every line leftward from it - away from the mat, and toward the
+        // side of the screen. So a long name reaches further off the table than a short one, and
+        // how far is a question about a font and a string rather than about this table.
+        //
+        // MEASURED, NOT MODELLED, and that is the whole of why it is a method here rather than a
+        // constant somewhere: the same thing the headless sweep reads. A clamp that measures one
+        // box while a check measures another will disagree forever.
+        //
+        // EMPTY UNTIL THE ROWS HAVE BEEN SHAPED. A Label3D asked for its box in the same frame its
+        // text changed answers for the text it had before, so whoever reads this has to be able to
+        // tell "nothing yet" from "nothing outside", and an empty box says so.
+        public Aabb Written()
+        {
+            var box = new Aabb();
+
+            bool any = false;
+
+            foreach ((Label3D line, float _) in Rows())
+            {
+                if (line == null || !line.Visible) continue;
+
+                Aabb one = line.GlobalTransform * line.GetAabb();
+
+                box = any ? box.Merge(one) : one;
+                any = true;
+            }
+
+            return box;
+        }
+
         // where the turn marker goes: the middle of the name row, in this card's own space
         public float NameRow { get; private set; }
+
+        MeshInstance3D _face;
+
+        QuadMesh _paper;
 
         Label3D _name;
 
@@ -85,6 +142,26 @@ namespace Game.Fight
             Of = actor;
             Yours = yours;
             Text = text;
+
+            // THE CARD ITSELF, built before the writing so it stands behind it
+            _paper = new QuadMesh { Size = new Vector2(Wide, NameHeight + Padding * 2f) };
+
+            _face = new MeshInstance3D
+            {
+                Name = "Face",
+                Mesh = _paper,
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = Paper,
+                    Roughness = 0.95f,
+                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                },
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                Position = new Vector3(-Wide * 0.5f, 0f, -Behind),
+            };
+
+            AddChild(_face);
 
             _name = Row(NameHeight);
             _health = Row(DetailHeight);
@@ -120,6 +197,10 @@ namespace Game.Fight
         {
             FontSize = GlyphResolution,
             PixelSize = height / GlyphResolution,
+
+            // the card's own width, so right alignment has an edge to be right against and the
+            // writing sits ON the paper rather than wherever the string happened to end
+            Width = Wide / (height / GlyphResolution),
             Modulate = Ink,
             OutlineSize = 0,
             Billboard = BaseMaterial3D.BillboardModeEnum.Disabled,
@@ -224,6 +305,15 @@ namespace Game.Fight
 
             Height = total;
 
+            // the card is as tall as what is written on it plus its own margin, and it grows the
+            // first time a foe has something new to say - the way a DM's card gains a pencilled line
+            if (_paper != null)
+            {
+                _paper.Size = new Vector2(Wide, total + Padding * 2f);
+
+                _face.Position = new Vector3(-Wide * 0.5f, total * 0.5f, -Behind);
+            }
+
             float top = total;
 
             foreach ((Label3D line, float height) in Rows())
@@ -258,6 +348,10 @@ namespace Game.Fight
         void Paint()
         {
             if (_name == null) return;
+
+            // a fallen card is a card turned face down on the table, not one whose writing faded
+            if (_face?.MaterialOverride is StandardMaterial3D stock)
+                stock.AlbedoColor = Of is { IsDown: true } ? Dealt : Paper;
 
             Color ink = Of.IsDown ? Fallen : _acting ? Up : Ink;
             int left = Of.IsDown ? 0 : Notches(_band);

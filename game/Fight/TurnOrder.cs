@@ -1,8 +1,9 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using Godot;
 using Core.Characters;
 using Core.Localization;
 using Game.Board;
+using Game.Room;
 
 namespace Game.Fight
 {
@@ -122,6 +123,12 @@ namespace Game.Fight
             // tilted toward the player, like every other thing on this table with words on it
             Game.Room.TableView.Face(this);
 
+            _shoved = 0f;
+            Settled = false;
+            _measured = default;
+
+            KeepInThePicture();
+
             AddChild(_marker = new MeshInstance3D
             {
                 Name = "Marker",
@@ -142,6 +149,103 @@ namespace Game.Fight
                 Shape = new BoxShape3D { Size = MarkerReach },
             });
         }
+
+        // THE STACK STANDS OFF THE MAT'S EDGE, AND THE MAT IS NOT ALWAYS INSIDE THE PICTURE.
+        //
+        // Where it goes is the mat's own half-width plus a margin, which is right for the shipped
+        // 8x8 room and wrong the moment a campaign ships a wider one: a mat wide enough to fill the
+        // frame puts its own left edge at the edge of the picture, and the turn order stands
+        // OUTSIDE that edge. Every name in the ashfall fight was off the screen, by up to 67 mm,
+        // and no map has to be malformed for it - it is the ordinary consequence of a bigger room,
+        // and a Workshop campaign will ship one. A name is a player's own string too, so how far a
+        // card reaches is not a number this table can know in advance.
+        //
+        // So the stack is pulled back in until it fits, from the rows' own measured boxes, every
+        // frame the cards are told what to say. It hugs the mat wherever there is room, which is
+        // every map small enough, and slides over the felt's edge on the ones that are not -
+        // because a turn order you cannot see is worth less than one an inch onto the mat.
+        //
+        // ASKED EVERY FRAME RATHER THAN ONCE, because a Label3D answers for the text it had before
+        // the one it was just given: measured at the moment a card is written, half of these boxes
+        // are a frame out of date. Asked again next frame it settles, and it early-outs the moment
+        // everything fits, which is every frame after the first.
+        void KeepInThePicture()
+        {
+            Framing frame = Framing.Of(IsInsideTree() ? GetViewport()?.GetCamera3D() : null);
+
+            if (!frame.Exists) return;
+
+            Aabb all = default;
+            bool any = false;
+
+            foreach (Card card in _cards.Values)
+            {
+                Aabb written = card.Written();
+
+                // a card whose rows have not been shaped yet has nothing to say about where it is
+                if (written.Size == Vector3.Zero) continue;
+
+                all = any ? all.Merge(written) : written;
+                any = true;
+            }
+
+            if (!any) return;
+
+            // TWO FRAMES HAVE TO AGREE BEFORE THIS IS BELIEVED. A row that has not been shaped yet
+            // does not measure as nothing - it measures as a sliver at the card's own origin, which
+            // fits the picture beautifully and is not where the words are going to be. One frame's
+            // answer said the stack was fine while every name in it was off the screen, so a
+            // measurement counts only once the one before it said the same thing.
+            bool same = _measured.Size.IsEqualApprox(all.Size) &&
+                        _measured.Position.IsEqualApprox(all.Position);
+
+            _measured = all;
+
+            float worst = frame.Margin(all.GetCenter(), all.Size);
+
+            if (worst >= 0f) { Settled = same; return; }
+
+            Settled = false;
+
+            // in from whichever side it fell off, which is the left on every map so far. The
+            // camera does not yaw, so one step is exact, and the next frame confirms it against
+            // boxes that have caught up
+            float over = Mathf.Min(-worst, Furthest - _shoved);
+
+            if (over <= 0f) { Settled = same; return; }
+
+            Position += new Vector3(GlobalPosition.X < 0f ? over : -over, 0f, 0f);
+
+            _shoved += over;
+
+            // ONTO THE MAT IS FINE AND RUNNING OUT OF MAT IS NOT. A stack standing on the felt at
+            // the far corner is what a real table looks like; one that would keep sliding is on
+            // its way over the board, where the marker's own body would start eating clicks meant
+            // for a square. So it stops at Furthest, and only then says anything - the shipped
+            // 12-wide yard needs 106 mm of this and is not a problem to be told about.
+            if (_shoved < Furthest) return;
+
+            GD.PushWarning($"turn order: the stack has been pulled {_shoved * 1000f:0} mm onto " +
+                           "the mat and is STILL not all in the picture - this map is wider than " +
+                           "the camera, or something on it is named at length");
+        }
+
+        // IS THE STACK DONE MOVING. A Label3D answers for the text it had before the one it was
+        // just given, so the first frame's boxes are a frame out of date and the stack is still
+        // being pulled in while they catch up. Nothing should be measured against it until this
+        // is true - the same discipline as not standing a piece on a mat that is in the air.
+        public bool Settled { get; private set; }
+
+        // how far this stack has been pulled in from where the mat put it, so the warning is about
+        // the whole slide rather than the last millimetre of it
+        float _shoved;
+
+        // the whole stack's box as the last frame measured it
+        Aabb _measured;
+
+        // it never slides further onto the felt than this, whatever the map or the names: about
+        // two and a half squares at the mat's far corner, which is where a DM's cards would lie
+        const float Furthest = 0.16f;
 
         StaticBody3D _nudge;
 
@@ -189,6 +293,8 @@ namespace Game.Fight
 
             // a card grows the first time it has something new to say; re-stack only then
             if (!Mathf.IsEqualApprox(was, Measured())) Stack();
+
+            KeepInThePicture();
 
             if (_marker == null) return;
 

@@ -246,9 +246,20 @@ DmPath = NodePath("../../Dm")
 ; THE STACK OF CARDS BESIDE YOU, which is the whole inventory. Anything you gain is dealt across as
 ; a card and goes on it; turning one over reads it. Near the player's own edge of the table, left of
 ; the sheet, where you would keep what you are carrying.
+;
+; IT WAS 12 CM BELOW THE BOTTOM OF THE PICTURE, and had been since it was built. At z 0.62 on the
+; felt it was past the near edge of the frame, which lands at z 0.503 - the same class as the A3
+; sheet off the right, the hint cord off the left and the speech card growing off the corner, and
+; the fourth time nobody could ask the question without opening the editor. So the question is a
+; number now: Game.Room.Framing asks it and check-room.ps1 fails on it.
+;
+; Moved BACK rather than sideways, and right rather than left, which puts it clear of the response
+; cards in front of the board and still left of the sheet. The stack spreads +X in 10 mm steps to
+; eight cards, so it runs to x 0.58 - 8 cm clear of the sheet's left edge, and its cards lie 6 cm
+; in front of the tray's near wall. Measured: 357 mm inside the sides, 81 mm inside the near edge.
 [node name="Loot" type="Node3D" parent="."]
 script = ExtResource("18_loot")
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.30, -0.036, 0.62)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.50, -0.036, 0.42)
 DmPath = NodePath("../Dm")
 
 ; THE CAMERA, LEANING IN. It does not replace the fixed 60 degrees - it reads it at boot and goes

@@ -390,7 +390,7 @@ namespace Game.Explore
 
             // a mat in the air has nothing to click on, and a question on the table is answered
             // before anything else happens
-            if (_board.Laid is { Ready: false }) return true;
+            if (_board.Laid is { Swapping: true }) return true;
 
             if (_response != null && _response.Asking) return true;
 

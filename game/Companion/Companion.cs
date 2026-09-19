@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using Godot;
 using Content.Companions;
 using Content.Dialogue;
@@ -45,6 +45,19 @@ namespace Game.Companion
         // WHERE EACH PERCH ACTUALLY IS, relative to the object it is a perch on. Exported because
         // the only way to place a creature at a table is to sit at the table and move the number,
         // and these are the numbers the eye check settled on when the wolf was placed by hand.
+        // HOW BIG THE LIVING ONE IS, against a table of figures.
+        //
+        // The placeholder was built at 60 mm tall and 135 mm nose to tail, and a hero mini on this
+        // board is 75 mm - so the one thing at this table that is alive was SMALLER than the
+        // painted figures standing on the map, and read as another piece of scenery. "The
+        // companion is still tiny" is a number and this is the number.
+        //
+        // Doubled, which puts it at 120 mm and 270 mm: plainly the largest creature present, and
+        // still 94 mm inside the picture sitting behind the tray. A card's own size multiplies
+        // this, so a raven still ships a smaller one and gets a smaller one - what changed is what
+        // "normal" means, and normal is a creature rather than a figurine.
+        [Export] public float Presence { get; set; } = 2.0f;
+
         [Export] public Vector3 AtTheTrayRim { get; set; } = new Vector3(0f, -0.013f, -0.36f);
 
         [Export] public Vector3 BesideTheMap { get; set; } = new Vector3(-0.09f, 0f, 0.04f);
@@ -178,7 +191,7 @@ namespace Game.Companion
         // sentence said by something smaller.
         void Sized()
         {
-            float size = Card?.Size ?? CompanionCard.NormalSize;
+            float size = (Card?.Size ?? CompanionCard.NormalSize) * Presence;
 
             if (_body != null) _body.Scale = Vector3.One * size;
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -195,6 +195,8 @@ namespace Game.Room
             _fight = FightPath != null && !FightPath.IsEmpty
                 ? GetNodeOrNull<Game.Fight.Fight>(FightPath)
                 : null;
+
+            _eye = GetNodeOrNull<Leaning>("Table/Leaning");
 
             _sheet = SheetPath != null && !SheetPath.IsEmpty
                 ? GetNodeOrNull<Game.Sheet.Sheet>(SheetPath)
@@ -889,15 +891,19 @@ namespace Game.Room
 
             int doused = 0;
 
-            foreach (Node child in _table.GetChildren())
+            // THE WHOLE TABLE, AND EVERY KIND OF LIGHT. It used to be the table's direct children
+            // and DirectionalLight3D alone, which is the one light that had gone wrong rather than
+            // the rule - a lamp of the table's own, or a sun one node deeper inside a prop, was a
+            // second light source this walked straight past while reporting that it had swept
+            foreach (Node node in _table.FindChildren("*", recursive: true, owned: false))
             {
-                if (child is DirectionalLight3D sun && sun.Visible)
+                if (node is Light3D light && light.Visible)
                 {
-                    sun.Visible = false;
+                    light.Visible = false;
                     doused++;
                 }
 
-                if (child is WorldEnvironment sky && sky.Environment != null)
+                if (node is WorldEnvironment sky && sky.Environment != null)
                 {
                     sky.Environment = null;
                     doused++;
@@ -1092,6 +1098,11 @@ namespace Game.Room
 
             if (_help != null) all.Add(_help.Reach());
 
+            // THE PAPER ON THE TABLE, which is the character screen and was in nobody's list. It
+            // goes ahead of the furniture because the blanks are the thing you are actually
+            // reaching for, and behind the open book for the same reason the book is first.
+            if (_sheet != null) all.AddRange(_sheet.Reachables());
+
             foreach (Furniture one in _furniture) all.Add(one.Reach());
 
             foreach (Game.Book.Book one in _standing) all.Add(one.Reach());
@@ -1206,10 +1217,27 @@ namespace Game.Room
 
                 one.Touch();
 
+                // AND REACHING FOR THE PAPER BRINGS IT TO YOU. What is written on the sheet is 10
+                // pixels tall from where you are sitting and 47 with it held up, so touching a
+                // blank you cannot read and having it silently change is not an interaction - it
+                // is the reason the sheet looked broken. Escape sets it back down.
+                if (_sheet != null && _sheet.Mine(what)) LeanOverTheSheet();
+
                 return true;
             }
 
             return false;
+        }
+
+        // the eye, which lives on the table with the camera it moves. Optional: a room opened
+        // without one simply does not lean, exactly as it did before there was one
+        Leaning _eye;
+
+        void LeanOverTheSheet()
+        {
+            if (_eye == null || _sheet == null || _eye.Moving) return;
+
+            _eye.LeanOver(_sheet.GlobalPosition);
         }
 
         // THE WORKSHOP DOOR (BK6). What is behind it is Steam's - an app id, the SDK and two

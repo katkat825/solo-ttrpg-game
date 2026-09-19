@@ -54,6 +54,20 @@ namespace Game.Access
         // the smallest outline that reads as an outline at this scale
         public const int Edge = 6;
 
+        // THE SMALLEST A LINE MAY BE ON SCREEN AND STILL BE READ: pixels of em height on a 1080p
+        // display, at the depth the thing it is written on actually stands.
+        //
+        // This is a floor, not a size. The text dial multiplies up from whatever an author gave a
+        // label, so somebody who needs larger has it; what the floor says is that the DEFAULT view
+        // has to be playable. Nothing checked that. Every surface on this table was authored in
+        // millimetres, by eye, in the editor, with no camera anywhere in the question - and the
+        // answer came out between 7 and 19 px with most of it near 11, which is not small but
+        // unreadable, and was the first thing said on looking at the game.
+        //
+        // 20 px of em is the usual floor for body text and it is not generous here, because this
+        // text is also read at sixty degrees off the felt.
+        public const float Least = 20f;
+
         // WHAT THE PLAYER ASKED FOR, APPLIED TO EVERY WORD UNDER HERE. Returns how many it touched.
         public int Apply(Node root, Adjustments how)
         {

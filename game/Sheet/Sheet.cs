@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
@@ -57,6 +57,13 @@ namespace Game.Sheet
         readonly ILocalizer _text = new GodotLocalizer();
 
         readonly Dictionary<Line, Label3D> _lines = new Dictionary<Line, Label3D>();
+
+        // the body behind each blank, so a blank is a thing you touch and not only a thing you read
+        readonly Dictionary<Line, StaticBody3D> _blanks = new Dictionary<Line, StaticBody3D>();
+
+        // how tall a row on this sheet is to aim at; the rows are 45 mm apart and a blank should
+        // not swallow the one under it
+        public const float RowHeight = 0.034f;
 
         readonly List<MeshInstance3D> _pips = new List<MeshInstance3D>();
 
@@ -150,6 +157,28 @@ namespace Game.Sheet
                 _lines[line] = written;
 
                 AddChild(written);
+
+                // A BLANK YOU CAN ACTUALLY TOUCH. "You fill it in by touching the blanks, and
+                // there is no Confirm button anywhere" was true of the method and of nothing else:
+                // the blanks were drawn as words with no body behind them, nothing raycast for
+                // them, and the only caller of Touch(line) in the whole build was the check that
+                // proves the sheet fills in. So the check passed and the sheet could not be
+                // filled in by a player at all, by mouse or by keyboard.
+                var blank = new StaticBody3D
+                {
+                    Name = "Blank" + line.Word(),
+                    Position = new Vector3(0f, y, 0f),
+                };
+
+                blank.AddChild(new CollisionShape3D
+                {
+                    Shape = new BoxShape3D { Size = Access.Hitbox.Around(
+                        new Vector3(Width, RowHeight, 0.004f)) },
+                });
+
+                AddChild(blank);
+
+                _blanks[line] = blank;
 
                 y -= 0.045f;
             }
@@ -286,6 +315,10 @@ namespace Game.Sheet
 
             return wrote;
         }
+
+        // what is on a line right now. The sheet is the character, so this reads the paper
+        public string Written(Line line) =>
+            _lines.TryGetValue(line, out Label3D written) ? written.Text : "";
 
         // the two lines a person writes rather than picks
         public void WriteIn(Line line, string what)
@@ -461,6 +494,71 @@ namespace Game.Sheet
             };
 
         public bool Owns(GodotObject what) => _touch != null && ReferenceEquals(_touch, what);
+
+        // ANYTHING ON THIS PAPER, which is what the room asks before it leans over it. The sheet's
+        // writing is 10 px tall sitting back and 47 in your hands, so reaching for it has to bring
+        // it to you - otherwise "you fill it in by touching the blanks" is an instruction to touch
+        // something you cannot read.
+        public bool Mine(GodotObject what)
+        {
+            if (what == null) return false;
+
+            if (Owns(what)) return true;
+
+            foreach (StaticBody3D blank in _blanks.Values)
+                if (ReferenceEquals(blank, what)) return true;
+
+            foreach (KeyValuePair<Check, Row> row in _checks)
+                if (ReferenceEquals(row.Value.Touch, what)) return true;
+
+            return false;
+        }
+
+
+        // WHAT THIS PAPER LOOKS LIKE TO A HAND, whichever hand is reaching.
+        //
+        // The room's list of what is reachable is one list on purpose, so that a mouse, a keyboard,
+        // a screen reader and the hitbox sweep can never reach different rooms - and the character
+        // sheet was not in it. It had bodies behind its three checks, none at all behind its
+        // blanks, and a whole-paper body nothing ever asked about, so the one thing R0 promises
+        // you do by touching could only be done by calling the method from code. It is here now,
+        // and the blanks come first because filling them in is what the paper is for.
+        public IEnumerable<Access.Reachable> Reachables()
+        {
+            foreach (Line line in Enum.GetValues<Line>())
+            {
+                if (!line.IsADropdown() || !_blanks.TryGetValue(line, out StaticBody3D body))
+                    continue;
+
+                Line which = line;
+
+                yield return new Access.Reachable(
+                    _text.Get(SheetKeys.Label(which)),
+                    () => Touch(which),
+                    body,
+                    Access.Hitbox.Around(new Vector3(Width, RowHeight, 0.004f)),
+                    also: new[] { Reads(which) });
+            }
+
+            foreach (KeyValuePair<Check, Row> row in _checks)
+            {
+                Check which = row.Key;
+
+                yield return new Access.Reachable(
+                    _text.Get(which.NameKey()),
+                    () => Try(which),
+                    row.Value.Touch,
+                    Access.Hitbox.Around(new Vector3(Width, 0.030f, 0.004f)),
+                    live: row.Value.Allowed);
+            }
+        }
+
+        // what is written on that line right now, as a whole sentence, so a voice reading the
+        // sheet says what it says rather than only what it is called
+        string Reads(Line line) =>
+            _lines.TryGetValue(line, out Label3D written) && written.Text.Length > 0
+                ? written.Text
+                : _text.Get(SheetKeys.Blank);
 
 
         // ---- the three you reach for yourself -------------------------------------------------

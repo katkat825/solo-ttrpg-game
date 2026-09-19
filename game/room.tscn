@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3]
+[gd_scene load_steps=14 format=3]
 
 ; THE ROOM. The game's main scene from R3 onward, and the shell that makes the whole thing a table
 ; you sit at rather than software you operate (ROOM_AND_SHEET.md R3, THE_TABLE.md section 6).
@@ -62,10 +62,11 @@ cull_mode = 1
 [sub_resource type="BoxMesh" id="Mesh_walls"]
 size = Vector3(5.0, 2.7, 5.0)
 
-; the floor goes with them, or it reads warmer than the wall standing behind it
-[sub_resource type="StandardMaterial3D" id="Mat_floor"]
-albedo_color = Color(0.082, 0.084, 0.09, 1)
-roughness = 1.0
+; THERE IS NO SEPARATE FLOOR, and that is what the inverted box buys: its own bottom face IS the
+; floor, in the same paint as the walls, so the two cannot drift apart. There was a Floor node here
+; carrying a second, darker material - built from the wall MESH, so its top face stood a metre and a
+; third up in the middle of the room, and switched invisible rather than resized. It was read by
+; nothing and it made the floor colour look like a number somebody could tune. Deleted.
 
 [node name="Room" type="Node3D"]
 script = ExtResource("2_room")
@@ -95,12 +96,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.31, 0)
 mesh = SubResource("Mesh_walls")
 material_override = SubResource("Mat_wall")
 
-[node name="Floor" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.04, 0)
-mesh = SubResource("Mesh_walls")
-material_override = SubResource("Mat_floor")
-visible = false
-
 ; THE TABLE, INSIDE THE ROOM. Everything built since B0 - the board, the tray, the DM, the
 ; companion, the sheet - comes in with it, placed exactly as table.tscn places it. The room knows
 ; where the table stands; the table has never known and still does not.
@@ -120,14 +115,20 @@ Is = 0
 Size = Vector3(1.1, 0.06, 0.28)
 Wood = Color(0.33, 0.27, 0.19, 1)
 
-; THE CHARACTER SHEET. The paper itself lives on the table (table.tscn); this is the shelf-side
-; handle on it, so the room's own list of objects is complete and the "touch only objects" walk has
-; something to touch for it.
+; THE CHARACTER SHEET. The paper itself lives on the table (table.tscn) and is what you touch; this
+; is the shelf-side handle on it, so the room's own list of objects is complete and the "touch only
+; objects" walk has something to touch for it.
+;
+; IT USED TO STAND ON TOP OF THE PAPER, and that is why the character sheet was not clickable. A
+; 0.30 x 0.40 box - the sheet's old A3 size, never brought down with it - sitting 2 cm above an A4
+; sheet at 0.765, so the room's one raycast hit this decorative box every time and the paper's own
+; bodies were never reached. Two objects for one thing, in the same place, and the useless one in
+; front. It stands with the dice case and the box lid now, among the room's other loose things.
 [node name="Sheet" type="Node3D" parent="." groups=["furniture"]]
 script = ExtResource("3_prop")
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.78, 0.0, 0.16)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.15, 0.01, 0.18)
 Is = 1
-Size = Vector3(0.3, 0.004, 0.4)
+Size = Vector3(0.21, 0.004, 0.297)
 Wood = Color(0.92, 0.9, 0.83, 1)
 
 ; A CORKBOARD WITH MAP AND NOTES - the quest log. Old maps get pinned to it and layered over, so it
@@ -192,15 +193,29 @@ script = ExtResource("4_case")
 ; it, and that is the one thing this room cannot have.
 ;
 ; Over the near edge of the table, where you would actually hold something you were reading.
+;
+; ON THE TABLE THE ROOM ACTUALLY TOOK IN, which is the correction this and the three objects below
+; share. They were placed at y 0.75-0.79 - the height of a real table - and the table rig this room
+; instances has its surface at y -0.021, so all four were floating 78 cm above the felt and three
+; of them were past the near edge of the picture as well. The room was built around a table at
+; human height and the table has always been built around its own origin; nothing reconciled them,
+; because the Table node carries no transform. The table's own placements are what three eye-check
+; passes were tuned against, so the table is the truth here and these four moved to meet it.
+;
+; AND CLEAR OF THE DICE TRAY. Putting it down on the table's centre line put a 34 cm open book
+; across the front of a tray that starts at x 0.02 and stands 12 cm of wall up out of the felt, so
+; the "?" opened a page with the tray's near wall through the middle of it. 10 cm clear of the tray
+; now, and 6 cm in front of the board's near edge.
 [node name="Book" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0, 0.79, 0.62)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, -0.021, 0.37)
 script = ExtResource("5_open")
 
 ; THE "?" ON THE TABLE (BK3). The one honest button in the game, and it earns it: somebody who cannot
 ; find how to ask for help has no way to be told where to look. What it DOES is diegetic - the DM
 ; reaches behind the screen and pushes the rules book across.
+; moved off x 0.52 as well, which is where the loot stack now stands
 [node name="Help" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.52, 0.755, 0.5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.24, -0.021, 0.44)
 script = ExtResource("6_help")
 
 ; ---- PHASE AX: THE WAY IN ----------------------------------------------------------------------
@@ -212,15 +227,18 @@ script = ExtResource("6_help")
 ; YOUR OWN HANDS, on your side of the table (AX5). The DM has had hands since D1 and you have not.
 ; Placeholder geometry, the same placeholder the DM's are, in whatever colour you chose - and gone
 ; entirely if you would rather they were.
+; on the felt, at the very near edge of the picture, which is where your own hands belong
 [node name="Hands" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0, 0.752, 0.78)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0, -0.026, 0.47)
 script = ExtResource("9_hands")
 
 ; THE SOUNDS, IN WORDS (AX4). A card at the near edge, off until asked, showing what was just heard.
 ; It is a card lying on the table rather than a band across the bottom of the picture, because a band
 ; across the bottom of the picture is an HUD and this room has none.
+; 26 cm wide, so it stands at x -0.50 rather than -0.30: far enough left to leave the near edge
+; clear for your hands, near enough in that its own left edge is still 5 cm inside the picture
 [node name="Captions" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.30, 0.755, 0.70)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.50, -0.021, 0.46)
 script = ExtResource("8_caption")
 
 ; THE VOICE (AX2). No geometry: it speaks through the platform's own, and keeps a transcript of

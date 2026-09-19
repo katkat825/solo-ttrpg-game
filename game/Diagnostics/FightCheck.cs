@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using Core.Characters;
@@ -66,6 +66,11 @@ namespace Game.Diagnostics
         DiceTray _tray;
 
         FightNode _fight;
+
+        // the table this fight is on, and what its camera can see of it
+        Node3D _table;
+
+        Game.Room.Framing _frame;
 
         Actor _hero;
 
@@ -279,6 +284,9 @@ namespace Game.Diagnostics
             }
 
             AddChild(table);
+
+            _table = table as Node3D;
+            _frame = InThePicture.SeenThrough(_table);
 
             // after AddChild: Godot readies the subtree bottom-up before the call returns
             _board = Find<BoardNode>();
@@ -772,6 +780,27 @@ namespace Game.Diagnostics
         }
 
         // the margin is where a hardcoded name or missing locale line shows, and the first place an ordinal is formatted into a key
+        // EVERY WORD THIS FIGHT PUTS ON THE TABLE IS INSIDE THE PICTURE. The initiative list was
+        // unreadable once for lying flat in nine pixels of type, and a speech card hung a third of
+        // itself off the side twice; the rule and the sweep are InThePicture's, and this says when
+        // to ask. Once per fight per moment, because a fight has a lot of rounds in it.
+        readonly System.Collections.Generic.HashSet<string> _looked =
+            new System.Collections.Generic.HashSet<string>();
+
+        void EveryWordIsInThePicture(string moment)
+        {
+            if (!_looked.Add(moment)) return;
+
+            IReadOnlyList<string> lost = InThePicture.Unreadable(_table, _frame, out int read);
+
+            foreach (string one in lost)
+                Problem($"{one} on {moment} - a line the player cannot read is a line that was " +
+                        "not said");
+
+            GD.Print($"words   {read} line(s) on the table at {moment}");
+        }
+
+
         void CheckTheOrder()
         {
             Encounter fight = _fight.Encounter;
@@ -970,6 +999,11 @@ namespace Game.Diagnostics
                 CheckTheOrder();
             }
 
+            // nothing is measured against the stack while it is still being pulled into the
+            // picture, for the same reason nothing stands on a mat that is in the air
+            if (_orderChecked && _fight.Order is { Settled: true })
+                EveryWordIsInThePicture("the turn order");
+
             if (_tray.IsAnswering || !_fight.Settled) return;
 
             // the fight drives the foes itself: that is watched, not driven
@@ -982,6 +1016,7 @@ namespace Game.Diagnostics
             if (fight.ActionsLeft <= 0)
             {
                 CheckTheNote();
+                EveryWordIsInThePicture("the note the turn pushes across");
 
                 bool pushing = !Plain && !_spentOnPush && _hero.Nerve > 0;
                 int nerve = _hero.Nerve;

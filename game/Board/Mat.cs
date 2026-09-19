@@ -19,6 +19,12 @@ namespace Game.Board
         // where a mat rests when nobody is carrying it; set by whoever put the mat on the table
         public Vector3 Rests { get; set; } = Vector3.Zero;
 
+        // NOTHING STANDS ON A MAT THAT IS IN THE AIR. A caller asks this before it puts a piece
+        // down, so a mini can never be set on a place that is half way across the table.
+        //
+        // Asked this way round on purpose. It was also a Ready property, which is the name of the
+        // signal every Node already has - so the C# event was hidden, the build carried a warning
+        // about it, and the two spellings meant opposite things. One of them says the same thing.
         public bool Swapping => _swap != null;
 
         // the new mat is down and the board may be stood on again
@@ -33,10 +39,6 @@ namespace Game.Board
         Action<Gesture> _hands;
 
         bool _built;
-
-        // NOTHING STANDS ON A MAT THAT IS IN THE AIR. A caller asks this before it puts a piece
-        // down, so a mini can never be set on a place that is half way across the table.
-        public bool Ready => _swap == null;
 
         public void SwapFor(Action build, Action<Gesture> hands = null)
         {

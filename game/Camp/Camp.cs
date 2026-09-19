@@ -67,7 +67,17 @@ namespace Game.Camp
 
             if (_talk == null)
             {
-                _talk = new Game.Dialogue.Talk { Name = "Talk", CompanionPath = CompanionPath };
+                // THE PATH IS THE CHILD'S, NOT THIS NODE'S. CompanionPath is written relative to
+                // the camp ("../Companion"), and read from a child one level down that is
+                // "Camp/Companion", which is nothing - so the companion's own lines at the fire
+                // came out of the table's bubble instead of its mouth, silently, from the day this
+                // was built. Hand the child the node that was already found, by its own full path.
+                _talk = new Game.Dialogue.Talk
+                {
+                    Name = "Talk",
+                    CompanionPath = _companion != null ? _companion.GetPath() : default,
+                };
+
                 AddChild(_talk);
             }
 

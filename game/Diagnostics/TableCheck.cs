@@ -65,6 +65,10 @@ namespace Game.Diagnostics
 
         Game.Companion.Companion _friend;
 
+        Node3D _table;
+
+        Game.Room.Framing _frame;
+
         // where in the walk it is. Each one waits for the table to settle and then does its thing
         enum Step
         {
@@ -138,6 +142,10 @@ namespace Game.Diagnostics
 
             AddChild(table);
 
+            _table = table;
+
+            _frame = InThePicture.SeenThrough(table);
+
             _board = table.GetNodeOrNull<Game.Board.Board>("Board");
             _dm = table.GetNodeOrNull<Game.Dm.Dm>("Dm");
             _eye = table.GetNodeOrNull<Game.Room.Leaning>("Leaning");
@@ -163,7 +171,7 @@ namespace Game.Diagnostics
 
             // nothing is asserted while the mat is in the air: a place half way across the table
             // is not a place anything is standing in
-            if (_board?.Laid is { Ready: false }) return;
+            if (_board?.Laid is { Swapping: true }) return;
 
             switch (_step)
             {
@@ -275,6 +283,22 @@ namespace Game.Diagnostics
         }
 
 
+        // ---- can you read it ------------------------------------------------------------------
+
+        // the rule and the sweep are InThePicture's, shared with the fight check; this says when
+        // to ask, which is every moment that puts words on the table
+        void EveryWordIsInThePicture(string moment)
+        {
+            IReadOnlyList<string> lost = InThePicture.Unreadable(_table, _frame, out int read);
+
+            foreach (string one in lost)
+                Problem($"{one} on {moment} - a line the player cannot read is a line that was " +
+                        "not said");
+
+            GD.Print($"words   {read} line(s) on the table at {moment}");
+        }
+
+
         // ---- walking up to something ---------------------------------------------------------
 
         void WalkUpToSomething()
@@ -333,6 +357,8 @@ namespace Game.Diagnostics
                 GD.Print($"card    [{at}] \"{words}\"");
             }
 
+            EveryWordIsInThePicture("the verb cards");
+
             Next(Step.Answering);
         }
 
@@ -366,6 +392,8 @@ namespace Game.Diagnostics
                         "the author wrote for it never reached the table");
             else
                 GD.Print($"dm      \"{note}\"");
+
+            EveryWordIsInThePicture("the DM's note");
 
             Next(Step.Searching);
         }
@@ -650,12 +678,21 @@ namespace Game.Diagnostics
                 return;
             }
 
-            if (!Mathf.IsEqualApprox(body.Scale.X, _friend.Card.Size))
-                Problem($"'{_friend.Card.Id}' is {_friend.Card.Size} on its card and " +
-                        $"{body.Scale.X} beside the table");
+            // THE CARD'S NUMBER IS RELATIVE, and it always was - what changed is that "normal" is
+            // now a creature rather than a figurine. The placeholder was built at 60 mm against a
+            // 75 mm hero mini, so the one living thing at this table was smaller than the painted
+            // figures on the map; Presence is the one number that fixes that, and a card that
+            // ships a smaller companion still gets a smaller one.
+            float wanted = _friend.Card.Size * _friend.Presence;
+
+            if (!Mathf.IsEqualApprox(body.Scale.X, wanted))
+                Problem($"'{_friend.Card.Id}' is {_friend.Card.Size} on its card at a presence of " +
+                        $"{_friend.Presence}, so it should read {wanted} beside the table and " +
+                        $"reads {body.Scale.X}");
             else
-                GD.Print($"companion {_friend.Card.Id} reads at {_friend.Card.Size:0.##} - " +
-                         $"on the {Content.Companions.Perches.Word(_friend.Card.Perch)}");
+                GD.Print($"companion {_friend.Card.Id} reads at {wanted:0.##} " +
+                         $"({_friend.Card.Size:0.##} on its card) - on the " +
+                         $"{Content.Companions.Perches.Word(_friend.Card.Perch)}");
         }
 
         void Onward()

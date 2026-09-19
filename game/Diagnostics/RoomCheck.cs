@@ -9,6 +9,7 @@ using Core.Characters;
 using Core.Dice;
 using Core.Localization;
 using Core.Resolution;
+using Game.Access;
 using Game.Localization;
 using Game.Room;
 using Game.Saves;
@@ -74,9 +75,21 @@ namespace Game.Diagnostics
 
             EveryObjectIsThere(theRoom);
 
+            OneLightInTheRoom(room);
+
+            EveryBindingConnects(room);
+
+            EverySignalIsHeard();
+
+            EverythingOnTheTableIsInThePicture(room);
+
+            EveryWordIsBigEnoughToRead(room);
+
+            YouCanLeanInAndRead(room);
+
             Node sheet = room.GetNodeOrNull("Table/Sheet");
 
-            FillItIn(sheet as Game.Sheet.Sheet);
+            FillItIn(theRoom, sheet as Game.Sheet.Sheet);
 
             TheDiceFollowTheSheet();
 
@@ -211,6 +224,449 @@ namespace Game.Diagnostics
         // exception, named rather than pattern-matched, so a new exception has to be argued for
         public static readonly IReadOnlyList<string> Excused = new[] { "res://Diagnostics/" };
 
+        // THE ROOM HAS ONE LIGHT, AND IT IS THE LAMP (fixes_needed.md #1, and it came BACK).
+        //
+        // table.tscn ships its own Sun (a DirectionalLight3D) and its own WorldEnvironment so it can
+        // be opened and checked on its own. Room.OwnTheLight() puts both out when the table is taken
+        // into the room, because a table indoors is lit by the room it is in, not by a sun of its
+        // own. Leave that sun lit and it washes the dark map walls to the brightness of the felt -
+        // exactly the report that opened the third eye check, and exactly the bug the FIRST eye check
+        // already fixed once. It came back the moment the scenes were rewritten, which is why it now
+        // has a machine on it: any rewrite that reintroduces a sun, or nests it where OwnTheLight
+        // cannot reach, fails HERE instead of in an eye check three passes later.
+        //
+        // The scan is the WHOLE room subtree (owned:false reaches into the instanced table), not the
+        // table's direct children the way OwnTheLight walks them.
+        //
+        // AND IT COUNTS EVERY KIND OF LIGHT, not only suns. "One light source" is the rule; asking
+        // only about DirectionalLight3D asked about the one bug that had already happened, and a
+        // second lamp or a spot over the screen would have walked straight past a check named after
+        // the rule it was not enforcing. One lit light in the room, whatever class it is.
+        void OneLightInTheRoom(Node3D room)
+        {
+            GD.Print("");
+
+            if (room == null) { Problem("no room to check the light of"); return; }
+
+            var lamps = new List<Light3D>();
+
+            foreach (Node node in room.FindChildren("*", nameof(Light3D),
+                                                    recursive: true, owned: false))
+                if (node is Light3D light && light.Visible) lamps.Add(light);
+
+            int lit = lamps.Count;
+
+            foreach (Light3D light in lamps.Skip(1))
+                Problem($"a second light is lit in the room ('{light.Name}', a " +
+                        $"{light.GetType().Name}) - the room has ONE light source, and lighting " +
+                        "it twice washes the dark map walls to the brightness of the felt, which " +
+                        "has been found by eye and fixed twice already");
+
+            if (lit == 0)
+                Problem("nothing in the room is lit at all - the room is its ambient alone, " +
+                        "which is not a room at night, it is a fog");
+
+            foreach (Light3D light in lamps.Take(1))
+                GD.Print($"light   the one light is '{light.Name}', a {light.GetType().Name} " +
+                         $"at energy {light.LightEnergy:0.00}");
+
+            int envs = 0;
+
+            foreach (Node node in room.FindChildren("*", nameof(WorldEnvironment),
+                                                    recursive: true, owned: false))
+                if (node is WorldEnvironment sky && sky.Environment != null) envs++;
+
+            // the room keeps its own; the table's must have been cleared, so more than one is the
+            // table's brought indoors and not put away
+            if (envs > 1)
+                Problem($"{envs} world environments are live at once - the table brought its own " +
+                        "indoors and it was not cleared");
+
+            GD.Print($"room    {lit} light(s) lit, {envs} world environment(s) live - " +
+                     "want 1 light and 1 environment");
+        }
+
+        // ---- is it in the picture ---------------------------------------------------------------
+
+        // EVERYTHING STANDING ON THE TABLE IS INSIDE THE CAMERA'S FRAME.
+        //
+        // The camera does not move, so this is arithmetic - and it was being done by hand, once per
+        // eye check, and forgotten in between. Four passes found the same bug four times: the A3
+        // character sheet off the right of the picture, the hint cord off the left, a speech card
+        // growing off its own corner, and the whole stack of cards you are carrying sitting 12 cm
+        // below the bottom edge for as long as it had existed. None of them was reachable by
+        // anything headless, and each one cost an eye check that could have been spent on taste.
+        //
+        // WHAT FAILS AND WHAT ONLY REPORTS is the one judgement here. The table's own objects are
+        // composition that three eye-check passes were spent settling, so one of them leaving the
+        // frame is a regression and fails. The room's Furniture is different by construction: the
+        // room is BIGGER than the picture on purpose - you walk to the bookcase - so a prop out of
+        // frame is the open framing question and is reported rather than failed.
+        void EverythingOnTheTableIsInThePicture(Node3D room)
+        {
+            GD.Print("");
+
+            if (room == null) { Problem("no room to frame"); return; }
+
+            Camera3D eye = room.FindChildren("*", nameof(Camera3D), recursive: true, owned: false)
+                               .OfType<Camera3D>()
+                               .FirstOrDefault();
+
+            if (eye == null)
+            {
+                Problem("there is no camera in the room, so nothing in it can be seen at all");
+                return;
+            }
+
+            Framing frame = Framing.Of(eye);
+
+            GD.Print($"frame   {frame}");
+
+            var table = room.GetNodeOrNull<Node3D>("Table");
+
+            if (table == null) { Problem("there is no table in the room to stand things on"); return; }
+
+            Aabb felt = Tabletop(table);
+
+            if (felt.Size == Vector3.Zero)
+            {
+                Problem("the table has no tabletop, so there is no surface to stand anything on");
+                return;
+            }
+
+            float surface = felt.Position.Y + felt.Size.Y;
+            float edge = frame.NearEdgeOn(surface);
+
+            GD.Print($"felt    {felt.Size.X:0.00} x {felt.Size.Z:0.00} m, surface at y {surface:0.000} - " +
+                     $"the bottom of the picture crosses it at z {edge:0.000}, " +
+                     "and anything nearer than that is below the edge");
+
+            // the table's own objects: everything it stands on itself, minus the things that are
+            // not objects at all. A camera, a light and an environment are not on the table
+            foreach (Node child in table.GetChildren())
+            {
+                if (child is Camera3D or Light3D or WorldEnvironment) continue;
+
+                if (child is not Node3D thing) continue;
+
+                float margin = frame.Margin(thing.GlobalPosition);
+
+                if (margin < 0f)
+                    Problem($"'{thing.Name}' stands {-margin * 1000f:0} mm outside the picture at " +
+                            $"{thing.GlobalPosition} - a thing on this table that the fixed camera " +
+                            "cannot see is a thing the player has no other way to reach");
+
+                GD.Print($"        {thing.Name,-12} {margin * 1000f,7:0} mm inside the frame");
+            }
+
+            // and the room's own props, which are allowed to be outside it
+            var away = new List<string>();
+
+            foreach (Node node in room.FindChildren("*", nameof(Game.Room.Furniture),
+                                                    recursive: true, owned: false))
+            {
+                if (node is not Game.Room.Furniture prop) continue;
+
+                if (!frame.Holds(prop.GlobalPosition)) away.Add(prop.Is.Word());
+            }
+
+            if (away.Count > 0)
+                Caution($"{away.Count} of the room's own objects are outside the picture " +
+                        $"({string.Join(", ", away)}) - the room is bigger than the frame on " +
+                        "purpose, but a prop a mouse can never put a cursor on is one only the " +
+                        "keyboard can reach. How much room is in frame is an eye check");
+        }
+
+        // the biggest flat thing the table stands on, found rather than named, so the surface this
+        // measures against is the one the game actually draws
+        static Aabb Tabletop(Node3D table)
+        {
+            var biggest = new Aabb();
+
+            float most = 0f;
+
+            foreach (Node child in table.GetChildren())
+            {
+                if (child is not MeshInstance3D mesh) continue;
+
+                Aabb box = mesh.GlobalTransform * mesh.GetAabb();
+
+                float area = box.Size.X * box.Size.Z;
+
+                if (area <= most) continue;
+
+                most = area;
+                biggest = box;
+            }
+
+            return biggest;
+        }
+
+
+        // CAN ANY OF IT ACTUALLY BE READ. Not "is it in the picture" - the sweep above already
+        // holds that, and every word in this game passed it while being too small to read.
+        void EveryWordIsBigEnoughToRead(Node3D room)
+        {
+            GD.Print("");
+
+            Framing frame = InThePicture.SeenThrough(room);
+
+            var table = room?.GetNodeOrNull<Node3D>("Table");
+
+            IReadOnlyList<string> sizes =
+                InThePicture.TooSmallToRead(table, frame, out int read, out float worst);
+
+            GD.Print($"words   {read} line(s) on the table at {Framing.Screen:0}p; the floor is " +
+                     $"{Legible.Least:0} px of em, and a line under it sitting back has to be one " +
+                     "you can pick up");
+
+            foreach (string one in sizes) GD.Print("        " + one);
+
+            int onlyInHand = sizes.Count(one => one.EndsWith("only in hand"));
+
+            if (onlyInHand > 0)
+                Caution($"{onlyInHand} kind(s) of writing on this table can only be read with the " +
+                        "thing in your hands - which is correct for a sheet of A4 and wrong for " +
+                        "anything that arrives and is swept, so every one of them has to be a " +
+                        "thing you can actually lean over or pick up");
+
+            if (read > 0 && worst < Legible.Least)
+                Problem($"the smallest words on this table are {worst:0.0} px tall on a " +
+                        $"{Framing.Screen:0}p screen even held up in front of you, and " +
+                        $"{Legible.Least:0} is the floor - the text dial multiplies up from here " +
+                        "rather than rescuing it");
+        }
+
+
+        // LEANING IN IS THE OTHER HALF OF THE SENTENCE ABOVE, AND NOBODY HAD EVER CHECKED IT.
+        //
+        // Half the writing on this table is only legible with the thing held up in front of you.
+        // That is a defensible design - it is how you read a sheet of paper - but only while
+        // leaning in actually works, and while a player can find out that it does. Otherwise
+        // "pick it up to read it" is a sentence in a comment and the game is simply unreadable,
+        // which is what it looked like from outside.
+        //
+        // So: does the camera move when it is asked to, does it end up near enough to read at, and
+        // does it come back. Three assertions and they are all about the same claim.
+        void YouCanLeanInAndRead(Node3D room)
+        {
+            GD.Print("");
+
+            var eye = room?.GetNodeOrNull<Leaning>("Table/Leaning");
+
+            if (eye == null)
+            {
+                Problem("there is nothing in this room that leans, so every word on the table " +
+                        "that is only readable in hand is unreadable");
+                return;
+            }
+
+            Camera3D camera = InThePicture.CameraIn(room);
+
+            if (camera == null) { Problem("no camera in the room to lean"); return; }
+
+            Vector3 back = camera.GlobalPosition;
+
+            var sheet = room.GetNodeOrNull<Node3D>("Table/Sheet");
+
+            if (sheet == null) { Problem("no sheet on the table to lean over"); return; }
+
+            eye.LeanOver(sheet.GlobalPosition);
+
+            // a lean is a move over time; run it out rather than waiting a frame
+            Settle(eye);
+
+            float near = (camera.GlobalPosition - sheet.GlobalPosition).Length();
+
+            GD.Print($"lean    sitting back is {(back - sheet.GlobalPosition).Length():0.00} m " +
+                     $"from the sheet, leaned in is {near:0.00} m");
+
+            if (near >= (back - sheet.GlobalPosition).Length())
+                Problem("leaning over the sheet did not bring the camera any closer to it - the " +
+                        "one way to read what is written on this table does nothing");
+
+            if (near > Lean.Held * 1.5f)
+                Problem($"leaned all the way in the camera is still {near:0.00} m from the sheet, " +
+                        $"and a thing is read at about {Lean.Held:0.00} m");
+
+            // and the mat's own zoom, which is the other move and has its own state behind it
+            if (eye.Window == null)
+            {
+                Problem("the camera has no window on the mat, so zooming does nothing at all");
+            }
+            else
+            {
+                eye.Back();
+                Settle(eye);
+
+                float was = eye.Window.Zoom;
+
+                eye.Zoom(0.5f);
+
+                if (Mathf.IsEqualApprox(eye.Window.Zoom, was))
+                    Problem($"zooming in did not change the window ({eye.Window}) - a player who " +
+                            "presses the zoom key gets nothing");
+
+                GD.Print($"zoom    {eye.Window}");
+            }
+
+            eye.Back();
+            Settle(eye);
+        }
+
+        // a lean takes about half a second of real time and a check has no real time, so it is
+        // wound forward by hand
+        static void Settle(Leaning eye)
+        {
+            for (int step = 0; step < 120 && eye.Moving; step++) eye._Process(0.02);
+        }
+
+
+        // ---- does every binding connect ---------------------------------------------------------
+
+        // A NODEPATH THAT POINTS AT NOTHING IS A FEATURE THAT SILENTLY DOES NOTHING.
+        //
+        // Half of what this room is wired out of is exported NodePaths set in the scene - the room
+        // finds the table through one, the fight finds the board and the tray through two more, the
+        // companion finds the screen it looks at through a fourth. Every one of them is a string,
+        // none of them is checked by the compiler, and a rename anywhere leaves a node that boots
+        // fine, warns at most once, and quietly stops doing its job. That is the "case exists but
+        // does nothing" class, and it is the cheapest of the four to make impossible.
+        //
+        // An EMPTY path is not a failure: half of these are optional and say so at their own line -
+        // a companion with no tray simply stares ahead. A path that was SET and resolves to nothing
+        // is always a mistake.
+        void EveryBindingConnects(Node3D room)
+        {
+            GD.Print("");
+
+            if (room == null) return;
+
+            int bound = 0;
+
+            var broken = new List<string>();
+
+            Bindings(room, ref bound, broken);
+
+            foreach (string one in broken)
+                Problem($"{one} - a binding that resolves to nothing is a feature that boots " +
+                        "fine and does nothing");
+
+            GD.Print($"wiring  {bound} binding(s) set in the shipped scenes, " +
+                     $"{broken.Count} pointing at nothing");
+        }
+
+        void Bindings(Node node, ref int bound, List<string> broken)
+        {
+            foreach (Godot.Collections.Dictionary property in node.GetPropertyList())
+            {
+                if ((Variant.Type)(int)property["type"] != Variant.Type.NodePath) continue;
+
+                var named = (string)property["name"];
+
+                var path = node.Get(named).AsNodePath();
+
+                if (path == null || path.IsEmpty) continue;
+
+                bound++;
+
+                if (node.GetNodeOrNull(path) == null)
+                    broken.Add($"{node.GetPath()}.{named} points at '{path}'");
+            }
+
+            foreach (Node child in node.GetChildren()) Bindings(child, ref bound, broken);
+        }
+
+
+        // A SIGNAL NOBODY LISTENS TO IS A FEATURE THAT FIRES INTO THE AIR.
+        //
+        // The other half of the binding sweep above, and the half that found more. A NodePath that
+        // points at nothing at least warns when it is read; a signal with no subscriber does
+        // exactly what a working one does, from the emitting side, forever. The room emits SatDown
+        // when you open a campaign book and nothing has ever heard it - which is why the shipped
+        // room boots into a hard-coded fight and a campaign cannot be started by picking up its
+        // book.
+        //
+        // Read off the source rather than the live tree, because a signal connected in a scene is
+        // still connected and a signal connected on a node that is not standing tonight is still
+        // wired. A caution and not a failure: an unheard signal is sometimes an honest seam left
+        // open early, and the point is that nobody can leave one by accident again.
+        void EverySignalIsHeard()
+        {
+            GD.Print("");
+
+            var declared = new Dictionary<string, string>();
+            var heard = new HashSet<string>();
+
+            Source(Project, declared, heard);
+
+            var deaf = new List<string>();
+
+            foreach (KeyValuePair<string, string> one in declared)
+                if (!heard.Contains(one.Key)) deaf.Add($"{one.Value}.{one.Key}");
+
+            deaf.Sort();
+
+            GD.Print($"signal  {declared.Count} declared in the build, {deaf.Count} with nobody " +
+                     "listening");
+
+            foreach (string one in deaf) GD.Print($"        {one} is emitted and never heard");
+
+            if (deaf.Count > 0)
+                Caution($"{deaf.Count} signal(s) fire into the air: {string.Join(", ", deaf)} - " +
+                        "each one is a thing the game does that nothing downstream reacts to");
+        }
+
+        static readonly System.Text.RegularExpressions.Regex Declares =
+            new System.Text.RegularExpressions.Regex(
+                @"\[Signal\][^;]*?delegate\s+void\s+(\w+)EventHandler");
+
+        void Source(string folder, Dictionary<string, string> declared, HashSet<string> heard)
+        {
+            using DirAccess dir = DirAccess.Open(folder);
+
+            if (dir == null) return;
+
+            foreach (string file in dir.GetFiles())
+            {
+                if (!file.EndsWith(".cs") && !file.EndsWith(".tscn")) continue;
+
+                string path = folder.TrimSuffix("/") + "/" + file;
+
+                if (Excused.Any(e => path.StartsWith(e, StringComparison.Ordinal))) continue;
+
+                string text = Godot.FileAccess.GetFileAsString(path);
+
+                if (text.Length == 0) continue;
+
+                foreach (System.Text.RegularExpressions.Match found in Declares.Matches(text))
+                    declared[found.Groups[1].Value] = file.TrimSuffix(".cs");
+
+                Listening(text, heard);
+            }
+
+            foreach (string inside in dir.GetDirectories())
+            {
+                if (inside.StartsWith(".") || inside == "bin" || inside == "obj") continue;
+
+                Source(folder.TrimSuffix("/") + "/" + inside, declared, heard);
+            }
+        }
+
+        // a C# event subscription, a Connect by name, or a scene-level connection
+        static void Listening(string text, HashSet<string> heard)
+        {
+            foreach (System.Text.RegularExpressions.Match found in
+                     System.Text.RegularExpressions.Regex.Matches(
+                         text, @"\.(\w+)\s*\+=|Connect\s*\(\s*\w*\.?SignalName\.(\w+)|" +
+                               @"signal\s*=\s*""(\w+)"""))
+            {
+                for (int group = 1; group <= 3; group++)
+                    if (found.Groups[group].Success) heard.Add(found.Groups[group].Value);
+            }
+        }
+
+
         void NoMenusAnywhere()
         {
             var found = new List<string>();
@@ -289,7 +745,7 @@ namespace Game.Diagnostics
 
         // ---- the sheet ----------------------------------------------------------------------
 
-        void FillItIn(Game.Sheet.Sheet sheet)
+        void FillItIn(RoomNode room, Game.Sheet.Sheet sheet)
         {
             GD.Print("");
 
@@ -311,14 +767,45 @@ namespace Game.Diagnostics
 
             GD.Print($"sheet   offers {offers}");
 
-            // touched, not confirmed: each blank cycles, and there is no button anywhere
+            // TOUCHED THE WAY A PLAYER TOUCHES IT, which is the whole of what this check got
+            // wrong for as long as it has existed: it called sheet.Touch(line) - the method - and
+            // reported that the sheet fills in by touching its blanks. It does not. The blanks
+            // were words with no body behind them and were in nobody's reachable list, so the
+            // only caller of that method in the entire build was this line, and a player clicking
+            // the sheet, or walking to it with a keyboard, got nothing at all.
+            //
+            // So it goes through the room's own list now. A check that reaches past the thing the
+            // player uses is a check that will pass on a game nobody can play.
+            var reachable = new Dictionary<string, Game.Access.Reachable>();
+
+            foreach (Game.Access.Reachable one in room.Reachables())
+                reachable[one.Called] = one;
+
             foreach (Line line in Enum.GetValues<Line>())
             {
                 if (!line.IsADropdown()) continue;
 
                 if (!offers.CanFill(line)) { GD.Print($"        {line.Word()}: nothing installed"); continue; }
 
-                string wrote = sheet.Touch(line);
+                string called = _text.Get(SheetKeys.Label(line));
+
+                if (!reachable.TryGetValue(called, out Game.Access.Reachable blank))
+                {
+                    Problem($"the {line.Word()} blank is not reachable from the room, so it can " +
+                            "be filled in by calling a method and by nothing a player can do");
+                    continue;
+                }
+
+                if (blank.Body == null)
+                    Problem($"the {line.Word()} blank has no body, so a click can never land on it");
+
+                if (!Hitbox.Generous(blank.Span))
+                    Problem($"the {line.Word()} blank is {Hitbox.Short(blank.Span) * 1000f:0} mm " +
+                            "short of a fingertip");
+
+                blank.Touch();
+
+                string wrote = sheet.Written(line);
 
                 GD.Print($"        {line.Word()}: {wrote}");
 
